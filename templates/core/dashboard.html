@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Дашборд</h1>
+
+<div class="stats">
+    <div class="stat-card">
+        <h3>Материалы</h3>
+        <p>{{ materials_count }}</p>
+    </div>
+    <div class="stat-card">
+        <h3>Образцы</h3>
+        <p>{{ samples_count }}</p>
+    </div>
+</div>
+
+<h2>Последние материалы</h2>
+<ul>
+    {% for material in recent_materials %}
+        <li>{{ material.code }} - {{ material.name }}</li>
+    {% endfor %}
+</ul>
+{% endblock %}
