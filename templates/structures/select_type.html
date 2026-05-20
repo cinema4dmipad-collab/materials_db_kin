@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Структуры — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="h4 mb-0">Создание новой структуры</h1>
+            <p class="text-muted small mb-0">Выберите тип структуры</p>
+        </div>
+        <a href="{% url 'structures:list' %}" class="btn btn-outline-secondary btn-sm">Все структуры</a>
+    </div>
+    <div class="card-body">
+        {% if types %}
+        <div class="row g-3">
+            {% for st in types %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h2 class="h5 card-title">{{ st.name }}</h2>
+                        <p class="card-text text-muted small mb-2">
+                            Код: <code>{{ st.code }}</code><br>
+                            Таблица: <code>{{ st.table_name }}</code><br>
+                            Полей: {{ st.fields.count }}
+                            {% if st.is_created %}
+                            <span class="badge bg-success ms-1">БД готова</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark ms-1">Таблица не создана</span>
+                            {% endif %}
+                        </p>
+                        {% if st.description %}
+                        <p class="card-text small">{{ st.description }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer bg-transparent d-flex gap-2">
+                        <a href="{% url 'structures:create' st.code %}" class="btn btn-primary btn-sm">Создать {{ st.name }}</a>
+                        <a href="{% url 'structures:instance_list_by_type' st.code %}" class="btn btn-outline-secondary btn-sm">Список</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">
+            Нет активных типов структур. Создайте тип в <a href="/admin/structures/structuretype/">админке</a>.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -6,6 +6,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('apps.core.urls')),
     path('materials/', include('apps.materials.urls')),
+    path('structures/', include('apps.structures.urls')),
 ]
 
 if settings.DEBUG:

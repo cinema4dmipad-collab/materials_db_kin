@@ -22,6 +22,15 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'materials:list' %}">Материалы</a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Структуры
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'structures:select_type' %}">Создать структуру</a></li>
+                            <li><a class="dropdown-item" href="{% url 'structures:list' %}">Все структуры</a></li>
+                        </ul>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link disabled" href="#" tabindex="-1" aria-disabled="true">Образцы</a>
                     </li>
