@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from apps.structures.models import StructureType
-from apps.structures.table_generator import TableGenerator
+from apps.structures.sql_executor import SQLExecutor
 
 
 class Command(BaseCommand):
@@ -18,11 +18,11 @@ class Command(BaseCommand):
                 )
                 continue
             self.stdout.write(f'Создаю таблицу для {structure_type.name}...')
-            try:
-                TableGenerator.create_table(structure_type)
+            result = SQLExecutor.create_table(structure_type)
+            if result['success']:
                 created += 1
                 self.stdout.write(self.style.SUCCESS(f'  OK: {structure_type.table_name}'))
-            except Exception as exc:
-                self.stdout.write(self.style.ERROR(f'  Ошибка: {exc}'))
+            else:
+                self.stdout.write(self.style.ERROR(f'  Ошибка: {result["error"]}'))
 
         self.stdout.write(self.style.SUCCESS(f'Готово. Создано таблиц: {created}'))

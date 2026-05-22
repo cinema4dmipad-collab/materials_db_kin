@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django.apps import apps as django_apps
+from django.core.exceptions import ImproperlyConfigured
 
 from apps.structures.models import StructureType
 
@@ -69,25 +70,10 @@ def generate_field_line(field) -> str:
 
 
 def generate_model_code(structure_type: StructureType) -> str:
-    class_name = structure_model_class_name(structure_type.code)
-    fields = structure_type.fields.all()
-    field_lines = [generate_field_line(f) for f in fields]
-    fields_block = '\n'.join(field_lines) if field_lines else '    pass'
-    table_name = f'structures_{structure_type.code.lower()}'
-
-    return f'''
-class {class_name}(models.Model):
-    structure_instance = models.OneToOneField(
-        StructureInstance, on_delete=models.CASCADE, related_name='{structure_type.code}_data'
+    raise ImproperlyConfigured(
+        'Dynamic Django model generation is disabled. '
+        'Use apps.structures.sql_executor.SQLExecutor for dynamic tables.'
     )
-{fields_block}
-
-    class Meta:
-        db_table = '{table_name}'
-        verbose_name = '{structure_type.name}'
-        verbose_name_plural = '{structure_type.name}'
-
-'''
 
 
 def generated_models_path() -> Path:
@@ -102,21 +88,10 @@ def model_already_generated(class_name: str) -> bool:
 
 
 def append_generated_model(structure_type: StructureType) -> str:
-    class_name = structure_model_class_name(structure_type.code)
-    if model_already_generated(class_name):
-        raise ValueError(f'Модель {class_name} уже существует в generated_models.py')
-
-    path = generated_models_path()
-    content = path.read_text(encoding='utf-8')
-    if not content.strip():
-        content = GENERATED_HEADER
-    elif 'class ' not in content:
-        if 'StructureInstance' not in content:
-            content = GENERATED_HEADER
-
-    new_block = generate_model_code(structure_type)
-    path.write_text(content.rstrip() + '\n' + new_block, encoding='utf-8')
-    return class_name
+    raise ImproperlyConfigured(
+        'Writing generated Django models is disabled. '
+        'Dynamic structure tables are managed through SQLExecutor only.'
+    )
 
 
 def resolve_foreign_key_model(model_label: str):

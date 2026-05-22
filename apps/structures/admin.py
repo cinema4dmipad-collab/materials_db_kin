@@ -9,7 +9,7 @@ from apps.structures.models import (
     StructureInstance,
     StructureType,
 )
-from apps.structures.table_generator import TableGenerator
+from apps.structures.sql_executor import SQLExecutor
 
 
 class StructureFieldInline(admin.TabularInline):
@@ -72,32 +72,32 @@ class StructureTypeAdmin(admin.ModelAdmin):
 
     def create_table_view(self, request, object_id):
         structure_type = StructureType.objects.get(pk=object_id)
-        try:
-            TableGenerator.create_table(structure_type)
+        result = SQLExecutor.create_table(structure_type)
+        if result['success']:
             messages.success(request, f'Таблица {structure_type.table_name} создана.')
-        except Exception as exc:
-            messages.error(request, f'Ошибка: {exc}')
+        else:
+            messages.error(request, f'Ошибка: {result["error"]}')
         return redirect('admin:structures_structuretype_change', object_id)
 
     def drop_table_view(self, request, object_id):
         structure_type = StructureType.objects.get(pk=object_id)
-        try:
-            TableGenerator.drop_table(structure_type)
+        result = SQLExecutor.drop_table(structure_type)
+        if result['success']:
             messages.success(request, f'Таблица {structure_type.table_name} удалена.')
-        except Exception as exc:
-            messages.error(request, f'Ошибка: {exc}')
+        else:
+            messages.error(request, f'Ошибка: {result["error"]}')
         return redirect('admin:structures_structuretype_change', object_id)
 
     @admin.action(description='Создать таблицы для выбранных типов')
     def create_table_action(self, request, queryset):
         created = 0
         for st in queryset.filter(is_created=False):
-            try:
-                TableGenerator.create_table(st)
+            result = SQLExecutor.create_table(st)
+            if result['success']:
                 created += 1
-            except Exception as exc:
+            else:
                 self.message_user(
-                    request, f'{st.name}: {exc}', level=messages.ERROR
+                    request, f'{st.name}: {result["error"]}', level=messages.ERROR
                 )
         if created:
             self.message_user(request, f'Создано таблиц: {created}', level=messages.SUCCESS)
