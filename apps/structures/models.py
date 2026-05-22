@@ -103,7 +103,6 @@ class StructureField(models.Model):
         ('BooleanField', 'Да/Нет'),
         ('DateField', 'Дата'),
         ('DateTimeField', 'Дата и время'),
-        ('ForeignKey', 'Связь с другой моделью'),
     ]
 
     structure_type = models.ForeignKey(
@@ -119,7 +118,11 @@ class StructureField(models.Model):
     max_digits = models.IntegerField(null=True, blank=True, default=10)
     decimal_places = models.IntegerField(null=True, blank=True, default=2)
     max_length = models.IntegerField(null=True, blank=True, default=255)
-    foreign_key_model = models.CharField(max_length=200, blank=True)
+    foreign_key_model = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+    )
 
     objects = StructureFieldManager()
 
@@ -193,9 +196,7 @@ class StructureFieldValue(models.Model):
 
     def get_value(self):
         field_type = self.field.field_type
-        if field_type in ('CharField', 'TextField', 'ForeignKey'):
-            if field_type == 'ForeignKey' and self.value_fk_id:
-                return str(self.value_fk_id)
+        if field_type in ('CharField', 'TextField'):
             return self.value_text
         if field_type == 'IntegerField':
             return self.value_integer

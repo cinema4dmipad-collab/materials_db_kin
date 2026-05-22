@@ -1,5 +1,6 @@
 import io
 from decimal import Decimal
+from unittest import mock
 
 from django.apps import apps
 from django.contrib.admin.sites import AdminSite
@@ -10,8 +11,14 @@ from django.core.management.base import CommandError
 from django.db import connection
 from django.test import RequestFactory, TransactionTestCase
 
-from apps.structures.admin import StructureFieldAdmin, StructureFieldInline
+from apps.structures import table_storage
+from apps.structures.admin import (
+    StructureFieldAdmin,
+    StructureFieldAdminForm,
+    StructureFieldInline,
+)
 from apps.structures.dynamic_models import REGISTERED_MODELS
+from apps.structures.forms import get_dynamic_form
 from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 
@@ -59,6 +66,32 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
     def tearDown(self):
         SQLExecutor.drop_table(self.structure_type)
         REGISTERED_MODELS.clear()
+
+    def _mark_field_as_legacy_foreign_key(self, field):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'UPDATE {SQLExecutor.quote_identifier(StructureField._meta.db_table)} '
+                f'SET {SQLExecutor.quote_identifier("field_type")} = %s '
+                f'WHERE {SQLExecutor.quote_identifier("id")} = %s',
+                ['ForeignKey', field.pk],
+            )
+        field.refresh_from_db()
+        return field
+
+    def _add_material_fk_field(self, *, legacy=True, **overrides):
+        values = {
+            'structure_type': self.structure_type,
+            'name': 'material',
+            'label': 'Material',
+            'field_type': 'CharField',
+            'is_required': True,
+            'sort_order': 4,
+        }
+        values.update(overrides)
+        field = StructureField.objects.create(**values)
+        if legacy:
+            self._mark_field_as_legacy_foreign_key(field)
+        return field
 
     def test_create_and_drop_table_without_registering_model(self):
         before_models = set(apps.all_models['structures'])
@@ -211,6 +244,85 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertEqual(inline.get_extra(None, self.structure_type), 0)
         self.assertEqual(set(inline.get_readonly_fields(None, self.structure_type)), set(inline.fields))
 
+    def test_foreign_key_is_not_supported_field_type_choice(self):
+        field_type_values = [value for value, _ in StructureField.FIELD_TYPES]
+        self.assertNotIn('ForeignKey', field_type_values)
+
+        site = AdminSite()
+        admin_model = StructureFieldAdmin(StructureField, site)
+        request = RequestFactory().get('/')
+        request.user = PermissiveAdminUser()
+
+        form_class = admin_model.get_form(request)
+        form = form_class()
+
+        form_choice_values = [value for value, _ in form.fields['field_type'].choices]
+        self.assertNotIn('ForeignKey', form_choice_values)
+
+    def test_structure_field_admin_form_hides_foreign_key_target(self):
+        form = StructureFieldAdminForm(
+            data={
+                'structure_type': self.structure_type.pk,
+                'name': 'notes',
+                'label': 'Notes',
+                'field_type': 'TextField',
+                'foreign_key_model': '',
+                'sort_order': 4,
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertNotIn('foreign_key_model', form.fields)
+
+        form_with_stale_target = StructureFieldAdminForm(
+            data={
+                'structure_type': self.structure_type.pk,
+                'name': 'code',
+                'label': 'Code',
+                'field_type': 'CharField',
+                'foreign_key_model': 'materials.Material',
+                'sort_order': 5,
+            }
+        )
+
+        self.assertTrue(form_with_stale_target.is_valid(), form_with_stale_target.errors)
+        self.assertEqual(form_with_stale_target.cleaned_data['foreign_key_model'], '')
+
+        stale_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='stale_code',
+            label='Stale code',
+            field_type='CharField',
+            foreign_key_model='materials.Material',
+            sort_order=6,
+        )
+        update_form = StructureFieldAdminForm(
+            data={
+                'structure_type': self.structure_type.pk,
+                'name': 'stale_code',
+                'label': 'Stale code updated',
+                'field_type': 'CharField',
+                'sort_order': 6,
+            },
+            instance=stale_field,
+        )
+        self.assertTrue(update_form.is_valid(), update_form.errors)
+
+        update_form.save()
+        stale_field.refresh_from_db()
+        self.assertEqual(stale_field.foreign_key_model, '')
+
+    def test_structure_field_inline_form_hides_foreign_key_target(self):
+        site = AdminSite()
+        inline = StructureFieldInline(StructureType, site)
+        request = RequestFactory().get('/')
+        request.user = PermissiveAdminUser()
+
+        formset_class = inline.get_formset(request, self.structure_type)
+        form = formset_class.form()
+
+        self.assertNotIn('foreign_key_model', form.fields)
+
     def test_structure_field_admin_locks_created_structure_type(self):
         site = AdminSite()
         admin_model = StructureFieldAdmin(StructureField, site)
@@ -278,6 +390,11 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertTrue(all_rows['success'], all_rows.get('error'))
         self.assertEqual(all_rows['total'], 2)
 
+        offset_rows = SQLExecutor.get_all(self.structure_type, limit=None, offset=1)
+        self.assertTrue(offset_rows['success'], offset_rows.get('error'))
+        self.assertEqual(offset_rows['total'], 2)
+        self.assertEqual(len(offset_rows['records']), 1)
+
         table_storage.update_row(
             self.structure_type,
             storage_id,
@@ -291,6 +408,13 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         delete_result = SQLExecutor.delete(self.structure_type, insert_result['id'])
         self.assertTrue(delete_result['success'], delete_result.get('error'))
         self.assertEqual(SQLExecutor.get_all(self.structure_type)['total'], 0)
+
+    def test_unlimited_offset_pagination_uses_postgresql_compatible_sql(self):
+        with mock.patch.object(connection, 'vendor', 'postgresql'):
+            clause, params = SQLExecutor._pagination_clause(limit=None, offset=5)
+
+        self.assertEqual(clause, ' LIMIT ALL OFFSET %s')
+        self.assertEqual(params, [5])
 
     def test_insert_uses_field_default_value_when_field_is_absent(self):
         StructureField.objects.create(
@@ -387,62 +511,92 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertEqual(row['record']['title'], 'Original panel')
         self.assertEqual(Decimal(str(row['record']['thickness'])), Decimal('2.50'))
 
-    def test_required_foreign_key_fields_do_not_create_sql_columns(self):
-        from apps.structures import table_storage
-
-        StructureField.objects.create(
-            structure_type=self.structure_type,
-            name='related_item',
-            label='Related item',
-            field_type='ForeignKey',
-            is_required=True,
-            foreign_key_model='structures.StructureType',
-            sort_order=4,
-        )
+    def test_create_table_rejects_legacy_foreign_key_field(self):
+        fk_field = self._add_material_fk_field()
 
         create_result = SQLExecutor.create_table(self.structure_type)
-        self.assertTrue(create_result['success'], create_result.get('error'))
+
+        self.assertFalse(create_result['success'])
+        self.assertIn('ForeignKey dynamic fields are not supported', create_result['error'])
+        self.assertIn('Material.struct_type/struct_props_id', create_result['error'])
+        self.assertFalse(SQLExecutor.table_exists(self.structure_type))
+        self.assertEqual(fk_field.field_type, 'ForeignKey')
+
+    def test_dynamic_form_excludes_legacy_foreign_key_field(self):
+        fk_field = self._add_material_fk_field()
+
+        form_class = get_dynamic_form(self.structure_type)
+        form = form_class()
+
+        self.assertNotIn(f'field_{fk_field.id}', form.fields)
+
+    def test_table_storage_excludes_legacy_foreign_key_field(self):
+        fk_field = self._add_material_fk_field(legacy=False, is_required=False)
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+        self._mark_field_as_legacy_foreign_key(fk_field)
 
         row_id = table_storage.insert_row(
             self.structure_type,
             'row-code',
-            {'title': 'FK metadata only'},
+            {'title': 'Storage row', fk_field.name: '00000000-0000-0000-0000-000000000000'},
         )
-        row = table_storage.get_row(self.structure_type, row_id)
-        self.assertIsNotNone(row)
-        self.assertEqual(row['title'], 'FK metadata only')
-        self.assertNotIn('related_item', row)
-        display_field_names = [
-            display_value.field.name
+
+        loaded = table_storage.load_field_data(self.structure_type, row_id)
+        display_values = {
+            display_value.field.name: display_value.get_value()
             for display_value in table_storage.get_display_values(self.structure_type, row_id)
-        ]
-        self.assertIn('title', display_field_names)
-        self.assertNotIn('related_item', display_field_names)
+        }
 
-        all_rows = SQLExecutor.get_all(self.structure_type)
-        self.assertTrue(all_rows['success'], all_rows.get('error'))
-        self.assertEqual(all_rows['total'], 1)
-        self.assertNotIn('related_item', all_rows['records'][0])
+        self.assertEqual(loaded['title'], 'Storage row')
+        self.assertNotIn(fk_field.name, loaded)
+        self.assertNotIn(fk_field.name, display_values)
 
-    def test_add_column_ignores_foreign_key_fields(self):
+    def test_dynamic_table_form_excludes_legacy_foreign_key_field(self):
+        fk_field = self._add_material_fk_field(legacy=False, is_required=False)
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+        self._mark_field_as_legacy_foreign_key(fk_field)
+
+        form_class = get_dynamic_form(self.structure_type)
+        form = form_class()
+
+        self.assertNotIn(f'field_{fk_field.id}', form.fields)
+
+    def test_dynamic_table_form_saves_without_legacy_foreign_key_field(self):
+        fk_field = self._add_material_fk_field(legacy=False, is_required=False)
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+        self._mark_field_as_legacy_foreign_key(fk_field)
+
+        form_class = get_dynamic_form(self.structure_type)
+        form = form_class(
+            data={
+                'code': 'form-row',
+                f'field_{self.structure_type.fields.get(name="title").id}': 'Form row',
+                f'field_{fk_field.id}': '00000000-0000-0000-0000-000000000000',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+        instance = form.save()
+        loaded = table_storage.load_field_data(self.structure_type, instance.dynamic_row_id)
+        self.assertEqual(loaded['title'], 'Form row')
+        self.assertNotIn(fk_field.name, loaded)
+
+    def test_add_column_rejects_legacy_foreign_key_field(self):
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
         fk_field = StructureField(
             structure_type=self.structure_type,
-            name='related_item',
-            label='Related item',
+            name='material',
+            label='Material',
             field_type='ForeignKey',
             is_required=True,
-            foreign_key_model='structures.StructureType',
             sort_order=4,
         )
 
         result = SQLExecutor.add_column(self.structure_type, fk_field)
 
-        self.assertEqual(result, {'success': True, 'error': None})
-        with connection.cursor() as cursor:
-            cursor.execute(f'SELECT * FROM {SQLExecutor.quote_identifier(self.structure_type.table_name)} LIMIT 0')
-            columns = [column[0] for column in cursor.description]
-        self.assertNotIn('related_item', columns)
+        self.assertFalse(result['success'])
+        self.assertIn('ForeignKey dynamic fields are not supported', result['error'])
+        self.assertIn('Material.struct_type/struct_props_id', result['error'])
 
     def test_add_required_column_with_default_backfills_non_empty_table(self):
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])

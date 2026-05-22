@@ -1,15 +1,12 @@
-import uuid
 from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import ValidationError
 
 from apps.structures.models import StructureField, StructureFieldValue, StructureInstance
-from apps.structures.services import resolve_foreign_key_model
 from apps.structures import table_storage
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
-_BOOTSTRAP_SELECT = {'class': 'form-select'}
 _BOOTSTRAP_CHECK = {'class': 'form-check-input'}
 
 
@@ -98,29 +95,16 @@ def _build_dynamic_field(structure_field: StructureField) -> forms.Field:
             initial=initial,
             widget=forms.DateTimeInput(attrs={**_BOOTSTRAP_INPUT, 'type': 'datetime-local'}),
         )
-    if structure_field.field_type == 'ForeignKey':
-        model = resolve_foreign_key_model(structure_field.foreign_key_model)
-        if model is not None:
-            return forms.ModelChoiceField(
-                label=label,
-                required=required,
-                help_text=help_text,
-                queryset=model.objects.all(),
-                widget=forms.Select(attrs=_BOOTSTRAP_SELECT),
-            )
-        return forms.CharField(
-            label=label,
-            required=required,
-            help_text=help_text or 'UUID связанной записи',
-            initial=initial,
-            widget=forms.TextInput(attrs=_BOOTSTRAP_INPUT),
-        )
     raise ValidationError(f'Неподдерживаемый тип поля: {structure_field.field_type}')
+
+
+def _supported_structure_fields(structure_type):
+    return list(structure_type.fields.exclude(field_type='ForeignKey'))
 
 
 def _collect_field_data(structure_type, cleaned_data):
     data = {}
-    for sf in structure_type.fields.exclude(field_type='ForeignKey'):
+    for sf in _supported_structure_fields(structure_type):
         value = cleaned_data.get(f'field_{sf.id}')
         if value is not None and value != '':
             data[sf.name] = value
@@ -157,21 +141,11 @@ def _save_field_value(field_value: StructureFieldValue, structure_field: Structu
         field_value.value_date = value
     elif field_type == 'DateTimeField':
         field_value.value_datetime = value
-    elif field_type == 'ForeignKey':
-        if hasattr(value, 'pk'):
-            pk = value.pk
-            field_value.value_fk_id = pk if isinstance(pk, uuid.UUID) else None
-            field_value.value_text = str(pk)
-        else:
-            try:
-                field_value.value_fk_id = uuid.UUID(str(value))
-            except (ValueError, AttributeError):
-                field_value.value_text = str(value)
     field_value.save()
 
 
 def _get_eav_form(structure_type):
-    structure_fields = list(structure_type.fields.all())
+    structure_fields = _supported_structure_fields(structure_type)
 
     class DynamicStructureForm(forms.ModelForm):
         class Meta:
@@ -211,9 +185,7 @@ def _get_eav_form(structure_type):
 
 
 def _get_table_form(structure_type):
-    structure_fields = list(
-        structure_type.fields.exclude(field_type='ForeignKey')
-    )
+    structure_fields = _supported_structure_fields(structure_type)
 
     class DynamicTableForm(forms.ModelForm):
         class Meta:

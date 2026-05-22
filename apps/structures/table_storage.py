@@ -20,6 +20,10 @@ def _coerce_for_db(field: StructureField, value):
     return SQLExecutor._coerce_for_db(field, value)
 
 
+def _supported_fields(structure_type: StructureType):
+    return structure_type.fields.exclude(field_type='ForeignKey')
+
+
 def get_row(structure_type: StructureType, row_id: uuid.UUID) -> dict | None:
     if not structure_type.is_created:
         return None
@@ -35,7 +39,7 @@ def get_display_values(structure_type: StructureType, row_id: uuid.UUID) -> list
         return []
     return [
         DisplayValue(field, row.get(field.name))
-        for field in structure_type.fields.exclude(field_type='ForeignKey')
+        for field in _supported_fields(structure_type)
     ]
 
 
@@ -48,7 +52,7 @@ def insert_row(
     row_id = uuid.uuid4()
     data = {'id': str(row_id), 'created_by': created_by or ''}
 
-    for field in structure_type.fields.exclude(field_type='ForeignKey'):
+    for field in _supported_fields(structure_type):
         if field.name in field_data:
             data[field.name] = field_data.get(field.name)
 
@@ -66,7 +70,7 @@ def update_row(
 ) -> None:
     data = {}
 
-    for field in structure_type.fields.exclude(field_type='ForeignKey'):
+    for field in _supported_fields(structure_type):
         if field.name in field_data:
             data[field.name] = field_data[field.name]
 
@@ -86,7 +90,7 @@ def load_field_data(structure_type: StructureType, row_id: uuid.UUID) -> dict:
     if not row:
         return {}
     result = {}
-    for field in structure_type.fields.exclude(field_type='ForeignKey'):
+    for field in _supported_fields(structure_type):
         val = row.get(field.name)
         if isinstance(val, Decimal):
             result[field.name] = val

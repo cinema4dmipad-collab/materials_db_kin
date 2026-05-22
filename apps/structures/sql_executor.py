@@ -9,6 +9,10 @@ from django.utils import timezone
 from apps.structures.models import StructureField, StructureType
 
 IDENTIFIER_RE = re.compile(r'^[a-z][a-z0-9_]*$')
+UNSUPPORTED_FOREIGN_KEY_FIELD_ERROR = (
+    'ForeignKey dynamic fields are not supported; link materials through '
+    'Material.struct_type/struct_props_id.'
+)
 
 
 class SQLExecutor:
@@ -25,6 +29,7 @@ class SQLExecutor:
             fields = list(structure_type.fields.all())
             if not fields:
                 raise ValueError(f'У типа «{structure_type.name}» нет полей.')
+            cls._raise_for_unsupported_fields(fields)
             if cls.table_exists(structure_type):
                 raise ValueError(f'Таблица «{structure_type.table_name}» уже существует.')
 
@@ -123,15 +128,15 @@ class SQLExecutor:
             return {'success': False, 'error': str(exc)}
 
     @classmethod
-    def get_all(cls, structure_type: StructureType, limit: int = 100, offset: int = 0) -> dict:
+    def get_all(cls, structure_type: StructureType, limit: int | None = 100, offset: int = 0) -> dict:
         try:
             table_name = cls.quote_identifier(structure_type.table_name)
+            query = f'SELECT * FROM {table_name} ORDER BY {cls.quote_identifier("created_at")} DESC'
+            pagination_clause, params = cls._pagination_clause(limit, offset)
+            query += pagination_clause
+
             with connection.cursor() as cursor:
-                cursor.execute(
-                    f'SELECT * FROM {table_name} ORDER BY {cls.quote_identifier("created_at")} DESC '
-                    'LIMIT %s OFFSET %s',
-                    [limit, offset],
-                )
+                cursor.execute(query, params)
                 columns = [column[0] for column in cursor.description]
                 records = [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
 
@@ -141,6 +146,35 @@ class SQLExecutor:
             return {'success': True, 'records': records, 'total': total, 'error': None}
         except Exception as exc:
             return {'success': False, 'error': str(exc)}
+
+    @classmethod
+    def get_structure_instances(
+        cls,
+        structure_type: StructureType,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list:
+        if not structure_type.is_created:
+            return []
+
+        result = cls.get_all(structure_type, limit=limit, offset=offset)
+        if not result['success']:
+            return []
+        return result['records']
+
+    @classmethod
+    def get_structure_instance(
+        cls,
+        structure_type: StructureType,
+        instance_id: str | uuid.UUID,
+    ) -> dict | None:
+        if not structure_type.is_created:
+            return None
+
+        result = cls.get_by_id(structure_type, instance_id)
+        if not result['success']:
+            return None
+        return result['record']
 
     @classmethod
     def get_by_id(cls, structure_type: StructureType, record_id: str | uuid.UUID) -> dict:
@@ -213,6 +247,7 @@ class SQLExecutor:
     @classmethod
     def add_column(cls, structure_type: StructureType, field: StructureField) -> dict:
         try:
+            cls._raise_for_unsupported_fields([field])
             if not cls._is_sql_backed_field(field):
                 return {'success': True, 'error': None}
 
@@ -268,8 +303,23 @@ class SQLExecutor:
         return [field for field in fields if cls._is_sql_backed_field(field)]
 
     @staticmethod
+    def _raise_for_unsupported_fields(fields) -> None:
+        if any(field.field_type == 'ForeignKey' for field in fields):
+            raise ValueError(UNSUPPORTED_FOREIGN_KEY_FIELD_ERROR)
+
+    @staticmethod
     def _is_empty_value(value) -> bool:
         return value is None or value == ''
+
+    @staticmethod
+    def _pagination_clause(limit: int | None, offset: int) -> tuple[str, list[int]]:
+        if limit is None:
+            if not offset:
+                return '', []
+            if connection.vendor == 'postgresql':
+                return ' LIMIT ALL OFFSET %s', [offset]
+            return ' LIMIT -1 OFFSET %s', [offset]
+        return ' LIMIT %s OFFSET %s', [limit, offset]
 
     @classmethod
     def _column_definition(
@@ -324,8 +374,6 @@ class SQLExecutor:
             return 'DATE'
         if field.field_type == 'DateTimeField':
             return 'TIMESTAMP' if connection.vendor == 'postgresql' else 'DATETIME'
-        if field.field_type == 'ForeignKey':
-            return 'TEXT'
         return 'TEXT'
 
     @staticmethod

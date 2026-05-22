@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect
@@ -14,8 +15,28 @@ from apps.structures.models import (
 from apps.structures.sql_executor import SQLExecutor
 
 
+class StructureFieldAdminForm(forms.ModelForm):
+    class Meta:
+        model = StructureField
+        exclude = ['foreign_key_model']
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cleaned_data['foreign_key_model'] = ''
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.foreign_key_model = ''
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+
 class StructureFieldInline(admin.TabularInline):
     model = StructureField
+    form = StructureFieldAdminForm
     extra = 1
     fields = [
         'name',
@@ -26,7 +47,6 @@ class StructureFieldInline(admin.TabularInline):
         'max_length',
         'max_digits',
         'decimal_places',
-        'foreign_key_model',
     ]
 
     def _is_locked(self, obj):
@@ -157,6 +177,7 @@ class StructureInstanceAdmin(admin.ModelAdmin):
 
 @admin.register(StructureField)
 class StructureFieldAdmin(admin.ModelAdmin):
+    form = StructureFieldAdminForm
     list_display = ['structure_type', 'name', 'label', 'field_type', 'is_required', 'sort_order']
     list_filter = ['structure_type', 'field_type']
     search_fields = ['name', 'label']
