@@ -42,6 +42,7 @@ class MaterialDetailView(DetailView):
     model = Material
     template_name = 'materials/material_detail.html'
     context_object_name = 'material'
+    structure_service_columns = {'id', 'created_at', 'updated_at', 'created_by'}
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -51,7 +52,56 @@ class MaterialDetailView(DetailView):
                 'property__name',
             )
         )
+        context.update(self.get_structure_context())
         return context
+
+    def get_structure_context(self):
+        material = self.object
+        structure_context = {
+            'structure_type': material.struct_type,
+            'structure_properties': [],
+            'structure_message': '',
+        }
+
+        if not material.struct_type_id:
+            structure_context['structure_message'] = 'Структура не выбрана.'
+            return structure_context
+
+        if not material.struct_props_id:
+            structure_context['structure_message'] = 'Запись параметров структуры не выбрана.'
+            return structure_context
+
+        structure_params = material.get_structure_params()
+        if structure_params is None:
+            structure_context['structure_message'] = 'Запись параметров структуры не найдена.'
+            return structure_context
+
+        fields = (
+            material.struct_type.fields.exclude(name__in=self.structure_service_columns)
+            .exclude(field_type='ForeignKey')
+            .order_by('sort_order', 'name')
+        )
+        structure_context['structure_properties'] = [
+            {
+                'label': field.label,
+                'name': field.name,
+                'field_type': field.field_type,
+                'value': structure_params.get(field.name),
+                'display_value': self.get_structure_display_value(
+                    structure_params.get(field.name)
+                ),
+            }
+            for field in fields
+        ]
+
+        if not structure_context['structure_properties']:
+            structure_context['structure_message'] = 'Параметры структуры не заданы.'
+        return structure_context
+
+    def get_structure_display_value(self, value):
+        if value is None or value == '':
+            return '—'
+        return value
 
 
 class MaterialCreateView(MaterialFormsetMixin, CreateView):

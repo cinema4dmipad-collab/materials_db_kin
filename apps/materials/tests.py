@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.db import connection
 from django.test import RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
@@ -149,6 +150,119 @@ class MaterialStructureLinkTests(TransactionTestCase):
 
         self.assertEqual(SQLExecutor.get_structure_instances(structure_type), [])
         self.assertIsNone(SQLExecutor.get_structure_instance(structure_type, uuid.uuid4()))
+
+    def test_detail_page_shows_material_and_linked_structure_properties(self):
+        density_group = PropertyGroup.objects.create(
+            name='Physical properties',
+            sort_order=1,
+        )
+        density = Property.objects.create(
+            name='density_detail',
+            display_name='Density',
+            unit='g/cm3',
+            group=density_group,
+        )
+        row_id = self.insert_structure_row(title='Laminate panel', thickness='18.75')
+        material = Material.objects.create(
+            code='MAT-DETAIL-001',
+            name='Detailed material',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        MaterialProperty.objects.create(material=material, property=density, value='1.55')
+
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Свойства')
+        self.assertContains(response, 'Density')
+        self.assertContains(response, '1.55')
+        self.assertContains(response, 'g/cm3')
+        self.assertContains(response, 'Параметры структуры')
+        self.assertContains(response, 'Test Panel')
+        self.assertContains(response, 'Title')
+        self.assertContains(response, 'Laminate panel')
+        self.assertContains(response, 'Thickness')
+        self.assertContains(response, '18,75')
+
+    def test_detail_page_ignores_service_columns_and_stale_foreign_key_fields(self):
+        row_id = self.insert_structure_row(title='Visible panel')
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO structures_structurefield
+                    (structure_type_id, name, label, field_type, is_required, default_value,
+                     help_text, sort_order, max_digits, decimal_places, max_length,
+                     foreign_key_model)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                [
+                    self.structure_type.pk,
+                    'legacy_parent',
+                    'Legacy parent',
+                    'ForeignKey',
+                    False,
+                    '',
+                    '',
+                    3,
+                    10,
+                    2,
+                    255,
+                    'materials.Material',
+                ],
+            )
+        material = Material.objects.create(
+            code='MAT-DETAIL-002',
+            name='Detail ignores stale fields',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Title')
+        self.assertNotContains(response, 'Legacy parent')
+        self.assertNotContains(response, '<td>id</td>', html=True)
+        self.assertNotContains(response, '<td>created_at</td>', html=True)
+        self.assertNotContains(response, '<td>updated_at</td>', html=True)
+        self.assertNotContains(response, '<td>created_by</td>', html=True)
+
+    def test_detail_page_without_linked_structure_shows_empty_state(self):
+        material = Material.objects.create(code='MAT-DETAIL-003', name='Plain detail material')
+
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Параметры структуры')
+        self.assertContains(response, 'Структура не выбрана.')
+
+    def test_detail_page_missing_structure_row_shows_helpful_message(self):
+        material = Material.objects.create(
+            code='MAT-DETAIL-004',
+            name='Missing row detail material',
+            struct_type=self.structure_type,
+            struct_props_id=uuid.uuid4(),
+        )
+
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Запись параметров структуры не найдена.')
+
+    def test_detail_page_shows_zero_structure_values(self):
+        row_id = self.insert_structure_row(title='Zero thickness panel', thickness='0.00')
+        material = Material.objects.create(
+            code='MAT-DETAIL-005',
+            name='Zero value detail material',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<td>0,00</td>', html=True)
 
 
 class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
