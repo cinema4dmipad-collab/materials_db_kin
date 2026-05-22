@@ -17,11 +17,18 @@ class SQLExecutor:
     @classmethod
     def create_table(cls, structure_type: StructureType) -> dict:
         try:
-            table_name = cls.quote_identifier(structure_type.table_name)
+            original_structure_type = structure_type
+            structure_type = StructureType.objects.prefetch_related('fields').get(pk=structure_type.pk)
+            if structure_type.is_created:
+                raise ValueError(f'Таблица «{structure_type.table_name}» уже создана.')
+
             fields = list(structure_type.fields.all())
             if not fields:
                 raise ValueError(f'У типа «{structure_type.name}» нет полей.')
+            if cls.table_exists(structure_type):
+                raise ValueError(f'Таблица «{structure_type.table_name}» уже существует.')
 
+            table_name = cls.quote_identifier(structure_type.table_name)
             columns = [cls._id_column_sql()]
             columns.extend(cls._column_definition(field) for field in cls._sql_fields(fields))
             columns.extend(
@@ -33,12 +40,11 @@ class SQLExecutor:
             )
 
             with connection.cursor() as cursor:
-                cursor.execute(
-                    f'CREATE TABLE IF NOT EXISTS {table_name} ({", ".join(columns)})'
-                )
+                cursor.execute(f'CREATE TABLE {table_name} ({", ".join(columns)})')
 
             structure_type.is_created = True
             structure_type.save(update_fields=['is_created'])
+            original_structure_type.is_created = True
             return {'success': True, 'error': None}
         except Exception as exc:
             return {'success': False, 'error': str(exc)}

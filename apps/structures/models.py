@@ -1,6 +1,12 @@
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
+
+
+STRUCTURE_FIELD_LOCK_ERROR = (
+    'Нельзя добавлять, изменять или удалять поля после создания SQL-таблицы.'
+)
 
 
 class StructureType(models.Model):
@@ -21,6 +27,68 @@ class StructureType(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class StructureFieldQuerySet(models.QuerySet):
+    def _locked_structure_type_ids(self, structure_type_ids):
+        ids = {structure_type_id for structure_type_id in structure_type_ids if structure_type_id}
+        if not ids:
+            return set()
+        return set(
+            StructureType.objects.filter(pk__in=ids, is_created=True).values_list(
+                'pk', flat=True
+            )
+        )
+
+    def _raise_if_locked_queryset(self):
+        if self.filter(structure_type__is_created=True).exists():
+            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+
+    def _raise_if_locked_objects(self, objs, include_existing=False):
+        object_list = list(objs)
+        locked_ids = self._locked_structure_type_ids(
+            obj.structure_type_id for obj in object_list
+        )
+        if locked_ids:
+            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+
+        if include_existing:
+            pks = [obj.pk for obj in object_list if obj.pk]
+            if pks and self.model.objects.filter(
+                pk__in=pks, structure_type__is_created=True
+            ).exists():
+                raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+
+        return object_list
+
+    def update(self, **kwargs):
+        self._raise_if_locked_queryset()
+        if 'structure_type' in kwargs:
+            structure_type = kwargs['structure_type']
+            structure_type_id = getattr(structure_type, 'pk', structure_type)
+            if self._locked_structure_type_ids([structure_type_id]):
+                raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+        if 'structure_type_id' in kwargs and self._locked_structure_type_ids(
+            [kwargs['structure_type_id']]
+        ):
+            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+        return super().update(**kwargs)
+
+    def delete(self):
+        self._raise_if_locked_queryset()
+        return super().delete()
+
+    def bulk_create(self, objs, **kwargs):
+        object_list = self._raise_if_locked_objects(objs)
+        return super().bulk_create(object_list, **kwargs)
+
+    def bulk_update(self, objs, fields, **kwargs):
+        object_list = self._raise_if_locked_objects(objs, include_existing=True)
+        return super().bulk_update(object_list, fields, **kwargs)
+
+
+class StructureFieldManager(models.Manager.from_queryset(StructureFieldQuerySet)):
+    pass
 
 
 class StructureField(models.Model):
@@ -53,12 +121,39 @@ class StructureField(models.Model):
     max_length = models.IntegerField(null=True, blank=True, default=255)
     foreign_key_model = models.CharField(max_length=200, blank=True)
 
+    objects = StructureFieldManager()
+
     class Meta:
         ordering = ['sort_order']
         unique_together = ['structure_type', 'name']
 
     def __str__(self):
         return f'{self.structure_type.name}.{self.name}'
+
+    def _has_locked_structure_type(self):
+        if self.structure_type_id and StructureType.objects.filter(
+            pk=self.structure_type_id, is_created=True
+        ).exists():
+            return True
+        if self.pk and StructureField.objects.filter(
+            pk=self.pk, structure_type__is_created=True
+        ).exists():
+            return True
+        return False
+
+    def clean(self):
+        super().clean()
+        if self._has_locked_structure_type():
+            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self._has_locked_structure_type():
+            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+        return super().delete(*args, **kwargs)
 
 
 class StructureInstance(models.Model):

@@ -1,15 +1,27 @@
 import io
+from decimal import Decimal
 
 from django.apps import apps
+from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
-from django.test import TransactionTestCase
+from django.test import RequestFactory, TransactionTestCase
 
+from apps.structures.admin import StructureFieldAdmin, StructureFieldInline
 from apps.structures.dynamic_models import REGISTERED_MODELS
 from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
+
+
+class PermissiveAdminUser:
+    is_active = True
+    is_staff = True
+
+    def has_perm(self, perm):
+        return True
 
 
 class SQLOnlyDynamicStructureTests(TransactionTestCase):
@@ -68,6 +80,156 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertEqual(result, {'success': True, 'error': None})
         self.assertFalse(self.structure_type.is_created)
         self.assertFalse(SQLExecutor.table_exists(self.structure_type))
+
+    def test_create_table_rejects_already_created_type(self):
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+
+        result = SQLExecutor.create_table(self.structure_type)
+
+        self.assertFalse(result['success'])
+        self.assertIn('уже создана', result['error'])
+
+    def test_create_table_uses_fresh_structure_type_state(self):
+        stale_structure_type = self.structure_type
+        StructureType.objects.filter(pk=stale_structure_type.pk).update(is_created=True)
+
+        result = SQLExecutor.create_table(stale_structure_type)
+
+        self.assertFalse(result['success'])
+        self.assertIn('уже создана', result['error'])
+        self.assertFalse(SQLExecutor.table_exists(stale_structure_type))
+
+    def test_create_table_rejects_type_without_fields(self):
+        empty_type = StructureType.objects.create(
+            name='Empty Structure',
+            code='empty_structure',
+            table_name='structures_empty_structure',
+        )
+
+        result = SQLExecutor.create_table(empty_type)
+        empty_type.refresh_from_db()
+
+        self.assertFalse(result['success'])
+        self.assertIn('нет полей', result['error'])
+        self.assertFalse(empty_type.is_created)
+
+    def test_structure_field_validation_rejects_create_change_and_delete_when_created(self):
+        field = self.structure_type.fields.get(name='title')
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+
+        new_field = StructureField(
+            structure_type=self.structure_type,
+            name='status',
+            label='Status',
+            field_type='CharField',
+            sort_order=4,
+        )
+        with self.assertRaises(ValidationError):
+            new_field.full_clean()
+        with self.assertRaises(ValidationError):
+            new_field.save()
+
+        field.label = 'Changed title'
+        with self.assertRaises(ValidationError):
+            field.save()
+
+        with self.assertRaises(ValidationError):
+            field.delete()
+        self.assertTrue(StructureField.objects.filter(pk=field.pk).exists())
+
+    def test_structure_field_validation_uses_fresh_structure_type_state(self):
+        stale_structure_type = self.structure_type
+        StructureType.objects.filter(pk=stale_structure_type.pk).update(is_created=True)
+
+        new_field = StructureField(
+            structure_type=stale_structure_type,
+            name='status',
+            label='Status',
+            field_type='CharField',
+            sort_order=4,
+        )
+
+        with self.assertRaises(ValidationError):
+            new_field.full_clean()
+
+    def test_structure_field_bulk_create_rejects_created_structure_type(self):
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+
+        with self.assertRaises(ValidationError):
+            StructureField.objects.bulk_create(
+                [
+                    StructureField(
+                        structure_type=self.structure_type,
+                        name='status',
+                        label='Status',
+                        field_type='CharField',
+                        sort_order=4,
+                    )
+                ]
+            )
+
+        self.assertFalse(self.structure_type.fields.filter(name='status').exists())
+
+    def test_structure_field_bulk_update_rejects_created_structure_type(self):
+        field = self.structure_type.fields.get(name='title')
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+        field.label = 'Changed title'
+
+        with self.assertRaises(ValidationError):
+            StructureField.objects.bulk_update([field], ['label'])
+
+        field.refresh_from_db()
+        self.assertEqual(field.label, 'Title')
+
+    def test_structure_field_queryset_update_rejects_created_structure_type(self):
+        field = self.structure_type.fields.get(name='title')
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+
+        with self.assertRaises(ValidationError):
+            StructureField.objects.filter(pk=field.pk).update(label='Changed title')
+
+        field.refresh_from_db()
+        self.assertEqual(field.label, 'Title')
+
+    def test_structure_field_queryset_delete_rejects_created_structure_type(self):
+        field = self.structure_type.fields.get(name='title')
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+
+        with self.assertRaises(ValidationError):
+            StructureField.objects.filter(pk=field.pk).delete()
+
+        self.assertTrue(StructureField.objects.filter(pk=field.pk).exists())
+
+    def test_structure_field_inline_is_locked_when_table_created(self):
+        site = AdminSite()
+        inline = StructureFieldInline(StructureType, site)
+        self.structure_type.is_created = True
+
+        self.assertFalse(inline.has_add_permission(None, self.structure_type))
+        self.assertFalse(inline.has_change_permission(None, self.structure_type))
+        self.assertFalse(inline.has_delete_permission(None, self.structure_type))
+        self.assertEqual(inline.get_extra(None, self.structure_type), 0)
+        self.assertEqual(set(inline.get_readonly_fields(None, self.structure_type)), set(inline.fields))
+
+    def test_structure_field_admin_locks_created_structure_type(self):
+        site = AdminSite()
+        admin_model = StructureFieldAdmin(StructureField, site)
+        factory = RequestFactory()
+        field = self.structure_type.fields.get(name='title')
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+
+        get_request = factory.get('/', {'structure_type': self.structure_type.pk})
+        get_request.user = PermissiveAdminUser()
+        post_request = factory.post('/', {'structure_type': self.structure_type.pk})
+        post_request.user = PermissiveAdminUser()
+        actions_request = factory.get('/')
+        actions_request.user = PermissiveAdminUser()
+
+        self.assertFalse(admin_model.has_add_permission(get_request))
+        self.assertFalse(admin_model.has_add_permission(post_request))
+        self.assertFalse(admin_model.has_change_permission(actions_request, field))
+        self.assertFalse(admin_model.has_delete_permission(actions_request, field))
+        self.assertNotIn('delete_selected', admin_model.get_actions(actions_request))
 
     def test_sql_executor_and_table_storage_crud_roundtrip(self):
         from apps.structures import table_storage
@@ -223,7 +385,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         row = SQLExecutor.get_by_id(self.structure_type, insert_result['id'])
         self.assertTrue(row['success'], row.get('error'))
         self.assertEqual(row['record']['title'], 'Original panel')
-        self.assertEqual(str(row['record']['thickness']), '2.5')
+        self.assertEqual(Decimal(str(row['record']['thickness'])), Decimal('2.50'))
 
     def test_required_foreign_key_fields_do_not_create_sql_columns(self):
         from apps.structures import table_storage
@@ -264,7 +426,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
 
     def test_add_column_ignores_foreign_key_fields(self):
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
-        fk_field = StructureField.objects.create(
+        fk_field = StructureField(
             structure_type=self.structure_type,
             name='related_item',
             label='Related item',
@@ -289,7 +451,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             {'title': 'Existing panel'},
         )
         self.assertTrue(insert_result['success'], insert_result.get('error'))
-        new_field = StructureField.objects.create(
+        new_field = StructureField(
             structure_type=self.structure_type,
             name='status',
             label='Status',
@@ -302,18 +464,14 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         result = SQLExecutor.add_column(self.structure_type, new_field)
         self.assertTrue(result['success'], result.get('error'))
 
-        existing_row = SQLExecutor.get_by_id(self.structure_type, insert_result['id'])
-        self.assertTrue(existing_row['success'], existing_row.get('error'))
-        self.assertEqual(existing_row['record']['status'], 'draft')
-
-        rejected = SQLExecutor.update(
-            self.structure_type,
-            insert_result['id'],
-            {'status': None},
-        )
-        self.assertFalse(rejected['success'])
-        self.assertIn('status', rejected['error'])
-        self.assertIn('required', rejected['error'])
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT {SQLExecutor.quote_identifier("status")} '
+                f'FROM {SQLExecutor.quote_identifier(self.structure_type.table_name)} '
+                f'WHERE {SQLExecutor.quote_identifier("id")} = %s',
+                [insert_result['id']],
+            )
+            self.assertEqual(cursor.fetchone()[0], 'draft')
 
     def test_add_required_column_without_default_rejects_non_empty_table(self):
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
@@ -322,7 +480,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             {'title': 'Existing panel'},
         )
         self.assertTrue(insert_result['success'], insert_result.get('error'))
-        new_field = StructureField.objects.create(
+        new_field = StructureField(
             structure_type=self.structure_type,
             name='required_code',
             label='Required code',
@@ -338,7 +496,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
 
     def test_add_column_and_identifier_rejection(self):
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
-        new_field = StructureField.objects.create(
+        new_field = StructureField(
             structure_type=self.structure_type,
             name='notes',
             label='Notes',
@@ -349,15 +507,10 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         result = SQLExecutor.add_column(self.structure_type, new_field)
         self.assertTrue(result['success'], result.get('error'))
 
-        insert_result = SQLExecutor.insert(
-            self.structure_type,
-            {'title': 'With notes', 'notes': 'Created after ALTER TABLE'},
-        )
-        self.assertTrue(insert_result['success'], insert_result.get('error'))
-        self.assertEqual(
-            SQLExecutor.get_by_id(self.structure_type, insert_result['id'])['record']['notes'],
-            'Created after ALTER TABLE',
-        )
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT * FROM {SQLExecutor.quote_identifier(self.structure_type.table_name)} LIMIT 0')
+            columns = [column[0] for column in cursor.description]
+        self.assertIn('notes', columns)
 
         dangerous_type = StructureType.objects.create(
             name='Dangerous',
@@ -366,7 +519,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         )
         self.assertFalse(SQLExecutor.create_table(dangerous_type)['success'])
 
-        dangerous_field = StructureField.objects.create(
+        dangerous_field = StructureField(
             structure_type=self.structure_type,
             name='bad;column',
             label='Bad column',
