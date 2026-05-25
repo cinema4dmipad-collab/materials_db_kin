@@ -5,34 +5,11 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h2 class="h4 mb-0">{{ instance.structure_type.name }}: {{ instance.code }}</h2>
+        <h2 class="h4 mb-0">Legacy-структура</h2>
     </div>
     <div class="card-body">
-        <table class="table">
-            <tr><th>Код</th><td>{{ instance.code }}</td></tr>
-            <tr><th>Тип</th><td>{{ instance.structure_type.name }}</td></tr>
-            <tr><th>Создана</th><td>{{ instance.created_at|date:"d.m.Y H:i" }}</td></tr>
-            <tr><th>Обновлена</th><td>{{ instance.updated_at|date:"d.m.Y H:i" }}</td></tr>
-        </table>
-
-        <h4 class="h5 mt-4">Параметры</h4>
-        {% if field_values %}
-        <table class="table table-striped">
-            {% for value in field_values %}
-            <tr>
-                <th>{{ value.field.label }}</th>
-                <td>{{ value.get_value|default:"—" }}</td>
-            </tr>
-            {% endfor %}
-        </table>
-        {% else %}
-        <p class="text-muted">Параметры не заполнены.</p>
-        {% endif %}
-
-        <div class="mt-3 d-flex gap-2">
-            <a href="{% url 'structures:edit' instance.pk %}" class="btn btn-warning">Редактировать</a>
-            <a href="{% url 'structures:delete' instance.pk %}" class="btn btn-danger">Удалить</a>
-            <a href="{% url 'structures:list' %}" class="btn btn-secondary">Назад</a>
+        <div class="alert alert-warning mb-0">
+            Просмотр самостоятельных экземпляров структур отключен. Актуальные параметры структуры доступны через карточку материала.
         </div>
     </div>
 </div>

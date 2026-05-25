@@ -6,6 +6,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 
 from apps.structures.models import (
+    MATERIAL_LINK_FIELD_TYPE,
     STRUCTURE_FIELD_LOCK_ERROR,
     StructureField,
     StructureFieldValue,
@@ -23,11 +24,19 @@ class StructureFieldAdminForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         cleaned_data['foreign_key_model'] = ''
+        if cleaned_data.get('field_type') == MATERIAL_LINK_FIELD_TYPE:
+            cleaned_data['max_length'] = None
+            cleaned_data['max_digits'] = None
+            cleaned_data['decimal_places'] = None
         return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.foreign_key_model = ''
+        if instance.field_type == MATERIAL_LINK_FIELD_TYPE:
+            instance.max_length = None
+            instance.max_digits = None
+            instance.decimal_places = None
         if commit:
             instance.save()
             self.save_m2m()
@@ -86,7 +95,44 @@ class StructureFieldInline(admin.TabularInline):
 class StructureFieldValueInline(admin.TabularInline):
     model = StructureFieldValue
     extra = 0
-    readonly_fields = ['field']
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        return [field.name for field in self.model._meta.fields]
+
+
+class LegacyReadOnlyAdminMixin:
+    legacy_notice = 'Legacy: сохранено только для просмотра старых данных.'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop('delete_selected', None)
+        return actions
+
+    def get_readonly_fields(self, request, obj=None):
+        return [field.name for field in self.model._meta.fields]
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        messages.warning(request, self.legacy_notice)
+        return super().change_view(request, object_id, form_url, extra_context)
 
 
 @admin.register(StructureType)
@@ -168,11 +214,15 @@ class StructureTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(StructureInstance)
-class StructureInstanceAdmin(admin.ModelAdmin):
-    list_display = ['code', 'structure_type', 'dynamic_row_id', 'created_at']
+class StructureInstanceAdmin(LegacyReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ['code', 'structure_type', 'dynamic_row_id', 'created_at', 'legacy_status']
     search_fields = ['code']
     list_filter = ['structure_type']
     inlines = [StructureFieldValueInline]
+
+    @admin.display(description='Статус')
+    def legacy_status(self, obj):
+        return 'Legacy/read-only'
 
 
 @admin.register(StructureField)
@@ -235,10 +285,14 @@ class StructureFieldAdmin(admin.ModelAdmin):
 
 
 @admin.register(StructureFieldValue)
-class StructureFieldValueAdmin(admin.ModelAdmin):
-    list_display = ['instance', 'field', 'get_display_value']
+class StructureFieldValueAdmin(LegacyReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ['instance', 'field', 'get_display_value', 'legacy_status']
     list_filter = ['field__structure_type']
 
     @admin.display(description='Значение')
     def get_display_value(self, obj):
         return obj.get_value()
+
+    @admin.display(description='Статус')
+    def legacy_status(self, obj):
+        return 'Legacy/read-only'

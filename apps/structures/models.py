@@ -7,6 +7,7 @@ from django.db import models
 STRUCTURE_FIELD_LOCK_ERROR = (
     'Нельзя добавлять, изменять или удалять поля после создания SQL-таблицы.'
 )
+MATERIAL_LINK_FIELD_TYPE = 'MaterialLink'
 
 
 class StructureType(models.Model):
@@ -103,6 +104,7 @@ class StructureField(models.Model):
         ('BooleanField', 'Да/Нет'),
         ('DateField', 'Дата'),
         ('DateTimeField', 'Дата и время'),
+        (MATERIAL_LINK_FIELD_TYPE, 'Материал'),
     ]
 
     structure_type = models.ForeignKey(
@@ -208,4 +210,6 @@ class StructureFieldValue(models.Model):
             return self.value_date
         if field_type == 'DateTimeField':
             return self.value_datetime
+        if field_type == MATERIAL_LINK_FIELD_TYPE:
+            return self.value_fk_id
         return None

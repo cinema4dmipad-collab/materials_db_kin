@@ -3,6 +3,7 @@ from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.contrib.admin.sites import AdminSite
+from django import forms
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import connection
@@ -13,7 +14,7 @@ from apps.materials.admin import MaterialAdmin, MaterialForm
 from apps.materials.forms import MaterialForm as PublicMaterialForm
 from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Property, PropertyGroup
-from apps.structures.models import StructureField, StructureType
+from apps.structures.models import StructureField, StructureInstance, StructureType
 from apps.structures.sql_executor import SQLExecutor
 
 urlpatterns = []
@@ -43,14 +44,63 @@ class MaterialStructureLinkTests(TransactionTestCase):
             decimal_places=2,
             sort_order=2,
         )
+        self.skin_material_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='skin_material',
+            label='Skin material',
+            field_type='MaterialLink',
+            sort_order=3,
+        )
         create_result = SQLExecutor.create_table(self.structure_type)
         self.assertTrue(create_result['success'], create_result.get('error'))
+        self.created_structure_types = [self.structure_type]
 
     def tearDown(self):
-        SQLExecutor.drop_table(self.structure_type)
+        for structure_type in reversed(self.created_structure_types):
+            SQLExecutor.drop_table(structure_type)
+
+    def create_structure_type(self, name='Second Panel', code='second_panel', table_name='structures_second_panel'):
+        structure_type = StructureType.objects.create(
+            name=name,
+            code=code,
+            table_name=table_name,
+        )
+        StructureField.objects.create(
+            structure_type=structure_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            is_required=True,
+            sort_order=1,
+        )
+        StructureField.objects.create(
+            structure_type=structure_type,
+            name='thickness',
+            label='Thickness',
+            field_type='DecimalField',
+            max_digits=8,
+            decimal_places=2,
+            sort_order=2,
+        )
+        create_result = SQLExecutor.create_table(structure_type)
+        self.assertTrue(create_result['success'], create_result.get('error'))
+        self.created_structure_types.append(structure_type)
+        return structure_type
+
+    def structure_field_data(self, structure_type, **overrides):
+        data = {
+            'title': 'Public panel',
+            'thickness': '12.50',
+            'skin_material': '',
+        }
+        data.update(overrides)
+        return {
+            f'structure_field_{field.pk}': data[field.name]
+            for field in structure_type.fields.exclude(field_type='ForeignKey')
+        }
 
     def insert_structure_row(self, **overrides):
-        data = {'title': 'Panel A', 'thickness': '12.50'}
+        data = {'title': 'Panel A', 'thickness': '12.50', 'skin_material': ''}
         data.update(overrides)
         result = SQLExecutor.insert(self.structure_type, data)
         self.assertTrue(result['success'], result.get('error'))
@@ -343,16 +393,51 @@ class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
 
 
 class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
-    def test_public_material_form_includes_structure_fields_and_choices(self):
-        row_id = self.insert_structure_row(title='Public row')
+    def _formset_management_data(self):
+        return {
+            'properties-TOTAL_FORMS': '3',
+            'properties-INITIAL_FORMS': '0',
+            'properties-MIN_NUM_FORMS': '0',
+            'properties-MAX_NUM_FORMS': '1000',
+        }
 
+    def _post_data(self, **overrides):
+        data = {
+            'code': 'MAT-PUBLIC-001',
+            'name': 'Public material',
+            'description': 'Created from public form',
+            'struct_type': str(self.structure_type.pk),
+            'created_by': 'tester',
+        }
+        data.update(self.structure_field_data(self.structure_type))
+        data.update(self._formset_management_data())
+        data.update(overrides)
+        return data
+
+    def test_public_material_form_includes_structure_fields_not_props_id(self):
         form = PublicMaterialForm(data={'struct_type': str(self.structure_type.pk)})
-        props_field = form.fields['struct_props_id']
 
         self.assertIn('struct_type', form.fields)
-        self.assertIn('struct_props_id', form.fields)
-        self.assertIn((str(row_id), 'Public row'), list(props_field.widget.choices))
-        self.assertNotIn('data-load-url', props_field.widget.attrs)
+        self.assertNotIn('struct_props_id', form.fields)
+        self.assertIn('structure_field_{}'.format(self.structure_type.fields.get(name='title').pk), form.fields)
+        self.assertIn(
+            'structure_field_{}'.format(self.structure_type.fields.get(name='thickness').pk),
+            form.fields,
+        )
+        self.assertEqual(
+            form.fields['structure_field_{}'.format(self.structure_type.fields.get(name='title').pk)].label,
+            'Title',
+        )
+        self.assertEqual(
+            form.fields[
+                'structure_field_{}'.format(self.structure_type.fields.get(name='thickness').pk)
+            ].label,
+            'Thickness',
+        )
+        material_field = form.fields[f'structure_field_{self.skin_material_field.pk}']
+        self.assertIsInstance(material_field, forms.ModelChoiceField)
+        self.assertEqual(list(material_field.queryset), list(Material.objects.order_by('code')))
+        self.assertFalse(material_field.required)
 
     @override_settings(ROOT_URLCONF='apps.materials.tests')
     def test_public_material_form_renders_without_admin_url_namespace(self):
@@ -360,55 +445,325 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
         rendered = form.as_p()
 
-        self.assertIn('name="struct_props_id"', rendered)
+        self.assertNotIn('name="struct_props_id"', rendered)
         self.assertNotIn('data-load-url', rendered)
 
-    def test_public_material_form_uses_provided_structure_load_url(self):
-        form = PublicMaterialForm(structure_load_url='/structures/load/')
-
-        self.assertEqual(
-            form.fields['struct_props_id'].widget.attrs['data-load-url'],
-            '/structures/load/',
+    def test_public_material_create_view_saves_dynamic_row_and_detail_shows_values(self):
+        linked_material = Material.objects.create(
+            code='MAT-LINKED-001',
+            name='Linked material',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(**{f'structure_field_{self.skin_material_field.pk}': str(linked_material.pk)}),
         )
 
-    def test_public_material_form_existing_instance_includes_selected_row(self):
-        selected_row_id = self.insert_structure_row(title='Selected public row')
-        for index in range(105):
-            self.insert_structure_row(title=f'Public row {index:03d}')
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        self.assertEqual(material.struct_type, self.structure_type)
+        self.assertIsNotNone(material.struct_props_id)
+        self.assertFalse(StructureInstance.objects.exists())
+
+        params = material.get_structure_params()
+        self.assertEqual(params['title'], 'Public panel')
+        self.assertEqual(str(params['thickness']), '12.50')
+        self.assertEqual(str(params['skin_material']), str(linked_material.pk))
+
+        detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertContains(detail_response, 'Title')
+        self.assertContains(detail_response, 'Public panel')
+        self.assertContains(detail_response, 'Thickness')
+        self.assertContains(detail_response, '12,50')
+        self.assertContains(detail_response, 'Skin material')
+        self.assertContains(detail_response, 'MAT-LINKED-001 - Linked material')
+
+    def test_public_material_update_prefills_and_updates_existing_dynamic_row(self):
+        row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
+        linked_material = Material.objects.create(
+            code='MAT-LINKED-002',
+            name='Prefilled material',
+        )
+        SQLExecutor.update(
+            self.structure_type,
+            row_id,
+            {'skin_material': linked_material.pk},
+        )
         material = Material.objects.create(
-            code='MAT-008',
-            name='Public material with selected structure',
+            code='MAT-PUBLIC-002',
+            name='Public material with existing structure',
             struct_type=self.structure_type,
-            struct_props_id=selected_row_id,
+            struct_props_id=row_id,
         )
 
         form = PublicMaterialForm(instance=material)
+        title_field = self.structure_type.fields.get(name='title')
+        thickness_field = self.structure_type.fields.get(name='thickness')
 
-        choices = list(form.fields['struct_props_id'].widget.choices)
-        self.assertIn((str(selected_row_id), 'Selected public row'), choices)
-
-    def test_public_material_form_validates_selected_dynamic_row(self):
-        row_id = self.insert_structure_row(title='Valid public row')
-        valid_form = PublicMaterialForm(
-            data={
-                'code': 'MAT-009',
-                'name': 'Valid public material',
-                'struct_type': str(self.structure_type.pk),
-                'struct_props_id': str(row_id),
-            }
+        self.assertEqual(form.fields[f'structure_field_{title_field.pk}'].initial, 'Original panel')
+        self.assertEqual(str(form.fields[f'structure_field_{thickness_field.pk}'].initial), '8.25')
+        self.assertEqual(
+            form.fields[f'structure_field_{self.skin_material_field.pk}'].initial,
+            linked_material,
         )
-        self.assertTrue(valid_form.is_valid(), valid_form.errors)
 
-        invalid_form = PublicMaterialForm(
-            data={
-                'code': 'MAT-010',
-                'name': 'Invalid public material',
-                'struct_type': str(self.structure_type.pk),
-                'struct_props_id': str(uuid.uuid4()),
-            }
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-002',
+                name='Updated public material',
+                **{
+                    f'structure_field_{title_field.pk}': 'Updated panel',
+                    f'structure_field_{thickness_field.pk}': '9.75',
+                },
+            ),
         )
-        self.assertFalse(invalid_form.is_valid())
-        self.assertIn('struct_props_id', invalid_form.errors)
+
+        self.assertEqual(response.status_code, 302)
+        material.refresh_from_db()
+        self.assertEqual(str(material.struct_props_id), row_id)
+        self.assertFalse(StructureInstance.objects.exists())
+        params = material.get_structure_params()
+        self.assertEqual(params['title'], 'Updated panel')
+        self.assertEqual(str(params['thickness']), '9.75')
+
+    def test_public_material_update_shared_row_creates_new_dynamic_row(self):
+        row_id = self.insert_structure_row(title='Shared panel', thickness='8.25')
+        material = Material.objects.create(
+            code='MAT-PUBLIC-SHARED-001',
+            name='Public material with shared structure',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        other_material = Material.objects.create(
+            code='MAT-PUBLIC-SHARED-002',
+            name='Other material with shared structure',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        title_field = self.structure_type.fields.get(name='title')
+        thickness_field = self.structure_type.fields.get(name='thickness')
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-SHARED-001',
+                name='Edited shared public material',
+                **{
+                    f'structure_field_{title_field.pk}': 'Edited panel',
+                    f'structure_field_{thickness_field.pk}': '9.75',
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material.refresh_from_db()
+        other_material.refresh_from_db()
+        self.assertNotEqual(str(material.struct_props_id), row_id)
+        self.assertEqual(str(other_material.struct_props_id), row_id)
+
+        old_params = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(old_params['title'], 'Shared panel')
+        self.assertEqual(str(old_params['thickness']), '8.25')
+
+        new_params = material.get_structure_params()
+        self.assertEqual(new_params['title'], 'Edited panel')
+        self.assertEqual(str(new_params['thickness']), '9.75')
+
+    def test_public_material_update_can_clear_structure_and_deletes_dynamic_row(self):
+        row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
+        material = Material.objects.create(
+            code='MAT-PUBLIC-003',
+            name='Public material with clearable structure',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-003',
+                name='Public material without structure',
+                struct_type='',
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material.refresh_from_db()
+        self.assertIsNone(material.struct_type)
+        self.assertIsNone(material.struct_props_id)
+        self.assertIsNone(SQLExecutor.get_structure_instance(self.structure_type, row_id))
+
+    def test_public_material_update_clear_shared_row_keeps_old_dynamic_row(self):
+        row_id = self.insert_structure_row(title='Shared panel', thickness='8.25')
+        material = Material.objects.create(
+            code='MAT-PUBLIC-SHARED-003',
+            name='Public material with clearable shared structure',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        other_material = Material.objects.create(
+            code='MAT-PUBLIC-SHARED-004',
+            name='Other material with clearable shared structure',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-SHARED-003',
+                name='Public material without shared structure',
+                struct_type='',
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material.refresh_from_db()
+        other_material.refresh_from_db()
+        self.assertIsNone(material.struct_type)
+        self.assertIsNone(material.struct_props_id)
+        self.assertEqual(str(other_material.struct_props_id), row_id)
+
+        old_params = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertIsNotNone(old_params)
+        self.assertEqual(old_params['title'], 'Shared panel')
+
+    def test_public_material_update_can_change_structure_and_deletes_old_dynamic_row(self):
+        old_row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
+        material = Material.objects.create(
+            code='MAT-PUBLIC-004',
+            name='Public material with replaceable structure',
+            struct_type=self.structure_type,
+            struct_props_id=old_row_id,
+        )
+        new_structure_type = self.create_structure_type()
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-004',
+                name='Public material with second structure',
+                struct_type=str(new_structure_type.pk),
+                **self.structure_field_data(
+                    new_structure_type,
+                    title='Replacement panel',
+                    thickness='3.50',
+                ),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material.refresh_from_db()
+        self.assertEqual(material.struct_type, new_structure_type)
+        self.assertIsNotNone(material.struct_props_id)
+        self.assertIsNone(SQLExecutor.get_structure_instance(self.structure_type, old_row_id))
+        params = material.get_structure_params()
+        self.assertEqual(params['title'], 'Replacement panel')
+        self.assertEqual(str(params['thickness']), '3.50')
+
+    def test_public_material_update_change_shared_row_keeps_old_dynamic_row(self):
+        old_row_id = self.insert_structure_row(title='Shared panel', thickness='8.25')
+        material = Material.objects.create(
+            code='MAT-PUBLIC-SHARED-005',
+            name='Public material with replaceable shared structure',
+            struct_type=self.structure_type,
+            struct_props_id=old_row_id,
+        )
+        other_material = Material.objects.create(
+            code='MAT-PUBLIC-SHARED-006',
+            name='Other material with replaceable shared structure',
+            struct_type=self.structure_type,
+            struct_props_id=old_row_id,
+        )
+        new_structure_type = self.create_structure_type()
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-SHARED-005',
+                name='Public material with replacement shared structure',
+                struct_type=str(new_structure_type.pk),
+                **self.structure_field_data(
+                    new_structure_type,
+                    title='Replacement panel',
+                    thickness='3.50',
+                ),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material.refresh_from_db()
+        other_material.refresh_from_db()
+        self.assertEqual(material.struct_type, new_structure_type)
+        self.assertIsNotNone(material.struct_props_id)
+        self.assertEqual(str(other_material.struct_props_id), old_row_id)
+
+        old_params = SQLExecutor.get_structure_instance(self.structure_type, old_row_id)
+        self.assertIsNotNone(old_params)
+        self.assertEqual(old_params['title'], 'Shared panel')
+
+        params = material.get_structure_params()
+        self.assertEqual(params['title'], 'Replacement panel')
+        self.assertEqual(str(params['thickness']), '3.50')
+
+    def test_public_material_create_requires_dynamic_required_fields(self):
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(**self.structure_field_data(self.structure_type, title='')),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Material.objects.filter(code='MAT-PUBLIC-001').exists())
+        self.assertContains(response, 'Обязательное поле.')
+
+    def test_public_material_create_persists_and_displays_zero_decimal_value(self):
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(**self.structure_field_data(self.structure_type, thickness='0.00')),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        params = material.get_structure_params()
+        self.assertEqual(str(params['thickness']), '0.00')
+
+        detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertContains(detail_response, '<td>0,00</td>', html=True)
+
+    def test_public_material_update_missing_existing_dynamic_row_returns_form_error(self):
+        row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
+        material = Material.objects.create(
+            code='MAT-PUBLIC-005',
+            name='Public material with missing dynamic row',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        delete_result = SQLExecutor.delete(self.structure_type, row_id)
+        self.assertTrue(delete_result['success'], delete_result.get('error'))
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-005',
+                name='Public material with missing dynamic row',
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Запись параметров структуры не найдена.')
+        material.refresh_from_db()
+        self.assertEqual(material.struct_type, self.structure_type)
+        self.assertEqual(str(material.struct_props_id), row_id)
+
+    def test_public_material_form_without_structure_type_has_empty_state(self):
+        form = PublicMaterialForm()
+
+        self.assertFalse(form.structure_bound_fields)
+        self.assertEqual(form.structure_empty_message, 'Выберите тип структуры, чтобы заполнить параметры.')
+
+        response = self.client.get(reverse('materials:create'))
+
+        self.assertContains(response, 'Выберите тип структуры, чтобы заполнить параметры.')
 
 
 class SeedDataCommandTests(TestCase):

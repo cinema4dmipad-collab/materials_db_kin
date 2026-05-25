@@ -1,7 +1,9 @@
 import io
+import uuid
 from decimal import Decimal
 from unittest import mock
 
+from django import forms
 from django.apps import apps
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ImproperlyConfigured
@@ -9,17 +11,26 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
-from django.test import RequestFactory, TransactionTestCase
+from django.test import RequestFactory, TestCase, TransactionTestCase
+from django.urls import NoReverseMatch, reverse
 
 from apps.structures import table_storage
+from apps.materials.models import Material
 from apps.structures.admin import (
     StructureFieldAdmin,
     StructureFieldAdminForm,
     StructureFieldInline,
+    StructureFieldValueAdmin,
+    StructureInstanceAdmin,
 )
 from apps.structures.dynamic_models import REGISTERED_MODELS
 from apps.structures.forms import get_dynamic_form
-from apps.structures.models import StructureField, StructureType
+from apps.structures.models import (
+    StructureField,
+    StructureFieldValue,
+    StructureInstance,
+    StructureType,
+)
 from apps.structures.sql_executor import SQLExecutor
 
 
@@ -29,6 +40,91 @@ class PermissiveAdminUser:
 
     def has_perm(self, perm):
         return True
+
+
+class PublicStructureRoutesDeprecatedTests(TestCase):
+    def setUp(self):
+        self.active_type = StructureType.objects.create(
+            name='Active Panel',
+            code='active_panel',
+            table_name='structures_active_panel',
+            description='Visible metadata',
+        )
+        StructureField.objects.create(
+            structure_type=self.active_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            sort_order=1,
+        )
+        self.inactive_type = StructureType.objects.create(
+            name='Inactive Panel',
+            code='inactive_panel',
+            table_name='structures_inactive_panel',
+            is_active=False,
+        )
+
+    def test_public_structure_instance_routes_are_not_exposed(self):
+        disabled_routes = [
+            ('structures:list', []),
+            ('structures:instance_list', []),
+            ('structures:instance_list_by_type', [self.active_type.code]),
+            ('structures:create', [self.active_type.code]),
+            ('structures:detail', [uuid.uuid4()]),
+            ('structures:edit', [uuid.uuid4()]),
+            ('structures:delete', [uuid.uuid4()]),
+        ]
+
+        for route_name, args in disabled_routes:
+            with self.subTest(route_name=route_name):
+                with self.assertRaises(NoReverseMatch):
+                    reverse(route_name, args=args)
+
+    def test_select_type_remains_metadata_only(self):
+        response = self.client.get(reverse('structures:select_type'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Типы структур')
+        self.assertContains(response, 'Active Panel')
+        self.assertContains(response, 'Visible metadata')
+        self.assertContains(response, 'Таблица: <code>structures_active_panel</code>', html=True)
+        self.assertContains(response, 'Параметры структуры заполняются в карточке материала.')
+        self.assertNotContains(response, 'Inactive Panel')
+        self.assertNotContains(response, 'Создать Active Panel')
+        self.assertNotContains(response, 'Список')
+
+
+class LegacyStructureAdminReadOnlyTests(TestCase):
+    def setUp(self):
+        self.site = AdminSite()
+        self.request = RequestFactory().get('/')
+        self.request.user = PermissiveAdminUser()
+
+    def test_structure_instance_admin_is_legacy_read_only(self):
+        admin_model = StructureInstanceAdmin(StructureInstance, self.site)
+
+        self.assertFalse(admin_model.has_add_permission(self.request))
+        self.assertFalse(admin_model.has_change_permission(self.request))
+        self.assertFalse(admin_model.has_delete_permission(self.request))
+        self.assertTrue(admin_model.has_view_permission(self.request))
+        self.assertNotIn('delete_selected', admin_model.get_actions(self.request))
+        self.assertEqual(
+            set(admin_model.get_readonly_fields(self.request)),
+            {field.name for field in StructureInstance._meta.fields},
+        )
+
+    def test_structure_field_value_admin_is_legacy_read_only(self):
+        admin_model = StructureFieldValueAdmin(StructureFieldValue, self.site)
+
+        self.assertFalse(admin_model.has_add_permission(self.request))
+        self.assertFalse(admin_model.has_change_permission(self.request))
+        self.assertFalse(admin_model.has_delete_permission(self.request))
+        self.assertTrue(admin_model.has_view_permission(self.request))
+        self.assertNotIn('delete_selected', admin_model.get_actions(self.request))
+        self.assertEqual(
+            set(admin_model.get_readonly_fields(self.request)),
+            {field.name for field in StructureFieldValue._meta.fields},
+        )
 
 
 class SQLOnlyDynamicStructureTests(TransactionTestCase):
@@ -244,8 +340,9 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertEqual(inline.get_extra(None, self.structure_type), 0)
         self.assertEqual(set(inline.get_readonly_fields(None, self.structure_type)), set(inline.fields))
 
-    def test_foreign_key_is_not_supported_field_type_choice(self):
+    def test_field_type_choices_include_material_link_but_not_foreign_key(self):
         field_type_values = [value for value, _ in StructureField.FIELD_TYPES]
+        self.assertIn('MaterialLink', field_type_values)
         self.assertNotIn('ForeignKey', field_type_values)
 
         site = AdminSite()
@@ -257,6 +354,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         form = form_class()
 
         form_choice_values = [value for value, _ in form.fields['field_type'].choices]
+        self.assertIn('MaterialLink', form_choice_values)
         self.assertNotIn('ForeignKey', form_choice_values)
 
     def test_structure_field_admin_form_hides_foreign_key_target(self):
@@ -311,6 +409,31 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         update_form.save()
         stale_field.refresh_from_db()
         self.assertEqual(stale_field.foreign_key_model, '')
+
+    def test_structure_field_admin_form_normalizes_material_link_parameters(self):
+        form = StructureFieldAdminForm(
+            data={
+                'structure_type': self.structure_type.pk,
+                'name': 'skin_material',
+                'label': 'Skin material',
+                'field_type': 'MaterialLink',
+                'is_required': True,
+                'foreign_key_model': 'materials.Material',
+                'max_length': 255,
+                'max_digits': 10,
+                'decimal_places': 2,
+                'sort_order': 4,
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        field = form.save()
+
+        self.assertEqual(field.field_type, 'MaterialLink')
+        self.assertEqual(field.foreign_key_model, '')
+        self.assertIsNone(field.max_length)
+        self.assertIsNone(field.max_digits)
+        self.assertIsNone(field.decimal_places)
 
     def test_structure_field_inline_form_hides_foreign_key_target(self):
         site = AdminSite()
@@ -408,6 +531,178 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         delete_result = SQLExecutor.delete(self.structure_type, insert_result['id'])
         self.assertTrue(delete_result['success'], delete_result.get('error'))
         self.assertEqual(SQLExecutor.get_all(self.structure_type)['total'], 0)
+
+    def test_material_link_create_table_roundtrip_and_on_delete_set_null(self):
+        material = Material.objects.create(code='MAT-LINK-001', name='Linked material')
+        replacement = Material.objects.create(code='MAT-LINK-002', name='Replacement material')
+        link_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='skin_material',
+            label='Skin material',
+            field_type='MaterialLink',
+            is_required=True,
+            max_length=255,
+            max_digits=10,
+            decimal_places=2,
+            foreign_key_model='materials.Material',
+            sort_order=4,
+        )
+
+        create_result = SQLExecutor.create_table(self.structure_type)
+        self.assertTrue(create_result['success'], create_result.get('error'))
+
+        expected_type = 'UUID' if connection.vendor == 'postgresql' else 'TEXT'
+        self.assertEqual(SQLExecutor._field_sql_type(link_field), expected_type)
+        with mock.patch.object(connection, 'vendor', 'postgresql'):
+            self.assertEqual(SQLExecutor._field_sql_type(link_field), 'UUID')
+        with mock.patch.object(connection, 'vendor', 'sqlite'):
+            self.assertEqual(SQLExecutor._field_sql_type(link_field), 'TEXT')
+        column_sql = SQLExecutor._column_definition(link_field)
+        self.assertIn('REFERENCES', column_sql)
+        self.assertIn(SQLExecutor.quote_identifier('materials_material'), column_sql)
+        self.assertIn('ON DELETE SET NULL', column_sql)
+        self.assertIn('NULL', column_sql)
+        self.assertNotIn('NOT NULL', column_sql)
+
+        if connection.vendor == 'sqlite':
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f'PRAGMA foreign_key_list({SQLExecutor.quote_identifier(self.structure_type.table_name)})'
+                )
+                foreign_keys = cursor.fetchall()
+            self.assertTrue(
+                any(
+                    row[2] == 'materials_material'
+                    and row[3] == 'skin_material'
+                    and row[4] == 'id'
+                    and row[6].upper() == 'SET NULL'
+                    for row in foreign_keys
+                ),
+                foreign_keys,
+            )
+
+        insert_result = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Linked panel', 'skin_material': material},
+        )
+        self.assertTrue(insert_result['success'], insert_result.get('error'))
+        row = SQLExecutor.get_by_id(self.structure_type, insert_result['id'])
+        self.assertEqual(str(row['record']['skin_material']), str(material.pk))
+
+        update_result = SQLExecutor.update(
+            self.structure_type,
+            insert_result['id'],
+            {'skin_material': str(replacement.pk)},
+        )
+        self.assertTrue(update_result['success'], update_result.get('error'))
+        row = SQLExecutor.get_by_id(self.structure_type, insert_result['id'])
+        self.assertEqual(str(row['record']['skin_material']), str(replacement.pk))
+
+        update_result = SQLExecutor.update(
+            self.structure_type,
+            insert_result['id'],
+            {'skin_material': ''},
+        )
+        self.assertTrue(update_result['success'], update_result.get('error'))
+        row = SQLExecutor.get_by_id(self.structure_type, insert_result['id'])
+        self.assertIsNone(row['record']['skin_material'])
+
+        update_result = SQLExecutor.update(
+            self.structure_type,
+            insert_result['id'],
+            {'skin_material': replacement.pk},
+        )
+        self.assertTrue(update_result['success'], update_result.get('error'))
+        replacement.delete()
+        row = SQLExecutor.get_by_id(self.structure_type, insert_result['id'])
+        self.assertIsNone(row['record']['skin_material'])
+
+        blank_insert = SQLExecutor.insert(self.structure_type, {'title': 'Blank link panel'})
+        self.assertTrue(blank_insert['success'], blank_insert.get('error'))
+        blank_row = SQLExecutor.get_by_id(self.structure_type, blank_insert['id'])
+        self.assertIsNone(blank_row['record']['skin_material'])
+
+    def test_material_link_dynamic_table_form_uses_material_choice_and_initial_object(self):
+        material = Material.objects.create(code='MAT-FORM-001', name='Form material')
+        other_material = Material.objects.create(code='MAT-FORM-002', name='Other material')
+        link_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='skin_material',
+            label='Skin material',
+            field_type='MaterialLink',
+            sort_order=4,
+        )
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+        row_id = table_storage.insert_row(
+            self.structure_type,
+            'row-code',
+            {'title': 'Form panel', 'skin_material': material.pk},
+        )
+        instance = self.structure_type.structureinstance_set.create(
+            code='row-code',
+            dynamic_row_id=row_id,
+        )
+
+        form_class = get_dynamic_form(self.structure_type)
+        form = form_class(instance=instance)
+        form_field = form.fields[f'field_{link_field.id}']
+
+        self.assertIsInstance(form_field, forms.ModelChoiceField)
+        self.assertFalse(form_field.required)
+        self.assertEqual(list(form_field.queryset), [material, other_material])
+        self.assertEqual(form_field.label_from_instance(material), 'MAT-FORM-001 - Form material')
+        self.assertEqual(form_field.initial, material)
+
+        invalid_form = form_class(
+            data={
+                'code': 'invalid-row',
+                f'field_{self.structure_type.fields.get(name="title").id}': 'Invalid row',
+                f'field_{link_field.id}': '00000000-0000-0000-0000-000000000000',
+            }
+        )
+        self.assertFalse(invalid_form.is_valid())
+        self.assertIn(f'field_{link_field.id}', invalid_form.errors)
+
+        valid_form = form_class(
+            data={
+                'code': 'updated-row',
+                f'field_{self.structure_type.fields.get(name="title").id}': 'Updated row',
+                f'field_{link_field.id}': str(other_material.pk),
+            },
+            instance=instance,
+        )
+        self.assertTrue(valid_form.is_valid(), valid_form.errors)
+        valid_form.save()
+        loaded = table_storage.load_field_data(self.structure_type, row_id)
+        self.assertEqual(str(loaded['skin_material']), str(other_material.pk))
+
+    def test_material_link_eav_form_saves_uuid_and_loads_initial_object(self):
+        material = Material.objects.create(code='MAT-EAV-001', name='EAV material')
+        link_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='skin_material',
+            label='Skin material',
+            field_type='MaterialLink',
+            sort_order=4,
+        )
+
+        form_class = get_dynamic_form(self.structure_type)
+        form = form_class(
+            data={
+                'code': 'eav-row',
+                f'field_{self.structure_type.fields.get(name="title").id}': 'EAV row',
+                f'field_{link_field.id}': str(material.pk),
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        instance = form.save()
+        field_value = instance.values.get(field=link_field)
+        self.assertEqual(field_value.value_fk_id, material.pk)
+        self.assertEqual(field_value.get_value(), material.pk)
+
+        edit_form = form_class(instance=instance)
+        self.assertEqual(edit_form.fields[f'field_{link_field.id}'].initial, material)
 
     def test_unlimited_offset_pagination_uses_postgresql_compatible_sql(self):
         with mock.patch.object(connection, 'vendor', 'postgresql'):

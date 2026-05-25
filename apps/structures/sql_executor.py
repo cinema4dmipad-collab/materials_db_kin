@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.db import connection
 from django.utils import timezone
 
-from apps.structures.models import StructureField, StructureType
+from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 
 IDENTIFIER_RE = re.compile(r'^[a-z][a-z0-9_]*$')
 UNSUPPORTED_FOREIGN_KEY_FIELD_ERROR = (
@@ -113,7 +113,7 @@ class SQLExecutor:
                     cls.validate_identifier(field.name)
                     columns.append(field.name)
                     values.append(cls._default_for_db(field))
-                elif field.is_required:
+                elif field.is_required and field.field_type != MATERIAL_LINK_FIELD_TYPE:
                     raise ValueError(f'Field {field.name!r} is required.')
 
             quoted_columns = ', '.join(cls.quote_identifier(column) for column in columns)
@@ -214,7 +214,11 @@ class SQLExecutor:
                 field = fields_by_name.get(name)
                 if field is None:
                     continue
-                if field.is_required and cls._is_empty_value(value):
+                if (
+                    field.is_required
+                    and field.field_type != MATERIAL_LINK_FIELD_TYPE
+                    and cls._is_empty_value(value)
+                ):
                     raise ValueError(f'Field {field.name!r} is required.')
                 assignments.append(f'{cls.quote_identifier(name)} = %s')
                 values.append(cls._coerce_for_db(field, value))
@@ -257,7 +261,12 @@ class SQLExecutor:
             with connection.cursor() as cursor:
                 cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
                 row_count = cursor.fetchone()[0]
-                if row_count and field.is_required and not has_default:
+                if (
+                    row_count
+                    and field.is_required
+                    and field.field_type != MATERIAL_LINK_FIELD_TYPE
+                    and not has_default
+                ):
                     raise ValueError(
                         f'Cannot add required column {field.name!r} to non-empty table '
                         'without StructureField.default_value.'
@@ -266,7 +275,10 @@ class SQLExecutor:
                 # Portable engines cannot all enforce NOT NULL after adding a column without
                 # rebuilding the table. For populated tables, add it nullable, backfill it,
                 # and let inserts/defaults preserve the required-field invariant.
-                force_nullable = bool(row_count and field.is_required and has_default)
+                force_nullable = bool(
+                    field.field_type == MATERIAL_LINK_FIELD_TYPE
+                    or (row_count and field.is_required and has_default)
+                )
                 cursor.execute(
                     f'ALTER TABLE {table_name} ADD COLUMN '
                     f'{cls._column_definition(field, force_nullable=force_nullable)}'
@@ -329,13 +341,23 @@ class SQLExecutor:
         force_nullable: bool = False,
         include_default: bool = True,
     ) -> str:
-        null_constraint = 'NULL' if force_nullable else 'NOT NULL' if field.is_required else 'NULL'
+        null_constraint = (
+            'NULL'
+            if force_nullable or field.field_type == MATERIAL_LINK_FIELD_TYPE
+            else 'NOT NULL' if field.is_required else 'NULL'
+        )
         default_clause = ''
         if include_default and cls._has_default(field):
             default_clause = f' DEFAULT {cls._sql_literal(cls._default_for_db(field))}'
+        reference_clause = ''
+        if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+            reference_clause = (
+                f' REFERENCES {cls.quote_identifier("materials_material")}'
+                f'({cls.quote_identifier("id")}) ON DELETE SET NULL'
+            )
         return (
             f'{cls.quote_identifier(field.name)} {cls._field_sql_type(field)} '
-            f'{null_constraint}{default_clause}'
+            f'{null_constraint}{default_clause}{reference_clause}'
         )
 
     @classmethod
@@ -374,12 +396,18 @@ class SQLExecutor:
             return 'DATE'
         if field.field_type == 'DateTimeField':
             return 'TIMESTAMP' if connection.vendor == 'postgresql' else 'DATETIME'
+        if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+            return 'UUID' if connection.vendor == 'postgresql' else 'TEXT'
         return 'TEXT'
 
     @staticmethod
     def _coerce_for_db(field: StructureField, value):
         if value is None or value == '':
             return None
+        if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+            if hasattr(value, 'pk'):
+                return str(value.pk)
+            return str(uuid.UUID(str(value)))
         if field.field_type == 'BooleanField':
             if isinstance(value, str):
                 value = value.strip().lower() in {'1', 'true', 'yes', 'on'}

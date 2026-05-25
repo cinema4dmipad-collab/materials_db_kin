@@ -6,12 +6,14 @@
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <div>
-            <h1 class="h4 mb-0">Создание новой структуры</h1>
-            <p class="text-muted small mb-0">Выберите тип структуры</p>
+            <h1 class="h4 mb-0">Типы структур</h1>
+            <p class="text-muted small mb-0">Метаданные динамических параметров материалов</p>
         </div>
-        <a href="{% url 'structures:list' %}" class="btn btn-outline-secondary btn-sm">Все структуры</a>
     </div>
     <div class="card-body">
+        <div class="alert alert-info">
+            Параметры структуры заполняются в карточке материала.
+        </div>
         {% if types %}
         <div class="row g-3">
             {% for st in types %}
@@ -32,10 +34,6 @@
                         {% if st.description %}
                         <p class="card-text small">{{ st.description }}</p>
                         {% endif %}
-                    </div>
-                    <div class="card-footer bg-transparent d-flex gap-2">
-                        <a href="{% url 'structures:create' st.code %}" class="btn btn-primary btn-sm">Создать {{ st.name }}</a>
-                        <a href="{% url 'structures:instance_list_by_type' st.code %}" class="btn btn-outline-secondary btn-sm">Список</a>
                     </div>
                 </div>
             </div>

@@ -1,12 +1,21 @@
+from django import forms
 from django.http import HttpResponseRedirect
+from django.db import transaction
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from apps.materials.forms import MaterialForm, MaterialPropertyFormSet
 from apps.materials.models import Material
+from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
 
 
 class MaterialFormsetMixin:
+    def get_initial(self):
+        initial = super().get_initial()
+        if 'struct_type' in self.request.GET:
+            initial['struct_type'] = self.request.GET.get('struct_type')
+        return initial
+
     def get_formset(self):
         if self.request.method == 'POST':
             if getattr(self, 'object', None):
@@ -25,9 +34,14 @@ class MaterialFormsetMixin:
         formset = self.get_formset()
         if not formset.is_valid():
             return self.render_to_response(self.get_context_data(form=form))
-        self.object = form.save()
-        formset.instance = self.object
-        formset.save()
+        try:
+            with transaction.atomic():
+                self.object = form.save()
+                formset.instance = self.object
+                formset.save()
+        except forms.ValidationError as exc:
+            form.add_error(None, exc)
+            return self.render_to_response(self.get_context_data(form=form))
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -88,6 +102,7 @@ class MaterialDetailView(DetailView):
                 'field_type': field.field_type,
                 'value': structure_params.get(field.name),
                 'display_value': self.get_structure_display_value(
+                    field,
                     structure_params.get(field.name)
                 ),
             }
@@ -98,9 +113,15 @@ class MaterialDetailView(DetailView):
             structure_context['structure_message'] = 'Параметры структуры не заданы.'
         return structure_context
 
-    def get_structure_display_value(self, value):
+    def get_structure_display_value(self, field, value):
         if value is None or value == '':
             return '—'
+        if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+            try:
+                material = Material.objects.get(pk=value)
+            except (Material.DoesNotExist, ValueError, TypeError):
+                return value
+            return f'{material.code} - {material.name}'
         return value
 
 

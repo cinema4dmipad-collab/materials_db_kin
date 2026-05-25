@@ -5,18 +5,12 @@
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <h1 class="h4 mb-0">Удаление структуры</h1>
+        <h1 class="h4 mb-0">Legacy-структура</h1>
     </div>
     <div class="card-body">
-        <div class="alert alert-warning">
-            Удалить структуру <strong>{{ instance.code }}</strong> ({{ instance.structure_type.name }})?
-            Связанные значения полей будут удалены.
+        <div class="alert alert-warning mb-0">
+            Самостоятельное удаление экземпляров структур отключено. Управляйте параметрами структуры через карточку материала.
         </div>
-        <form method="post" class="d-flex gap-2">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-danger">Удалить</button>
-            <a href="{% url 'structures:detail' instance.pk %}" class="btn btn-secondary">Отмена</a>
-        </form>
     </div>
 </div>
 {% endblock %}

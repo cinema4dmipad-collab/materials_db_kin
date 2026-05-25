@@ -3,11 +3,38 @@ from decimal import Decimal
 from django import forms
 from django.core.exceptions import ValidationError
 
-from apps.structures.models import StructureField, StructureFieldValue, StructureInstance
+from apps.materials.models import Material
+from apps.structures.models import (
+    MATERIAL_LINK_FIELD_TYPE,
+    StructureField,
+    StructureFieldValue,
+    StructureInstance,
+)
 from apps.structures import table_storage
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _BOOTSTRAP_CHECK = {'class': 'form-check-input'}
+_BOOTSTRAP_SELECT = {'class': 'form-select'}
+
+
+class MaterialChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return f'{obj.code} - {obj.name}'
+
+
+def material_label(material: Material) -> str:
+    return f'{material.code} - {material.name}'
+
+
+def material_from_value(value):
+    if value in (None, ''):
+        return None
+    if isinstance(value, Material):
+        return value
+    try:
+        return Material.objects.get(pk=value)
+    except (Material.DoesNotExist, ValueError, TypeError):
+        return None
 
 
 def _parse_default(field: StructureField):
@@ -19,6 +46,8 @@ def _parse_default(field: StructureField):
         return int(field.default_value)
     if field.field_type in ('DecimalField', 'FloatField'):
         return Decimal(field.default_value)
+    if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+        return material_from_value(field.default_value)
     return field.default_value
 
 
@@ -28,6 +57,15 @@ def _build_dynamic_field(structure_field: StructureField) -> forms.Field:
     help_text = structure_field.help_text or None
     initial = _parse_default(structure_field)
 
+    if structure_field.field_type == MATERIAL_LINK_FIELD_TYPE:
+        return MaterialChoiceField(
+            label=label,
+            required=False,
+            help_text=help_text,
+            initial=initial,
+            queryset=Material.objects.order_by('code'),
+            widget=forms.Select(attrs=_BOOTSTRAP_SELECT),
+        )
     if structure_field.field_type == 'CharField':
         return forms.CharField(
             label=label,
@@ -141,6 +179,8 @@ def _save_field_value(field_value: StructureFieldValue, structure_field: Structu
         field_value.value_date = value
     elif field_type == 'DateTimeField':
         field_value.value_datetime = value
+    elif field_type == MATERIAL_LINK_FIELD_TYPE:
+        field_value.value_fk_id = getattr(value, 'pk', value)
     field_value.save()
 
 
@@ -166,7 +206,10 @@ def _get_eav_form(structure_type):
             for sf in structure_fields:
                 fv = values.get(sf.id)
                 if fv:
-                    self.fields[f'field_{sf.id}'].initial = fv.get_value()
+                    value = fv.get_value()
+                    if sf.field_type == MATERIAL_LINK_FIELD_TYPE:
+                        value = material_from_value(value)
+                    self.fields[f'field_{sf.id}'].initial = value
 
         def save(self, commit=True):
             instance = super().save(commit=False)
@@ -204,7 +247,10 @@ def _get_table_form(structure_type):
                 )
                 for sf in structure_fields:
                     if sf.name in row_data:
-                        self.fields[f'field_{sf.id}'].initial = row_data[sf.name]
+                        value = row_data[sf.name]
+                        if sf.field_type == MATERIAL_LINK_FIELD_TYPE:
+                            value = material_from_value(value)
+                        self.fields[f'field_{sf.id}'].initial = value
 
         def save(self, commit=True):
             if not self.structure_type.is_created:

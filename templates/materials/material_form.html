@@ -19,7 +19,7 @@
                     {% if form.non_field_errors %}
                     <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                     {% endif %}
-                    {% for field in form %}
+                    {% for field in form.base_bound_fields %}
                     <div class="mb-3">
                         <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
                         {{ field }}
@@ -31,6 +31,35 @@
                         {% endif %}
                     </div>
                     {% endfor %}
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">Параметры структуры</div>
+                <div class="card-body">
+                    {% if form.structure_bound_fields %}
+                    {% for field in form.structure_bound_fields %}
+                    <div class="mb-3">
+                        {% if field.field.widget.input_type == 'checkbox' %}
+                        <div class="form-check">
+                            {{ field }}
+                            <label for="{{ field.id_for_label }}" class="form-check-label">{{ field.label }}</label>
+                        </div>
+                        {% else %}
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                        {{ field }}
+                        {% endif %}
+                        {% if field.errors %}
+                        <div class="invalid-feedback d-block">{{ field.errors }}</div>
+                        {% endif %}
+                        {% if field.help_text %}
+                        <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% elif form.structure_empty_message %}
+                    <p class="text-muted mb-0">{{ form.structure_empty_message }}</p>
+                    {% endif %}
                 </div>
             </div>
 
@@ -78,4 +107,19 @@
         </form>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var structureSelect = document.getElementById('id_struct_type');
+    if (!structureSelect) {
+        return;
+    }
+
+    structureSelect.addEventListener('change', function () {
+        var url = new URL(window.location.href);
+        url.searchParams.set('struct_type', structureSelect.value);
+        window.location.href = url.toString();
+    });
+});
+</script>
 {% endblock %}
