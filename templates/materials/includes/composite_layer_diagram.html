@@ -1,0 +1,60 @@
+{% if layer_diagram %}
+<div class="composite-layer-diagram p-3 border-bottom">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h3 class="h6 mb-0">Схема укладки слоёв</h3>
+        <span class="badge text-bg-light border">
+            {{ layer_diagram.layer_count }} сл. · Σt = {{ layer_diagram.total_thickness }}
+        </span>
+    </div>
+
+    {% if layer_diagram.material_legend %}
+    <div class="layer-material-legend mb-3">
+        {% for entry in layer_diagram.material_legend %}
+        <span class="layer-material-chip">
+            <span class="layer-material-chip-swatch" style="background-color: {{ entry.color }};"></span>
+            {{ entry.material_label }}
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="row g-4 align-items-start">
+        <div class="col-md-5 col-lg-4">
+            <div class="layer-stack-panel">
+                <div class="layer-stack-title">Сверху ↓</div>
+                <div class="layer-stack-column">
+                    {% for item in layer_diagram.layers %}
+                    <div class="layer-stack-segment"
+                         style="flex: {{ item.flex_grow }} 1 0%; background-color: {{ item.color }};"
+                         title="Слой {{ item.layer_number }}: {{ item.material_label }}">
+                        <span class="layer-stack-segment-index">#{{ item.layer_number }}</span>
+                        <span class="layer-stack-material-code">{{ item.material_code }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="layer-stack-caption">Каждый слой — свой цвет</div>
+            </div>
+        </div>
+
+        <div class="col-md-7 col-lg-8">
+            <div class="layer-legend-list">
+                {% for item in layer_diagram.layers %}
+                <div class="layer-legend-item">
+                    <div class="layer-legend-swatch" style="background-color: {{ item.color }};"></div>
+                    <div class="layer-legend-body">
+                        <div class="layer-legend-title">
+                            Слой {{ item.layer_number }} — {{ item.material_label }}
+                        </div>
+                        <div class="layer-legend-meta">
+                            Угол <strong>{{ item.angle }}°</strong>
+                            · толщина <strong>{{ item.thickness }}</strong>
+                            · доля <strong>{{ item.thickness_percent }}%</strong>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

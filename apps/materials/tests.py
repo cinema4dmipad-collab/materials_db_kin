@@ -140,7 +140,10 @@ class MaterialStructureLinkTests(TransactionTestCase):
         composite_material = Material.objects.create(
             code='MAT-TYPE-003',
             name='Composite material',
+            struct_type=self.structure_type,
         )
+        self.structure_type.allow_layers = True
+        self.structure_type.save(update_fields=['allow_layers'])
         layer_material = Material.objects.create(
             code='MAT-TYPE-LAYER-001',
             name='Layer material',
@@ -158,7 +161,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertFalse(simple_material.is_composite)
         self.assertTrue(simple_material.is_simple)
         self.assertTrue(composite_material.is_composite)
-        self.assertFalse(composite_material.is_simple)
+        self.assertTrue(composite_material.is_simple)
 
     def test_clean_rejects_structure_row_without_type(self):
         material = Material(
@@ -344,6 +347,22 @@ class MaterialStructureLinkTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<td>0,00</td>', html=True)
+
+    def test_material_list_displays_structure_type(self):
+        Material.objects.create(code='MAT-LIST-001', name='Plain material')
+        Material.objects.create(
+            code='MAT-LIST-002',
+            name='Structured material',
+            struct_type=self.structure_type,
+        )
+
+        response = self.client.get(reverse('materials:list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Тип структуры')
+        self.assertContains(response, 'Test Panel')
+        self.assertContains(response, 'MAT-LIST-001')
+        self.assertContains(response, 'MAT-LIST-002')
 
 
 class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
@@ -583,6 +602,13 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
         detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
         self.assertContains(detail_response, 'Слои')
+        self.assertContains(detail_response, 'composite-layer-diagram')
+        self.assertContains(detail_response, 'Схема укладки слоёв')
+        self.assertContains(detail_response, 'layer-stack-column')
+        self.assertContains(detail_response, 'layer-material-legend')
+        self.assertContains(detail_response, 'flex:')
+        self.assertContains(detail_response, 'background-color:')
+        self.assertContains(detail_response, 'composite_layer_diagram.css')
         self.assertContains(detail_response, 'MAT-LAYER-001 - Layer material')
         self.assertContains(detail_response, '45')
         self.assertContains(detail_response, '0,25')
@@ -655,6 +681,15 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         material = Material.objects.get(code='MAT-PUBLIC-001')
         self.assertFalse(material.supports_layers)
         self.assertFalse(CompositeLayer.objects.filter(parent_material=material).exists())
+
+        with self.assertRaises(ValidationError):
+            CompositeLayer.objects.create(
+                parent_material=material,
+                material=layer_material,
+                layer_number=1,
+                angle=45,
+                thickness=0.25,
+            )
 
     def test_public_material_update_prefills_and_updates_existing_dynamic_row(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')

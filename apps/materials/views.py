@@ -113,6 +113,9 @@ class MaterialListView(ListView):
     context_object_name = 'materials'
     paginate_by = 10
 
+    def get_queryset(self):
+        return super().get_queryset().select_related('struct_type')
+
 
 class MaterialDetailView(DetailView):
     model = Material
@@ -132,8 +135,14 @@ class MaterialDetailView(DetailView):
         context['composite_layers'] = (
             self.get_composite_layers() if self.object.supports_layers else []
         )
+        context['layer_diagram'] = self.get_layer_diagram(context['composite_layers'])
         context.update(self.get_structure_context())
         return context
+
+    def get_layer_diagram(self, composite_layers):
+        from apps.composites.layer_diagram import build_layer_diagram
+
+        return build_layer_diagram(composite_layers)
 
     def get_composite_layers(self):
         return self.object.composite_layers.select_related('material').order_by('layer_number')

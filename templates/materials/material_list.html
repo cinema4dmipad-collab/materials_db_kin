@@ -16,6 +16,7 @@
                     <tr>
                         <th>Код</th>
                         <th>Название</th>
+                        <th>Тип структуры</th>
                         <th>Дата создания</th>
                         <th class="text-end">Действия</th>
                     </tr>
@@ -25,6 +26,7 @@
                     <tr>
                         <td><a href="{% url 'materials:detail' material.pk %}">{{ material.code }}</a></td>
                         <td>{{ material.name }}</td>
+                        <td>{{ material.struct_type.name|default:"—" }}</td>
                         <td>{{ material.created_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end text-nowrap">
                             <a href="{% url 'materials:detail' material.pk %}" class="btn btn-sm btn-outline-secondary">Просмотр</a>

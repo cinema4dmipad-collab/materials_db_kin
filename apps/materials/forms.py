@@ -1,5 +1,5 @@
 from django import forms
-from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
 
 from apps.composites.models import CompositeLayer
@@ -47,7 +47,23 @@ _LAYER_NUMBER_WIDGET = {
 class CompositeLayerFormSet(forms.BaseInlineFormSet):
     def clean(self):
         super().clean()
+        if self._layers_not_allowed():
+            raise ValidationError(
+                'Слои недоступны для выбранного типа структуры.',
+            )
         self._assign_layer_numbers()
+
+    def _layers_not_allowed(self):
+        if not self.instance or not self.instance.pk:
+            return False
+        if self.instance.supports_layers:
+            return False
+        for form in self.forms:
+            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+                continue
+            if form.instance.pk or not self._is_empty_form(form):
+                return True
+        return False
 
     def save(self, commit=True):
         self._assign_layer_numbers()
@@ -151,7 +167,7 @@ class MaterialForm(forms.ModelForm):
 
         try:
             return StructureType.objects.get(pk=structure_type_id)
-        except (StructureType.DoesNotExist, ValueError, DjangoValidationError):
+        except (StructureType.DoesNotExist, ValueError, ValidationError):
             return None
 
     def _supported_structure_fields(self):

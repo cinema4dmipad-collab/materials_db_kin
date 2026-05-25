@@ -1,6 +1,13 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}{{ material.code }} — База композитов{% endblock %}
+
+{% block extra_head %}
+{% if show_composite_layers and composite_layers %}
+<link rel="stylesheet" href="{% static 'css/composite_layer_diagram.css' %}">
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="card mb-4">
@@ -68,6 +75,7 @@
     <div class="card-body p-0">
         {% if show_composite_layers %}
         {% if composite_layers %}
+        {% include 'materials/includes/composite_layer_diagram.html' %}
         <div class="table-responsive">
             <table class="table table-striped table-hover mb-0">
                 <thead>

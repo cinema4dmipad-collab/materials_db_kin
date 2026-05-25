@@ -4,6 +4,9 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 
+LAYERS_NOT_ALLOWED_ERROR = 'Слои недоступны для выбранного типа структуры.'
+
+
 class CompositeLayer(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     parent_material = models.ForeignKey(
@@ -29,6 +32,12 @@ class CompositeLayer(models.Model):
         super().clean()
         if self.parent_material_id and self.parent_material_id == self.material_id:
             raise ValidationError({'material': 'Материал не может быть собственным слоем.'})
+        if self.parent_material_id and not self.parent_material.supports_layers:
+            raise ValidationError({'parent_material': LAYERS_NOT_ALLOWED_ERROR})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ['layer_number']
