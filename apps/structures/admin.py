@@ -137,13 +137,21 @@ class LegacyReadOnlyAdminMixin:
 
 @admin.register(StructureType)
 class StructureTypeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'table_name', 'code', 'is_created', 'is_active', 'created_at']
-    list_filter = ['is_created', 'is_active']
+    list_display = ['name', 'table_name', 'code', 'allow_layers', 'is_created', 'is_active', 'created_at']
+    list_filter = ['allow_layers', 'is_created', 'is_active']
     search_fields = ['name', 'code', 'table_name']
     prepopulated_fields = {'code': ('name',)}
     readonly_fields = ['table_name', 'is_created']
     inlines = [StructureFieldInline]
     actions = ['create_table_action']
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'code', 'table_name', 'description', 'allow_layers', 'is_active'),
+        }),
+        ('Статус', {
+            'fields': ('is_created',),
+        }),
+    )
 
     def change_view(self, request, object_id, form_url='', extra_context=None):
         structure_type = self.get_object(request, object_id)

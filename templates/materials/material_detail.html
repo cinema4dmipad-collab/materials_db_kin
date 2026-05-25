@@ -61,6 +61,44 @@
     </div>
 </div>
 
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Слои композита</h2>
+    </div>
+    <div class="card-body p-0">
+        {% if show_composite_layers %}
+        {% if composite_layers %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Номер слоя</th>
+                        <th>Материал</th>
+                        <th>Угол</th>
+                        <th>Толщина</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for layer in composite_layers %}
+                    <tr>
+                        <td>{{ layer.layer_number }}</td>
+                        <td>{{ layer.material }}</td>
+                        <td>{{ layer.angle }}</td>
+                        <td>{{ layer.thickness }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-3 mb-0 text-muted">Слои композита не заданы.</p>
+        {% endif %}
+        {% else %}
+        <p class="p-3 mb-0 text-muted">Для выбранного типа структуры слои не используются.</p>
+        {% endif %}
+    </div>
+</div>
+
 <div class="card">
     <div class="card-header">
         <h2 class="h5 mb-0">Параметры структуры</h2>

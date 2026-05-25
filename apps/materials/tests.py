@@ -10,8 +10,9 @@ from django.db import connection
 from django.test import RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
-from apps.materials.admin import MaterialAdmin, MaterialForm
-from apps.materials.forms import MaterialForm as PublicMaterialForm
+from apps.composites.models import CompositeLayer
+from apps.materials.admin import CompositeLayerInline, MaterialAdmin, MaterialForm
+from apps.materials.forms import CompositeLayerFormSet, MaterialForm as PublicMaterialForm
 from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Property, PropertyGroup
 from apps.structures.models import StructureField, StructureInstance, StructureType
@@ -128,6 +129,36 @@ class MaterialStructureLinkTests(TransactionTestCase):
         material.struct_type = self.structure_type
         material.struct_props_id = uuid.uuid4()
         self.assertIsNone(material.get_structure_params())
+
+    def test_material_type_proxy_flags_reflect_structure_and_layers(self):
+        plain_material = Material.objects.create(code='MAT-TYPE-001', name='Plain material')
+        simple_material = Material(
+            code='MAT-TYPE-002',
+            name='Simple material',
+            struct_type=self.structure_type,
+        )
+        composite_material = Material.objects.create(
+            code='MAT-TYPE-003',
+            name='Composite material',
+        )
+        layer_material = Material.objects.create(
+            code='MAT-TYPE-LAYER-001',
+            name='Layer material',
+        )
+        CompositeLayer.objects.create(
+            parent_material=composite_material,
+            material=layer_material,
+            layer_number=1,
+            angle=45,
+            thickness='0.25',
+        )
+
+        self.assertFalse(plain_material.is_composite)
+        self.assertFalse(plain_material.is_simple)
+        self.assertFalse(simple_material.is_composite)
+        self.assertTrue(simple_material.is_simple)
+        self.assertTrue(composite_material.is_composite)
+        self.assertFalse(composite_material.is_simple)
 
     def test_clean_rejects_structure_row_without_type(self):
         material = Material(
@@ -316,6 +347,33 @@ class MaterialStructureLinkTests(TransactionTestCase):
 
 
 class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
+    def test_material_admin_uses_composite_layer_inline_without_material_type_column(self):
+        inline = CompositeLayerInline(Material, AdminSite())
+        material = Material.objects.create(
+            code='MAT-ADMIN-LAYERS-001',
+            name='Material with layers',
+            struct_type=self.structure_type,
+        )
+        self.structure_type.allow_layers = True
+        self.structure_type.save(update_fields=['allow_layers'])
+        admin_model = MaterialAdmin(Material, AdminSite())
+        request = RequestFactory().get('/')
+
+        self.assertNotIn('material_type', MaterialAdmin.list_display)
+        self.assertFalse(hasattr(MaterialAdmin, 'material_type'))
+        self.assertNotIn(CompositeLayerInline, MaterialAdmin.inlines)
+        self.assertIn(
+            CompositeLayerInline,
+            admin_model.get_inlines(request, material),
+        )
+        self.assertEqual(inline.fk_name, 'parent_material')
+        self.assertEqual(
+            list(inline.fields),
+            ['layer_number', 'material', 'angle', 'thickness'],
+        )
+        self.assertEqual(inline.extra, 0)
+        self.assertEqual(inline.formset, CompositeLayerFormSet)
+
     def test_material_form_populates_structure_instance_choices(self):
         row_id = self.insert_structure_row(title='Visible row')
 
@@ -393,6 +451,11 @@ class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
 
 
 class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
+    def setUp(self):
+        super().setUp()
+        self.structure_type.allow_layers = True
+        self.structure_type.save(update_fields=['allow_layers'])
+
     def _formset_management_data(self):
         return {
             'properties-TOTAL_FORMS': '3',
@@ -400,6 +463,24 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             'properties-MIN_NUM_FORMS': '0',
             'properties-MAX_NUM_FORMS': '1000',
         }
+
+    def _layer_formset_management_data(self, total='1', initial='0'):
+        return {
+            'layers-TOTAL_FORMS': total,
+            'layers-INITIAL_FORMS': initial,
+            'layers-MIN_NUM_FORMS': '0',
+            'layers-MAX_NUM_FORMS': '1000',
+        }
+
+    def _layer_formset_data(self, material, prefix='layers-0', **overrides):
+        data = {
+            f'{prefix}-layer_number': '1',
+            f'{prefix}-material': str(material.pk),
+            f'{prefix}-angle': '45',
+            f'{prefix}-thickness': '0.25',
+        }
+        data.update(overrides)
+        return data
 
     def _post_data(self, **overrides):
         data = {
@@ -411,6 +492,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         }
         data.update(self.structure_field_data(self.structure_type))
         data.update(self._formset_management_data())
+        data.update(self._layer_formset_management_data(total='0'))
         data.update(overrides)
         return data
 
@@ -477,6 +559,103 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(detail_response, 'Skin material')
         self.assertContains(detail_response, 'MAT-LINKED-001 - Linked material')
 
+    def test_public_material_create_view_saves_layer_formset_and_detail_shows_layers(self):
+        layer_material = Material.objects.create(
+            code='MAT-LAYER-001',
+            name='Layer material',
+        )
+
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._layer_formset_management_data(),
+                **self._layer_formset_data(layer_material),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        layer = CompositeLayer.objects.get(parent_material=material)
+        self.assertEqual(layer.layer_number, 1)
+        self.assertEqual(layer.material, layer_material)
+        self.assertEqual(layer.angle, 45)
+        self.assertEqual(str(layer.thickness), '0.25')
+
+        detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertContains(detail_response, 'Слои')
+        self.assertContains(detail_response, 'MAT-LAYER-001 - Layer material')
+        self.assertContains(detail_response, '45')
+        self.assertContains(detail_response, '0,25')
+
+    def test_public_material_create_view_auto_numbers_multiple_layers(self):
+        first_layer_material = Material.objects.create(
+            code='MAT-LAYER-AUTO-001',
+            name='First layer material',
+        )
+        second_layer_material = Material.objects.create(
+            code='MAT-LAYER-AUTO-002',
+            name='Second layer material',
+        )
+
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._layer_formset_management_data(total='2'),
+                **self._layer_formset_data(
+                    first_layer_material,
+                    prefix='layers-0',
+                    **{'layers-0-layer_number': ''},
+                ),
+                **self._layer_formset_data(
+                    second_layer_material,
+                    prefix='layers-1',
+                    **{
+                        'layers-1-layer_number': '',
+                        'layers-1-angle': '90',
+                        'layers-1-thickness': '0.50',
+                    },
+                ),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        layers = list(
+            CompositeLayer.objects.filter(parent_material=material).order_by('layer_number')
+        )
+        self.assertEqual(len(layers), 2)
+        self.assertEqual(layers[0].layer_number, 1)
+        self.assertEqual(layers[0].material, first_layer_material)
+        self.assertEqual(layers[1].layer_number, 2)
+        self.assertEqual(layers[1].material, second_layer_material)
+
+    def test_public_material_create_view_hides_layers_when_structure_type_disallows(self):
+        self.structure_type.allow_layers = False
+        self.structure_type.save(update_fields=['allow_layers'])
+        layer_material = Material.objects.create(
+            code='MAT-LAYER-HIDDEN-001',
+            name='Layer material',
+        )
+
+        create_response = self.client.get(
+            reverse('materials:create'),
+            {'struct_type': str(self.structure_type.pk)},
+        )
+        self.assertNotContains(create_response, 'Добавить слой')
+
+        post_response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._layer_formset_management_data(),
+                **self._layer_formset_data(layer_material),
+            ),
+        )
+
+        self.assertEqual(post_response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        self.assertFalse(material.supports_layers)
+        self.assertFalse(CompositeLayer.objects.filter(parent_material=material).exists())
+
     def test_public_material_update_prefills_and_updates_existing_dynamic_row(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
         linked_material = Material.objects.create(
@@ -525,6 +704,53 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         params = material.get_structure_params()
         self.assertEqual(params['title'], 'Updated panel')
         self.assertEqual(str(params['thickness']), '9.75')
+
+    def test_public_material_update_view_saves_layer_formset(self):
+        row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
+        original_layer_material = Material.objects.create(
+            code='MAT-LAYER-ORIGINAL-001',
+            name='Original layer material',
+        )
+        updated_layer_material = Material.objects.create(
+            code='MAT-LAYER-UPDATED-001',
+            name='Updated layer material',
+        )
+        material = Material.objects.create(
+            code='MAT-PUBLIC-LAYER-001',
+            name='Public material with layers',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        layer = CompositeLayer.objects.create(
+            parent_material=material,
+            material=original_layer_material,
+            layer_number=1,
+            angle=0,
+            thickness='0.10',
+        )
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-LAYER-001',
+                name='Updated public material with layers',
+                **self._layer_formset_management_data(initial='1'),
+                **self._layer_formset_data(
+                    updated_layer_material,
+                    **{
+                        'layers-0-id': str(layer.pk),
+                        'layers-0-angle': '90',
+                        'layers-0-thickness': '0.50',
+                    },
+                ),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        layer.refresh_from_db()
+        self.assertEqual(layer.material, updated_layer_material)
+        self.assertEqual(layer.angle, 90)
+        self.assertEqual(layer.thickness, 0.5)
 
     def test_public_material_update_shared_row_creates_new_dynamic_row(self):
         row_id = self.insert_structure_row(title='Shared panel', thickness='8.25')

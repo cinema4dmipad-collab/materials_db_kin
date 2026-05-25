@@ -2,6 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.forms import inlineformset_factory
 
+from apps.composites.models import CompositeLayer
 from apps.materials.models import Material, MaterialProperty
 from apps.structures.models import StructureType
 from apps.structures.forms import _build_dynamic_field, material_from_value
@@ -36,6 +37,72 @@ MaterialPropertyFormSet = inlineformset_factory(
         'value': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
     },
 )
+
+_LAYER_NUMBER_WIDGET = {
+    'class': 'form-control layer-number-field',
+    'readonly': True,
+}
+
+
+class CompositeLayerFormSet(forms.BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        self._assign_layer_numbers()
+
+    def save(self, commit=True):
+        self._assign_layer_numbers()
+        return super().save(commit=commit)
+
+    def _assign_layer_numbers(self):
+        layer_num = 1
+        for form in self.forms:
+            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+                continue
+            if not form.instance.pk and self._is_empty_form(form):
+                continue
+            form.cleaned_data['layer_number'] = layer_num
+            form.instance.layer_number = layer_num
+            layer_num += 1
+
+    def _is_empty_form(self, form):
+        cleaned_data = form.cleaned_data
+        material = cleaned_data.get('material')
+        angle = cleaned_data.get('angle')
+        thickness = cleaned_data.get('thickness')
+        return (
+            not material
+            and angle in (None, '')
+            and thickness in (None, '')
+        )
+
+
+class CompositeLayerForm(forms.ModelForm):
+    class Meta:
+        model = CompositeLayer
+        fields = ['layer_number', 'material', 'angle', 'thickness']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['layer_number'].required = False
+
+
+def get_composite_layer_formset():
+    return inlineformset_factory(
+        Material,
+        CompositeLayer,
+        form=CompositeLayerForm,
+        formset=CompositeLayerFormSet,
+        fk_name='parent_material',
+        fields=['layer_number', 'material', 'angle', 'thickness'],
+        extra=0,
+        can_delete=True,
+        widgets={
+            'layer_number': forms.NumberInput(attrs=_LAYER_NUMBER_WIDGET),
+            'material': forms.Select(attrs=_BOOTSTRAP_SELECT),
+            'angle': forms.NumberInput(attrs=_BOOTSTRAP_INPUT),
+            'thickness': forms.NumberInput(attrs=_BOOTSTRAP_INPUT),
+        },
+    )
 
 
 class MaterialForm(forms.ModelForm):

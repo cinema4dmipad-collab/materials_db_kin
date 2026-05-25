@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'apps.core',
     'apps.references',
+    'apps.composites',
     'apps.materials',
     'apps.samples',
     'apps.scans',

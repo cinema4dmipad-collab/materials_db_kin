@@ -4,9 +4,13 @@ from django.db import transaction
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from apps.materials.forms import MaterialForm, MaterialPropertyFormSet
+from apps.materials.forms import (
+    MaterialForm,
+    MaterialPropertyFormSet,
+    get_composite_layer_formset,
+)
 from apps.materials.models import Material
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
+from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureType
 
 
 class MaterialFormsetMixin:
@@ -15,6 +19,30 @@ class MaterialFormsetMixin:
         if 'struct_type' in self.request.GET:
             initial['struct_type'] = self.request.GET.get('struct_type')
         return initial
+
+    def get_selected_structure_type(self):
+        material = getattr(self, 'object', None)
+        if self.request.method == 'POST':
+            struct_type_id = self.request.POST.get('struct_type')
+        elif material and material.struct_type_id:
+            return material.struct_type
+        else:
+            struct_type_id = self.request.GET.get('struct_type')
+            if not struct_type_id:
+                initial = self.get_initial()
+                struct_type_id = initial.get('struct_type')
+
+        if not struct_type_id:
+            return None
+
+        try:
+            return StructureType.objects.get(pk=struct_type_id)
+        except (StructureType.DoesNotExist, ValueError, TypeError):
+            return None
+
+    def layers_allowed(self):
+        structure_type = self.get_selected_structure_type()
+        return bool(structure_type and structure_type.allow_layers)
 
     def get_formset(self):
         if self.request.method == 'POST':
@@ -25,23 +53,57 @@ class MaterialFormsetMixin:
             return MaterialPropertyFormSet(instance=self.object)
         return MaterialPropertyFormSet()
 
+    def get_layer_formset(self):
+        if not self.layers_allowed():
+            return None
+
+        formset_class = get_composite_layer_formset()
+        kwargs = {'prefix': 'layers'}
+        if self.request.method == 'POST':
+            kwargs['data'] = self.request.POST
+        if getattr(self, 'object', None):
+            kwargs['instance'] = self.object
+        return formset_class(**kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['formset'] = self.get_formset()
+        if 'formset' not in context:
+            context['formset'] = self.get_formset()
+        if 'layer_formset' not in context:
+            context['layer_formset'] = self.get_layer_formset()
+            context['layers_allowed'] = self.layers_allowed()
         return context
 
     def form_valid(self, form):
         formset = self.get_formset()
-        if not formset.is_valid():
-            return self.render_to_response(self.get_context_data(form=form))
+        layer_formset = self.get_layer_formset()
+        if not formset.is_valid() or (
+            layer_formset is not None and not layer_formset.is_valid()
+        ):
+            return self.render_to_response(
+                self.get_context_data(
+                    form=form,
+                    formset=formset,
+                    layer_formset=layer_formset,
+                )
+            )
         try:
             with transaction.atomic():
                 self.object = form.save()
                 formset.instance = self.object
                 formset.save()
+                if layer_formset is not None:
+                    layer_formset.instance = self.object
+                    layer_formset.save()
         except forms.ValidationError as exc:
             form.add_error(None, exc)
-            return self.render_to_response(self.get_context_data(form=form))
+            return self.render_to_response(
+                self.get_context_data(
+                    form=form,
+                    formset=formset,
+                    layer_formset=layer_formset,
+                )
+            )
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -66,8 +128,15 @@ class MaterialDetailView(DetailView):
                 'property__name',
             )
         )
+        context['show_composite_layers'] = self.object.supports_layers
+        context['composite_layers'] = (
+            self.get_composite_layers() if self.object.supports_layers else []
+        )
         context.update(self.get_structure_context())
         return context
+
+    def get_composite_layers(self):
+        return self.object.composite_layers.select_related('material').order_by('layer_number')
 
     def get_structure_context(self):
         material = self.object

@@ -4,6 +4,8 @@ from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.urls import path, reverse
 
+from apps.composites.models import CompositeLayer
+from apps.materials.forms import CompositeLayerForm, CompositeLayerFormSet
 from .models import Material, MaterialProperty
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
@@ -86,6 +88,27 @@ class MaterialPropertyInline(admin.TabularInline):
     extra = 1
 
 
+class CompositeLayerInline(admin.TabularInline):
+    model = CompositeLayer
+    fk_name = 'parent_material'
+    form = CompositeLayerForm
+    formset = CompositeLayerFormSet
+    fields = ['layer_number', 'material', 'angle', 'thickness']
+    extra = 0
+    verbose_name = 'слой'
+    verbose_name_plural = 'слои композита'
+
+    class Media:
+        js = ['admin/js/composite_layers.js']
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset_class = super().get_formset(request, obj, **kwargs)
+        layer_number_field = formset_class.form.base_fields['layer_number']
+        layer_number_field.widget.attrs['readonly'] = True
+        layer_number_field.widget.attrs['class'] = 'layer-number-field'
+        return formset_class
+
+
 @admin.register(Material)
 class MaterialAdmin(admin.ModelAdmin):
     form = MaterialForm
@@ -97,6 +120,12 @@ class MaterialAdmin(admin.ModelAdmin):
 
     class Media:
         js = ['admin/js/dynamic_structure.js']
+
+    def get_inlines(self, request, obj=None):
+        inlines = [MaterialPropertyInline]
+        if obj and obj.struct_type_id and obj.struct_type.allow_layers:
+            inlines.append(CompositeLayerInline)
+        return inlines
 
     def get_urls(self):
         urls = super().get_urls()

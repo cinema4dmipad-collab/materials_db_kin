@@ -17,6 +17,11 @@ class StructureType(models.Model):
     code = models.SlugField(max_length=50, unique=True)
     table_name = models.CharField(max_length=100, unique=True, blank=True)
     description = models.TextField(blank=True)
+    allow_layers = models.BooleanField(
+        default=False,
+        verbose_name='Добавить слои',
+        help_text='Разрешить добавление слоёв композита для материалов этого типа.',
+    )
     is_active = models.BooleanField(default=True)
     is_created = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

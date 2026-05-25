@@ -31,6 +31,18 @@ class Material(models.Model):
     def __str__(self):
         return f'{self.code} - {self.name}'
 
+    @property
+    def is_composite(self):
+        return self.pk is not None and self.composite_layers.exists()
+
+    @property
+    def is_simple(self):
+        return bool(self.struct_type_id)
+
+    @property
+    def supports_layers(self):
+        return bool(self.struct_type_id and self.struct_type.allow_layers)
+
     def clean(self):
         super().clean()
         if self.struct_props_id and not self.struct_type_id:
