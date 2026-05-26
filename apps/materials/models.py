@@ -8,9 +8,9 @@ from apps.references.models import Property
 
 class Material(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code = models.CharField(max_length=50, unique=True)
-    name = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
+    code = models.CharField(max_length=50, unique=True, verbose_name='Код')
+    name = models.CharField(max_length=200, verbose_name='Название')
+    description = models.TextField(blank=True, verbose_name='Описание')
     struct_type = models.ForeignKey(
         'structures.StructureType',
         on_delete=models.PROTECT,
@@ -24,9 +24,9 @@ class Material(models.Model):
         blank=True,
         verbose_name='ID параметров структуры',
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создан')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлён')
+    created_by = models.CharField(max_length=100, blank=True, verbose_name='Создал')
 
     def __str__(self):
         return f'{self.code} - {self.name}'
@@ -68,8 +68,52 @@ class Material(models.Model):
 
         return SQLExecutor.get_structure_instance(self.struct_type, self.struct_props_id)
 
+    def delete(self, *args, **kwargs):
+        for attachment in self.attachments.all():
+            if attachment.file:
+                attachment.file.delete(save=False)
+        super().delete(*args, **kwargs)
+
     class Meta:
         ordering = ['code']
+        verbose_name = 'материал'
+        verbose_name_plural = 'материалы'
+
+
+class MaterialAttachment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    material = models.ForeignKey(
+        Material,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        verbose_name='Материал',
+    )
+    file = models.FileField(
+        upload_to='material_attachments/%Y/%m/%d/',
+        verbose_name='Файл',
+    )
+    title = models.CharField(max_length=200, verbose_name='Название')
+    description = models.TextField(blank=True, verbose_name='Описание')
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Загружен')
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        verbose_name = 'вложение'
+        verbose_name_plural = 'вложения'
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def filename(self):
+        if not self.file:
+            return ''
+        return self.file.name.rsplit('/', 1)[-1]
+
+    def delete(self, *args, **kwargs):
+        if self.file:
+            self.file.delete(save=False)
+        super().delete(*args, **kwargs)
 
 
 class MaterialProperty(models.Model):

@@ -6,7 +6,8 @@ from django.urls import path, reverse
 
 from apps.composites.models import CompositeLayer
 from apps.materials.forms import CompositeLayerForm, CompositeLayerFormSet
-from .models import Material, MaterialProperty
+from apps.samples.models import Sample
+from .models import Material, MaterialAttachment, MaterialProperty
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
 
@@ -88,6 +89,14 @@ class MaterialPropertyInline(admin.TabularInline):
     extra = 1
 
 
+class SampleInline(admin.TabularInline):
+    model = Sample
+    extra = 0
+    fields = ['code', 'name', 'object_type', 'created_by', 'created_at']
+    readonly_fields = ['created_at']
+    show_change_link = True
+
+
 class CompositeLayerInline(admin.TabularInline):
     model = CompositeLayer
     fk_name = 'parent_material'
@@ -109,6 +118,13 @@ class CompositeLayerInline(admin.TabularInline):
         return formset_class
 
 
+class MaterialAttachmentInline(admin.TabularInline):
+    model = MaterialAttachment
+    extra = 0
+    fields = ['title', 'file', 'description', 'uploaded_at']
+    readonly_fields = ['uploaded_at']
+
+
 @admin.register(Material)
 class MaterialAdmin(admin.ModelAdmin):
     form = MaterialForm
@@ -122,7 +138,9 @@ class MaterialAdmin(admin.ModelAdmin):
         js = ['admin/js/dynamic_structure.js']
 
     def get_inlines(self, request, obj=None):
-        inlines = [MaterialPropertyInline]
+        inlines = [MaterialPropertyInline, SampleInline]
+        if obj and obj.pk:
+            inlines.append(MaterialAttachmentInline)
         if obj and obj.struct_type_id and obj.struct_type.allow_layers:
             inlines.append(CompositeLayerInline)
         return inlines

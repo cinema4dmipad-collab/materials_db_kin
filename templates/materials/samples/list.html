@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+
+
+{% block title %}Образцы — {{ material.code }}{% endblock %}
+
+
+
+{% block content %}
+
+{% include 'materials/includes/material_tabs.html' %}
+
+
+
+<div class="card mb-4">
+
+    <div class="card-header d-flex justify-content-between align-items-center">
+
+        <h1 class="h5 mb-0">Образцы материала {{ material.code }}</h1>
+
+        <a href="{% url 'samples:create' %}?material={{ material.pk }}" class="btn btn-sm btn-primary">Добавить образец</a>
+
+    </div>
+
+    <div class="card-body p-0">
+
+        {% if samples %}
+
+        <div class="table-responsive">
+
+            <table class="table table-striped table-hover mb-0 align-middle">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Код</th>
+
+                        <th>Название</th>
+
+                        <th>Тип объекта</th>
+
+                        <th>Сканы</th>
+
+                        <th class="text-end">Действия</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    {% for sample in samples %}
+
+                    <tr>
+
+                        <td><a href="{% url 'samples:detail' sample.pk %}">{{ sample.code }}</a></td>
+
+                        <td>{{ sample.name }}</td>
+
+                        <td>{{ sample.get_object_type_display }}</td>
+
+                        <td>{{ sample.scan_count }}</td>
+
+                        <td class="text-end text-nowrap">
+
+                            <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-sm btn-outline-secondary">Просмотр</a>
+
+                            <a href="{% url 'scans:create' sample.pk %}" class="btn btn-sm btn-outline-primary">Скан</a>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+        {% else %}
+
+        <p class="p-3 mb-0 text-muted">Образцы не созданы.</p>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+{% endblock %}
+

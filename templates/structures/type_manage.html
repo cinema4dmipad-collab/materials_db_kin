@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ structure_type.name }} — Управление{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h1 class="h4 mb-1">{{ structure_type.name }}</h1>
+            <p class="text-muted small mb-0">
+                Код: <code>{{ structure_type.code }}</code> · Таблица: <code>{{ structure_type.table_name }}</code>
+            </p>
+        </div>
+        <div class="text-nowrap">
+            {% if structure_type.is_created %}
+            <a href="{% url 'structures:list' structure_type.code %}" class="btn btn-primary btn-sm">Записи</a>
+            {% endif %}
+            {% if not structure_type.is_created %}
+            <a href="{% url 'structures:type_edit' structure_type.code %}" class="btn btn-outline-primary btn-sm">Изменить</a>
+            {% endif %}
+            <a href="{% url 'structures:select_type' %}" class="btn btn-outline-secondary btn-sm">К типам</a>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if structure_type.description %}
+        <p>{{ structure_type.description }}</p>
+        {% endif %}
+
+        <dl class="row mb-0">
+            <dt class="col-sm-3">SQL-таблица</dt>
+            <dd class="col-sm-9">
+                {% if structure_type.is_created %}
+                <span class="badge bg-success">Создана в БД</span>
+                {% else %}
+                <span class="badge bg-warning text-dark">Не создана</span>
+                {% endif %}
+            </dd>
+            <dt class="col-sm-3">Слои композита</dt>
+            <dd class="col-sm-9">{% if structure_type.allow_layers %}Разрешены{% else %}Нет{% endif %}</dd>
+            <dt class="col-sm-3">Материалов с типом</dt>
+            <dd class="col-sm-9">{{ linked_materials_count }}</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Поля структуры</h2>
+    </div>
+    <div class="card-body p-0">
+        {% if fields %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Подпись</th>
+                        <th>Тип</th>
+                        <th>Обязательное</th>
+                        <th>Порядок</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for field in fields %}
+                    <tr>
+                        <td><code>{{ field.name }}</code></td>
+                        <td>{{ field.label }}</td>
+                        <td>{{ field.get_field_type_display }}</td>
+                        <td>{% if field.is_required %}Да{% else %}Нет{% endif %}</td>
+                        <td>{{ field.sort_order }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-3 mb-0 text-muted">Поля не заданы. <a href="{% url 'structures:type_edit' structure_type.code %}">Добавьте поля</a> перед созданием таблицы.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="h5 mb-0">SQL-таблица в базе данных</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Нажмите кнопку, когда поля проверены: система создаст таблицу с колонками из списка выше
+            плюс служебные <code>id</code>, <code>created_at</code>, <code>updated_at</code>, <code>created_by</code>.
+            После создания имена колонок изменить нельзя — только удалить таблицу и начать заново.
+        </p>
+
+        {% if can_create_table %}
+        <form method="post" action="{% url 'structures:type_create_table' structure_type.code %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success">Создать таблицу в БД</button>
+        </form>
+        {% elif structure_type.is_created %}
+        <p class="mb-3">Таблица <code>{{ structure_type.table_name }}</code> создана. Поля заблокированы для редактирования.</p>
+        <a href="{% url 'structures:type_drop_table' structure_type.code %}" class="btn btn-outline-danger">Удалить таблицу из БД</a>
+        {% else %}
+        <div class="alert alert-info mb-0">Добавьте хотя бы одно поле, затем создайте таблицу.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

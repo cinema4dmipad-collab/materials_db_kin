@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление таблицы — {{ structure_type.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h1 class="h5 mb-0">Удаление SQL-таблицы</h1>
+            </div>
+            <div class="card-body">
+                <p>
+                    Удалить таблицу <code>{{ structure_type.table_name }}</code> для типа
+                    <strong>{{ structure_type.name }}</strong>?
+                </p>
+                <p class="text-danger">Все данные в таблице будут безвозвратно потеряны.</p>
+                {% if linked_materials_count %}
+                <div class="alert alert-warning">
+                    {{ linked_materials_count }} материал(ов) ссылаются на этот тип структуры.
+                    После удаления таблицы их параметры могут стать недоступны.
+                </div>
+                {% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">Удалить таблицу</button>
+                        <a href="{% url 'structures:type_manage' structure_type.code %}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

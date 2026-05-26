@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление файла{% endblock %}
+
+{% block content %}
+{% include 'materials/includes/material_tabs.html' %}
+
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h1 class="h5 mb-0">Удаление файла</h1>
+            </div>
+            <div class="card-body">
+                <p>Удалить файл <strong>{{ attachment.title }}</strong> ({{ attachment.filename }})?</p>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">Удалить</button>
+                        <a href="{% url 'material_attachments:list' material.pk %}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

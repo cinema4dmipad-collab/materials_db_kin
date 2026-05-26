@@ -1102,3 +1102,88 @@ class SeedDataCommandTests(TestCase):
         self.assertEqual(counts_after_first_run, counts_after_second_run)
         self.assertIn('materials: created 12, updated 0', first_output)
         self.assertIn('materials: created 0, updated 12', second_output)
+
+
+@override_settings(
+    STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    },
+)
+class MaterialAttachmentViewsTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.media_root = tempfile.mkdtemp()
+        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.settings_override.enable()
+        self.material = Material.objects.create(code='MAT-ATT-001', name='Attachment material')
+
+    def tearDown(self):
+        import shutil
+
+        self.settings_override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def test_material_detail_shows_files_and_samples_tabs(self):
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': self.material.pk}))
+        self.assertContains(response, 'Файлы')
+        self.assertContains(response, 'Образцы')
+        self.assertContains(response, reverse('material_attachments:list', kwargs={'material_pk': self.material.pk}))
+        self.assertContains(response, reverse('material_samples:list', kwargs={'material_pk': self.material.pk}))
+
+    def test_material_samples_tab_lists_samples(self):
+        from apps.samples.models import Sample
+
+        sample = Sample.objects.create(
+            material=self.material,
+            code='SMP-001',
+            name='Test sample',
+            object_type='plate',
+        )
+        samples_url = reverse('material_samples:list', kwargs={'material_pk': self.material.pk})
+        response = self.client.get(samples_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, sample.code)
+        self.assertContains(response, reverse('samples:create'))
+
+    def test_attach_file_on_material_attachments_tab(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.materials.models import MaterialAttachment
+
+        attachments_url = reverse('material_attachments:list', kwargs={'material_pk': self.material.pk})
+        get_response = self.client.get(attachments_url)
+        self.assertContains(get_response, 'Прикрепить файл')
+
+        post_response = self.client.post(
+            attachments_url,
+            {
+                'attachment-title': 'Datasheet',
+                'attachment-file': SimpleUploadedFile(
+                    'datasheet.pdf',
+                    b'%PDF-1.4 test',
+                    content_type='application/pdf',
+                ),
+            },
+        )
+        self.assertRedirects(post_response, attachments_url)
+        attachment = MaterialAttachment.objects.get(title='Datasheet')
+        self.assertEqual(attachment.material, self.material)
+        self.assertTrue(attachment.file.storage.exists(attachment.file.name))
+
+    def test_material_delete_removes_attachment_files(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.materials.models import MaterialAttachment
+
+        attachment = MaterialAttachment.objects.create(
+            material=self.material,
+            title='To delete',
+            file=SimpleUploadedFile('doc.txt', b'content', content_type='text/plain'),
+        )
+        file_name = attachment.file.name
+        self.material.delete()
+        self.assertFalse(MaterialAttachment.objects.filter(title='To delete').exists())
+        self.assertFalse(attachment.file.storage.exists(file_name))

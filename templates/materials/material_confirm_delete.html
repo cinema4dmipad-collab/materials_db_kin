@@ -10,7 +10,7 @@
     <div class="card-body">
         <div class="alert alert-warning">
             Вы уверены, что хотите удалить материал <strong>{{ material.code }} — {{ material.name }}</strong>?
-            Связанные свойства и образцы могут быть затронуты ограничениями базы данных.
+            Связанные свойства, образцы и сканы будут удалены вместе с материалом.
         </div>
         <form method="post" class="d-flex gap-2">
             {% csrf_token %}

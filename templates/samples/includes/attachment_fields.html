@@ -1,0 +1,28 @@
+{% if attachment_form.non_field_errors %}
+<div class="alert alert-danger">{{ attachment_form.non_field_errors }}</div>
+{% endif %}
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <label class="form-label" for="{{ attachment_form.title.id_for_label }}">{{ attachment_form.title.label }}</label>
+        {{ attachment_form.title }}
+        {% for error in attachment_form.title.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="{{ attachment_form.file.id_for_label }}">{{ attachment_form.file.label }}</label>
+        {{ attachment_form.file }}
+        <div class="form-text">Любой формат файла, до 100 МБ.</div>
+        {% for error in attachment_form.file.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="col-12">
+        <label class="form-label" for="{{ attachment_form.description.id_for_label }}">{{ attachment_form.description.label }}</label>
+        {{ attachment_form.description }}
+        {% for error in attachment_form.description.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+</div>

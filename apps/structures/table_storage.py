@@ -104,3 +104,26 @@ def load_field_data(structure_type: StructureType, row_id: uuid.UUID) -> dict:
         else:
             result[field.name] = val
     return result
+
+
+SERVICE_COLUMNS = {'id', 'created_at', 'updated_at', 'created_by'}
+
+
+def structure_record_label(record: dict, structure_type: StructureType) -> str:
+    for field in _supported_fields(structure_type):
+        value = record.get(field.name)
+        if value not in (None, ''):
+            if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+                return str(DisplayValue(field, value).get_value())
+            return str(value)
+    record_id = str(record.get('id') or '')
+    return record_id[:8] if record_id else '—'
+
+
+def count_linked_materials(structure_type: StructureType, row_id) -> int:
+    from apps.materials.models import Material
+
+    return Material.objects.filter(
+        struct_type=structure_type,
+        struct_props_id=row_id,
+    ).count()

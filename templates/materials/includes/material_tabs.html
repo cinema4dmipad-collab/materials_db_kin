@@ -1,0 +1,20 @@
+{% if material %}
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link{% if active_tab == 'material' %} active{% endif %}"
+           href="{% url 'materials:detail' material.pk %}">Материал</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if active_tab == 'samples' %} active{% endif %}"
+           href="{% url 'material_samples:list' material.pk %}">
+            Образцы{% if sample_count %} ({{ sample_count }}){% endif %}
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if active_tab == 'attachments' %} active{% endif %}"
+           href="{% url 'material_attachments:list' material.pk %}">
+            Файлы{% if attachment_count %} ({{ attachment_count }}){% endif %}
+        </a>
+    </li>
+</ul>
+{% endif %}

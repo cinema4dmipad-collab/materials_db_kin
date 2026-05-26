@@ -121,10 +121,15 @@ class MaterialDetailView(DetailView):
     model = Material
     template_name = 'materials/material_detail.html'
     context_object_name = 'material'
+    active_tab = 'material'
     structure_service_columns = {'id', 'created_at', 'updated_at', 'created_by'}
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['active_tab'] = self.active_tab
+        context['attachment_count'] = self.object.attachments.count()
+        context['sample_count'] = self.object.samples.count()
+        context['attachments'] = self.object.attachments.all()[:5]
         context['properties'] = (
             self.object.properties.select_related('property', 'property__group').order_by(
                 'property__group__sort_order',

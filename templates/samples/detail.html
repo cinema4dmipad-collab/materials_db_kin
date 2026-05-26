@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ sample.code }} — Образец{% endblock %}
+
+{% block content %}
+{% include 'samples/includes/sample_tabs.html' %}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="h4 mb-1">{{ sample.name }}</h1>
+            <p class="text-muted mb-0 small">Код: <strong>{{ sample.code }}</strong></p>
+        </div>
+        <div class="text-nowrap">
+            <a href="{% url 'samples:edit' sample.pk %}" class="btn btn-outline-primary btn-sm">Изменить</a>
+            <a href="{% url 'samples:delete' sample.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            <a href="{% url 'samples:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Материал</dt>
+            <dd class="col-sm-9">
+                <a href="{% url 'materials:detail' sample.material.pk %}">{{ sample.material }}</a>
+            </dd>
+            <dt class="col-sm-3">Тип объекта</dt>
+            <dd class="col-sm-9">{{ sample.get_object_type_display }}</dd>
+            <dt class="col-sm-3">Создал</dt>
+            <dd class="col-sm-9">{{ sample.created_by|default:"—" }}</dd>
+            <dt class="col-sm-3">Создан</dt>
+            <dd class="col-sm-9">{{ sample.created_at|date:"d.m.Y H:i" }}</dd>
+            <dt class="col-sm-3">Сканы (HDF5)</dt>
+            <dd class="col-sm-9">
+                <a href="{% url 'scans:list' sample.pk %}">{{ scan_count }}</a>
+            </dd>
+            <dt class="col-sm-3">Файлы</dt>
+            <dd class="col-sm-9">
+                <a href="{% url 'attachments:list' sample.pk %}">{{ attachment_count }}</a>
+            </dd>
+        </dl>
+    </div>
+</div>
+
+{% if scans %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Последние сканы</h2>
+        <a href="{% url 'scans:list' sample.pk %}" class="btn btn-sm btn-primary">Перейти к сканам</a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Метод</th>
+                        <th>Загружен</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for scan in scans %}
+                    <tr>
+                        <td><a href="{% url 'scans:detail' sample.pk scan.pk %}">{{ scan.title }}</a></td>
+                        <td>{{ scan.get_method_display }}</td>
+                        <td>{{ scan.uploaded_at|date:"d.m.Y H:i" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info mb-0">
+    Сканы ещё не прикреплены. Перейдите на вкладку
+    <a href="{% url 'scans:list' sample.pk %}">Сканы</a>
+    или добавьте их при редактировании образца.
+</div>
+{% endif %}
+{% endblock %}

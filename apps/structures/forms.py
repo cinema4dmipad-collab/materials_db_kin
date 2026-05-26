@@ -290,3 +290,66 @@ def get_dynamic_form(structure_type):
     if structure_type.is_created:
         return _get_table_form(structure_type)
     return _get_eav_form(structure_type)
+
+
+STRUCTURE_FIELD_PREFIX = 'structure_field_'
+
+
+class StructureRecordForm(forms.Form):
+    """Форма записи в SQL-таблице динамической структуры (публичный UI)."""
+
+    def __init__(self, structure_type, record=None, *args, **kwargs):
+        self.structure_type = structure_type
+        self.record = record
+        super().__init__(*args, **kwargs)
+        self.structure_fields = _supported_structure_fields(structure_type)
+        for structure_field in self.structure_fields:
+            field = _build_dynamic_field(structure_field)
+            self.fields[self.field_name(structure_field)] = field
+        if record:
+            self._apply_initial_values(record)
+
+    @classmethod
+    def field_name(cls, structure_field):
+        return f'{STRUCTURE_FIELD_PREFIX}{structure_field.pk}'
+
+    @property
+    def bound_structure_fields(self):
+        return [self[self.field_name(field)] for field in self.structure_fields]
+
+    def _apply_initial_values(self, record):
+        for structure_field in self.structure_fields:
+            if structure_field.name not in record:
+                continue
+            value = record[structure_field.name]
+            if structure_field.field_type == MATERIAL_LINK_FIELD_TYPE:
+                value = material_from_value(value)
+            self.fields[self.field_name(structure_field)].initial = value
+
+    def collect_data(self):
+        data = {}
+        for structure_field in self.structure_fields:
+            value = self.cleaned_data.get(self.field_name(structure_field))
+            if value not in (None, '') or structure_field.is_required:
+                data[structure_field.name] = value
+            else:
+                data[structure_field.name] = None
+        return data
+
+    def save(self, created_by=''):
+        from apps.structures.sql_executor import SQLExecutor
+
+        data = self.collect_data()
+        if self.record:
+            row_id = self.record['id']
+            result = SQLExecutor.update(self.structure_type, row_id, data)
+            if not result['success']:
+                raise ValidationError(result.get('error') or 'Не удалось сохранить запись.')
+            return row_id
+
+        if created_by:
+            data['created_by'] = created_by
+        result = SQLExecutor.insert(self.structure_type, data)
+        if not result['success']:
+            raise ValidationError(result.get('error') or 'Не удалось создать запись.')
+        return result['id']
