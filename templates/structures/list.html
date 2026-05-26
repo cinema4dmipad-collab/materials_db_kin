@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}
+{% if structure_type %}{{ structure_type.name }}{% else %}Структуры{% endif %} — База композитов
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Legacy-структуры</h1>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning mb-0">
+            Самостоятельный список экземпляров структур отключен. Параметры структуры теперь создаются и редактируются в карточке материала.
+        </div>
+    </div>
+</div>
+{% endblock %}

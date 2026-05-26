@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ material.code }} — База композитов{% endblock %}
+
+{% block extra_head %}
+{% if show_composite_layers and composite_layers %}
+<link rel="stylesheet" href="{% static 'css/composite_layer_diagram.css' %}">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="h4 mb-1">{{ material.name }}</h1>
+            <p class="text-muted mb-0 small">Код: <strong>{{ material.code }}</strong></p>
+        </div>
+        <div class="text-nowrap">
+            <a href="{% url 'materials:edit' material.pk %}" class="btn btn-primary btn-sm">Изменить</a>
+            <a href="{% url 'materials:delete' material.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Описание</dt>
+            <dd class="col-sm-9">{{ material.description|default:"—" }}</dd>
+            <dt class="col-sm-3">Создал</dt>
+            <dd class="col-sm-9">{{ material.created_by|default:"—" }}</dd>
+            <dt class="col-sm-3">Создан</dt>
+            <dd class="col-sm-9">{{ material.created_at|date:"d.m.Y H:i" }}</dd>
+            <dt class="col-sm-3">Обновлён</dt>
+            <dd class="col-sm-9">{{ material.updated_at|date:"d.m.Y H:i" }}</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Свойства</h2>
+    </div>
+    <div class="card-body p-0">
+        {% if properties %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Свойство</th>
+                        <th>Значение</th>
+                        <th>Единица</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mp in properties %}
+                    <tr>
+                        <td>{{ mp.property.display_name }}</td>
+                        <td>{{ mp.value }}</td>
+                        <td>{{ mp.property.unit|default:"—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-3 mb-0 text-muted">Свойства не заданы.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Слои композита</h2>
+    </div>
+    <div class="card-body p-0">
+        {% if show_composite_layers %}
+        {% if composite_layers %}
+        {% include 'materials/includes/composite_layer_diagram.html' %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Номер слоя</th>
+                        <th>Материал</th>
+                        <th>Угол</th>
+                        <th>Толщина</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for layer in composite_layers %}
+                    <tr>
+                        <td>{{ layer.layer_number }}</td>
+                        <td>{{ layer.material }}</td>
+                        <td>{{ layer.angle }}</td>
+                        <td>{{ layer.thickness }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-3 mb-0 text-muted">Слои композита не заданы.</p>
+        {% endif %}
+        {% else %}
+        <p class="p-3 mb-0 text-muted">Для выбранного типа структуры слои не используются.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Параметры структуры</h2>
+    </div>
+    <div class="card-body p-0">
+        {% if structure_type %}
+        <div class="px-3 pt-3">
+            <p class="text-muted mb-3">Тип структуры: <strong>{{ structure_type.name }}</strong></p>
+        </div>
+        {% endif %}
+
+        {% if structure_properties %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Параметр</th>
+                        <th>Значение</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for prop in structure_properties %}
+                    <tr>
+                        <td>{{ prop.label|default:prop.name }}</td>
+                        <td>{{ prop.display_value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% elif structure_message %}
+        <p class="p-3 mb-0 text-muted">{{ structure_message }}</p>
+        {% else %}
+        <p class="p-3 mb-0 text-muted">Параметры структуры не заданы.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

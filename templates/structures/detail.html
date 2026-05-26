@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ instance.code }} — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="h4 mb-0">Legacy-структура</h2>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning mb-0">
+            Просмотр самостоятельных экземпляров структур отключен. Актуальные параметры структуры доступны через карточку материала.
+        </div>
+    </div>
+</div>
+{% endblock %}
