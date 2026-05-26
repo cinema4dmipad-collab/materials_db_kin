@@ -9,20 +9,30 @@
     </div>
     <div class="card-body">
         <div class="row g-3">
-            <div class="col-md-6">
-                <div class="card text-center h-100">
+            <div class="col-md-4">
+                <div class="card stat-card text-center h-100">
                     <div class="card-body">
                         <h3 class="card-title h5">Материалы</h3>
-                        <p class="display-6 mb-0">{{ materials_count }}</p>
+                        <p class="display-6 mb-0 stat-card__value">{{ materials_count }}</p>
                         <a href="{% url 'materials:list' %}" class="btn btn-sm btn-outline-primary mt-2">Открыть список</a>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="card text-center h-100">
+            <div class="col-md-4">
+                <div class="card stat-card text-center h-100">
+                    <div class="card-body">
+                        <h3 class="card-title h5">Структуры</h3>
+                        <p class="display-6 mb-0 stat-card__value">{{ structures_count }}</p>
+                        <a href="{% url 'structures:select_type' %}" class="btn btn-sm btn-outline-primary mt-2">Типы структур</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card stat-card text-center h-100">
                     <div class="card-body">
                         <h3 class="card-title h5">Образцы</h3>
-                        <p class="display-6 mb-0">{{ samples_count }}</p>
+                        <p class="display-6 mb-0 stat-card__value">{{ samples_count }}</p>
+                        <a href="{% url 'samples:list' %}" class="btn btn-sm btn-outline-primary mt-2">Открыть список</a>
                     </div>
                 </div>
             </div>

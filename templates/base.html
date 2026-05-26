@@ -1,17 +1,23 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}База композитов{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{% static 'css/keenetica-theme.css' %}" rel="stylesheet">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-keenetica">
         <div class="container">
             <a class="navbar-brand" href="{% url 'core:dashboard' %}">
-                <span class="text-white-50 me-2">KEENETICA</span>База композитов
+                <span class="brand-keenetica me-2">KEENETICA</span>
+                <span class="brand-subtitle">База композитов</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
                     aria-controls="navbarNav" aria-expanded="false" aria-label="Меню">
@@ -44,7 +50,7 @@
         </div>
     </nav>
 
-    <main class="container mt-4">
+    <main class="container app-main mt-4">
         {% if messages %}
             {% for message in messages %}
                 <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
@@ -55,6 +61,13 @@
         {% endif %}
         {% block content %}{% endblock %}
     </main>
+
+    <footer class="app-footer">
+        <div class="container d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span>© ООО «КИНЕТИКА»</span>
+            <a href="https://keenetica.ru/" target="_blank" rel="noopener noreferrer">keenetica.ru</a>
+        </div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
