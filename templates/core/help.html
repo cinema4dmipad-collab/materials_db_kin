@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+
+{% block title %}Справка — База композитов{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Справка по работе с базой</h1>
+    </div>
+    <div class="card-body">
+        <p class="mb-0">
+            Эта страница описывает, как устроен сайт, в каком порядке вводить данные и на что обратить внимание.
+            Разделы ниже соответствуют пунктам верхнего меню.
+        </p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card sticky-top help-toc-card">
+            <div class="card-header">
+                <h2 class="h6 mb-0">Содержание</h2>
+            </div>
+            <div class="list-group list-group-flush">
+                <a class="list-group-item list-group-item-action" href="#overview">Общая схема</a>
+                <a class="list-group-item list-group-item-action" href="#properties">Справочник свойств</a>
+                <a class="list-group-item list-group-item-action" href="#materials">Материалы</a>
+                <a class="list-group-item list-group-item-action" href="#structures">Типы структур</a>
+                <a class="list-group-item list-group-item-action" href="#samples">Образцы</a>
+                <a class="list-group-item list-group-item-action" href="#scans">Сканы и файлы</a>
+                <a class="list-group-item list-group-item-action" href="#search">Поиск и фильтры</a>
+                <a class="list-group-item list-group-item-action" href="#tags">Теги</a>
+                <a class="list-group-item list-group-item-action" href="#tips">Рекомендации</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <section id="overview" class="card mb-4 help-section">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Общая схема данных</h2>
+            </div>
+            <div class="card-body">
+                <p>Данные связаны между собой так:</p>
+                <ol>
+                    <li><strong>Справочник свойств</strong> — названия и единицы измерения (плотность, модуль упругости и т.п.).</li>
+                    <li><strong>Материал</strong> — карточка композита или заготовки с кодом, типом структуры и значениями свойств.</li>
+                    <li><strong>Образец</strong> — конкретная деталь или пластина из материала; свойства можно уточнить для образца.</li>
+                    <li><strong>Сканы и файлы</strong> — прикрепляются к образцу (ультразвуковые HDF5, фото, отчёты).</li>
+                </ol>
+                <p class="mb-0 text-muted small">
+                    Рекомендуемый порядок: сначала завести нужные свойства в справочнике, затем материал, потом образцы и измерения.
+                </p>
+            </div>
+        </section>
+
+        <section id="properties" class="card mb-4 help-section">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Справочник свойств</h2>
+                <a href="{% url 'references:list' %}" class="btn btn-sm btn-outline-primary">Открыть раздел</a>
+            </div>
+            <div class="card-body">
+                <p>Раздел <strong>Свойства</strong> в меню — это общий каталог параметров, которые потом выбираются в материалах и образцах.</p>
+                <ul>
+                    <li><strong>Название</strong> — как свойство видно в интерфейсе (можно на русском).</li>
+                    <li><strong>Код свойства</strong> — заполняется автоматически из названия; при необходимости можно поправить вручную.</li>
+                    <li><strong>Единица измерения</strong> — необязательно (МПа, г/см³, % и т.д.).</li>
+                    <li><strong>Тип данных</strong> — число, строка, да/нет или дата.</li>
+                    <li><strong>Группа</strong> — для удобной группировки в списках (группы создаются в админке).</li>
+                </ul>
+                <p class="mb-0">Один раз добавленное свойство можно использовать во многих материалах и образцах.</p>
+            </div>
+        </section>
+
+        <section id="materials" class="card mb-4 help-section">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Материалы</h2>
+                <a href="{% url 'materials:list' %}" class="btn btn-sm btn-outline-primary">Открыть раздел</a>
+            </div>
+            <div class="card-body">
+                <h3 class="h6">Основные поля</h3>
+                <ul>
+                    <li><strong>Код</strong> — уникальный идентификатор (например, <code>CMP-CFRP-T700-EP</code>).</li>
+                    <li><strong>Название</strong> — понятное описание материала.</li>
+                    <li><strong>Тип структуры</strong> — определяет набор параметров конструкции (сэндвич, монолит и т.п.). После выбора типа появятся дополнительные поля; при смене типа страница перезагрузится.</li>
+                    <li><strong>Теги</strong> — необязательные метки для поиска (через запятую или выбор из подсказок).</li>
+                </ul>
+
+                <h3 class="h6 mt-3">Свойства материала</h3>
+                <p>
+                    В блоке «Свойства» нажмите <strong>+ Добавить свойство</strong>, выберите параметр из справочника и укажите значение.
+                    Строки можно удалять кнопкой ✖.
+                </p>
+
+                <h3 class="h6 mt-3">Слои композита</h3>
+                <p>
+                    Если для выбранного типа структуры разрешены слои, появится таблица укладки: номер слоя, материал слоя, угол и толщина.
+                    Номера слоёв проставляются автоматически. На карточке материала отображается схема укладки и суммарная толщина.
+                </p>
+
+                <h3 class="h6 mt-3">Карточка материала</h3>
+                <p class="mb-0">
+                    На странице просмотра — свойства, слои, параметры структуры, образцы, вложения.
+                    Отсюда же можно перейти к редактированию или создать образец из этого материала.
+                </p>
+            </div>
+        </section>
+
+        <section id="structures" class="card mb-4 help-section">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Типы структур</h2>
+                <a href="{% url 'structures:select_type' %}" class="btn btn-sm btn-outline-primary">Открыть раздел</a>
+            </div>
+            <div class="card-body">
+                <p>
+                    Тип структуры задаёт, какие дополнительные поля появятся у материала (толщина, тип обшивки, ссылка на другой материал и т.д.).
+                </p>
+                <ul>
+                    <li>На странице типа можно просматривать и создавать записи структур этого вида.</li>
+                    <li>Для нового типа нужно создать SQL-таблицу (кнопка в интерфейсе управления типом).</li>
+                    <li>Флаг «Разрешить слои» включает таблицу слоёв композита в форме материала.</li>
+                </ul>
+                <p class="mb-0 text-muted small">
+                    Настройка полей типа структуры — задача администратора базы; при сомнениях обратитесь к ответственному за систему.
+                </p>
+            </div>
+        </section>
+
+        <section id="samples" class="card mb-4 help-section">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Образцы</h2>
+                <a href="{% url 'samples:list' %}" class="btn btn-sm btn-outline-primary">Открыть раздел</a>
+            </div>
+            <div class="card-body">
+                <p>Образец — конкретная единица (пластина, деталь, контрольный элемент), изготовленная из материала.</p>
+
+                <h3 class="h6">Поля образца</h3>
+                <ul>
+                    <li><strong>Код и название</strong> — уникальный код и краткое описание.</li>
+                    <li><strong>Материал</strong> — обязательная связь с карточкой материала.</li>
+                    <li><strong>Тип объекта</strong> — испытательный, контрольный, изделие и др.</li>
+                </ul>
+
+                <h3 class="h6 mt-3">Свойства образца</h3>
+                <p>
+                    При выборе материала свойства <strong>подставляются автоматически</strong> из его карточки.
+                    Значения можно изменить — они сохранятся только для этого образца.
+                </p>
+                <div class="alert alert-warning mb-3">
+                    Если добавить свойство, которого <strong>нет у материала</strong>, система покажет предупреждение
+                    (жёлтая подсказка в форме и сообщение после сохранения). Это не ошибка — образец может иметь дополнительные параметры.
+                </div>
+                <p class="mb-0">
+                    Сканы HDF5 и произвольные файлы прикрепляются на вкладках «Сканы» и «Файлы» уже после создания образца.
+                </p>
+            </div>
+        </section>
+
+        <section id="scans" class="card mb-4 help-section">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Сканы и файлы</h2>
+                <a href="{% url 'scans_all' %}" class="btn btn-sm btn-outline-primary">Все сканы</a>
+            </div>
+            <div class="card-body">
+                <h3 class="h6">Сканы (HDF5)</h3>
+                <ul>
+                    <li>Загружаются к конкретному образцу на вкладке «Сканы» или из общего списка сканов.</li>
+                    <li>Принимаются только файлы <strong>.h5</strong> и <strong>.hdf5</strong> с корректной сигнатурой HDF5.</li>
+                    <li>Указываются название, описание и метод контроля (эхо, теневой, зеркальный и др.).</li>
+                </ul>
+
+                <h3 class="h6 mt-3">Файлы-вложения</h3>
+                <p class="mb-0">
+                    На вкладке «Файлы» образца можно прикрепить фото, PDF и другие документы с названием и описанием.
+                </p>
+            </div>
+        </section>
+
+        <section id="search" class="card mb-4 help-section">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Поиск и фильтры</h2>
+            </div>
+            <div class="card-body">
+                <p>На страницах списков (материалы, образцы, сканы, свойства и др.) доступны:</p>
+                <ul>
+                    <li><strong>Строка поиска</strong> — ищет по коду, названию, описанию; в некоторых разделах — также по тегам.</li>
+                    <li><strong>Фильтры</strong> — выпадающие списки (тип структуры, тип объекта, метод сканирования и т.п.).</li>
+                    <li><strong>Сброс фильтров</strong> — ссылка появляется, если результатов нет или нужно очистить условия.</li>
+                </ul>
+                <p class="mb-0">
+                    На карточках просмотра таблицы свойств и сканов можно дополнительно отфильтровать строки локальным поиском по таблице.
+                </p>
+            </div>
+        </section>
+
+        <section id="tags" class="card mb-4 help-section">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Теги</h2>
+            </div>
+            <div class="card-body">
+                <p>
+                    Теги задаются в формах материала, образца и скана в поле «Теги» — через запятую или выбор из уже существующих.
+                    На списках тег отображается как метка; клик по ней отфильтрует записи с этим тегом.
+                </p>
+                <p class="mb-0 text-muted small">
+                    При вводе нового тега система нормализует написание; похожие теги лучше не дублировать.
+                </p>
+            </div>
+        </section>
+
+        <section id="tips" class="card mb-4 help-section">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Практические рекомендации</h2>
+            </div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li>Используйте единый формат кодов материалов и образцов — так проще искать и ссылаться друг на друга.</li>
+                    <li>Сначала заполните справочник свойств, затем материал — так не придётся прерывать ввод.</li>
+                    <li>Для композитов с укладкой проверьте, что у типа структуры включены слои, и материалы слоёв уже заведены в базе.</li>
+                    <li>Значения свойств вводите в тех единицах, которые указаны в справочнике (МПа, GPa, мм и т.д.).</li>
+                    <li>Если форма не сохраняется — проверьте красные сообщения об ошибках и блок «Свойства»; возможно, не заполнено обязательное поле.</li>
+                    <li>Расширенные настройки (группы свойств, права доступа) — в разделе <a href="/admin/">Админка</a>.</li>
+                </ul>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.help-toc-card {
+    top: 1rem;
+}
+.help-section {
+    scroll-margin-top: 1rem;
+}
+</style>
+{% endblock %}

@@ -13,3 +13,7 @@ def dashboard(request):
         'recent_materials': Material.objects.order_by('-created_at')[:5],
     }
     return render(request, 'core/dashboard.html', context)
+
+
+def help_page(request):
+    return render(request, 'core/help.html')

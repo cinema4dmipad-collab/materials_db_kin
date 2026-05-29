@@ -1,4 +1,5 @@
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from apps.core.list_filters import QuerySetFilterMixin
 from apps.core.models import Tag
@@ -115,3 +116,13 @@ class QuerySetFilterMixinTests(TestCase):
 
         self.assertEqual(queryset.count(), 1)
         self.assertEqual(queryset.get().code, 'SMP-FILTER-B')
+
+
+class HelpPageTests(TestCase):
+    def test_help_page_renders(self):
+        response = self.client.get(reverse('core:help'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Справка по работе с базой')
+        self.assertContains(response, 'Справочник свойств')
+        self.assertContains(response, 'Образцы')
