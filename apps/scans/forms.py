@@ -1,10 +1,11 @@
 from django import forms
 
+from apps.core.tag_forms import TagNamesFormMixin
 from apps.scans.models import ScanRecord
 from apps.scans.validators import format_max_scan_file_size, validate_scan_file
 
 
-class ScanRecordForm(forms.ModelForm):
+class ScanRecordForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = ScanRecord
         fields = ['file', 'title', 'description', 'method']

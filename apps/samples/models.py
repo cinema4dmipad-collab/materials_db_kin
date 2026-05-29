@@ -3,6 +3,7 @@ import uuid
 from django.db import models
 
 from apps.materials.models import Material
+from apps.references.models import Property
 
 
 class Sample(models.Model):
@@ -32,6 +33,13 @@ class Sample(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.CharField(max_length=100, blank=True)
 
+    tags = models.ManyToManyField(
+        'core.Tag',
+        blank=True,
+        related_name='samples',
+        verbose_name='Теги',
+    )
+
     class Meta:
         ordering = ['code']
 
@@ -46,6 +54,28 @@ class Sample(models.Model):
             if attachment.file:
                 attachment.file.delete(save=False)
         super().delete(*args, **kwargs)
+
+
+class SampleProperty(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sample = models.ForeignKey(
+        Sample,
+        on_delete=models.CASCADE,
+        related_name='properties',
+    )
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name='sample_values',
+    )
+    value = models.CharField(max_length=500)
+    notes = models.TextField(blank=True)
+
+    def __str__(self):
+        return f'{self.sample.code} - {self.property.display_name}: {self.value}'
+
+    class Meta:
+        unique_together = ['sample', 'property']
 
 
 class SampleAttachment(models.Model):

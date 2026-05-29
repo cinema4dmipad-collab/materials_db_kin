@@ -15,6 +15,7 @@ urlpatterns = [
     path('samples/<uuid:sample_pk>/scans/', include('apps.scans.urls')),
     path('samples/<uuid:sample_pk>/attachments/', include('apps.samples.attachment_urls')),
     path('structures/', include('apps.structures.urls')),
+    path('properties/', include('apps.references.urls')),
 ]
 
 if settings.DEBUG:

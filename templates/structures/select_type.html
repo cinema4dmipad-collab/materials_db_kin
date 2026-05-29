@@ -13,9 +13,10 @@
     </div>
     <div class="card-body">
         {% if types %}
-        <div class="row g-3">
+        {% include 'includes/card_search_bar.html' with target_selector='#structure-types-grid' placeholder='Поиск по названию или коду типа...' %}
+        <div class="row g-3" id="structure-types-grid">
             {% for st in types %}
-            <div class="col-md-6 col-lg-4">
+            <div class="col-md-6 col-lg-4" data-card-search-item>
                 <div class="card h-100">
                     <div class="card-body d-flex flex-column">
                         <h2 class="h5 card-title">{{ st.name }}</h2>

@@ -117,7 +117,12 @@
                                             <td>{{ field_form.max_digits }}</td>
                                             <td>{{ field_form.decimal_places }}</td>
                                             {% if field_formset.can_delete and not fields_locked %}
-                                             <td><button type="button" class="btn btn-sm btn-secondary duplicate-row-btn me-2">⧉</button><button type="button" class="btn btn-sm btn-danger delete-row-btn">✖</button></td>
+                                            <td class="text-nowrap">
+                                                {% if field_form.id %}{{ field_form.id }}{% endif %}
+                                                <span class="visually-hidden">{% if field_form.DELETE %}{{ field_form.DELETE }}{% endif %}</span>
+                                                <button type="button" class="btn btn-sm btn-secondary duplicate-row-btn me-2">⧉</button>
+                                                <button type="button" class="btn btn-sm btn-danger delete-row-btn">✖</button>
+                                            </td>
                                             {% endif %}
                                         </tr>
                                         {% endfor %}
@@ -150,7 +155,11 @@
                                     <td><input type="number" name="fields-__idx__-max_length" class="form-control" value="255" min="1" max="4000" id="id_fields-__idx__-max_length"></td>
                                     <td><input type="number" name="fields-__idx__-max_digits" class="form-control" value="10" min="1" max="18" id="id_fields-__idx__-max_digits"></td>
                                     <td><input type="number" name="fields-__idx__-decimal_places" class="form-control" value="2" min="0" max="10" id="id_fields-__idx__-decimal_places"></td>
-                                     <td><button type="button" class="btn btn-sm btn-danger delete-row-btn">✖</button></td>
+                                    <td class="text-nowrap">
+                                        <input type="checkbox" name="fields-__idx__-DELETE" id="id_fields-__idx__-DELETE" class="d-none">
+                                        <button type="button" class="btn btn-sm btn-secondary duplicate-row-btn me-2">⧉</button>
+                                        <button type="button" class="btn btn-sm btn-danger delete-row-btn">✖</button>
+                                    </td>
                                 </tr>
                             </template>
                         </div>

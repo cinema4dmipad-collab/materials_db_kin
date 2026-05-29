@@ -34,4 +34,14 @@
         <div class="invalid-feedback d-block">{{ error }}</div>
         {% endfor %}
     </div>
+    <div class="col-12">
+        <label class="form-label" for="{{ scan_form.tag_names.id_for_label }}">{{ scan_form.tag_names.label }}</label>
+        {{ scan_form.tag_names }}
+        {% if scan_form.tag_names.help_text %}
+        <div class="form-text">{{ scan_form.tag_names.help_text }}</div>
+        {% endif %}
+        {% for error in scan_form.tag_names.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
 </div>

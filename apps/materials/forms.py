@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
 
 from apps.composites.models import CompositeLayer
+from apps.core.tag_forms import TagNamesFormMixin
 from apps.materials.models import Material, MaterialProperty
 from apps.structures.models import StructureType
 from apps.structures.forms import _build_dynamic_field, material_from_value
@@ -26,22 +27,43 @@ def structure_instance_label(instance: dict) -> str:
             return str(value)
     return record_id[:8]
 
+_LAYER_NUMBER_WIDGET = {
+    'class': 'form-control layer-number-field',
+    'readonly': True,
+}
+
+
+class MaterialPropertyInlineFormSet(forms.BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        seen = {}
+        for form in self.forms:
+            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+                continue
+            prop = form.cleaned_data.get('property')
+            if not prop:
+                continue
+            if prop.pk in seen:
+                form.add_error(
+                    'property',
+                    'Это свойство уже указано в другой строке.',
+                )
+            else:
+                seen[prop.pk] = True
+
+
 MaterialPropertyFormSet = inlineformset_factory(
     Material,
     MaterialProperty,
     fields=['property', 'value'],
-    extra=3,
+    extra=0,
     can_delete=True,
+    formset=MaterialPropertyInlineFormSet,
     widgets={
         'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
         'value': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
     },
 )
-
-_LAYER_NUMBER_WIDGET = {
-    'class': 'form-control layer-number-field',
-    'readonly': True,
-}
 
 
 class CompositeLayerFormSet(forms.BaseInlineFormSet):
@@ -121,7 +143,7 @@ def get_composite_layer_formset():
     )
 
 
-class MaterialForm(forms.ModelForm):
+class MaterialForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = Material
         fields = [
@@ -322,5 +344,6 @@ class MaterialForm(forms.ModelForm):
         if commit:
             self._save_structure_row(material)
             material.save()
+            self.save_tags(material)
             self.save_m2m()
         return material

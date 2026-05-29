@@ -1,0 +1,13 @@
+{% if tags %}
+<div class="entity-tags">
+    {% for tag in tags %}
+    {% if filter_url %}
+    <a href="{{ filter_url }}?tag={{ tag.slug }}" class="entity-tag">{{ tag.name }}</a>
+    {% else %}
+    <span class="entity-tag">{{ tag.name }}</span>
+    {% endif %}
+    {% endfor %}
+</div>
+{% else %}
+<span class="text-muted">—</span>
+{% endif %}

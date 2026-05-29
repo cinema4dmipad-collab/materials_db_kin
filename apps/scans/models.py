@@ -30,6 +30,12 @@ class ScanRecord(models.Model):
     )
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Загружен')
     uploaded_by = models.CharField(max_length=100, blank=True, verbose_name='Загрузил')
+    tags = models.ManyToManyField(
+        'core.Tag',
+        blank=True,
+        related_name='scans',
+        verbose_name='Теги',
+    )
 
     class Meta:
         ordering = ['-uploaded_at']

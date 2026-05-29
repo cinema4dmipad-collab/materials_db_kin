@@ -60,37 +60,64 @@ class StructureTypeSelectView(TemplateView):
 class StructureRecordListView(CreatedTableRequiredMixin, TemplateView):
     template_name = 'structures/list.html'
 
+    def _build_records(self, raw_records):
+        return [
+            {
+                'id': record['id'],
+                'created_at': record.get('created_at'),
+                'label': structure_record_label(record, self.structure_type),
+            }
+            for record in raw_records
+        ]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        search_query = self.request.GET.get('q', '').strip()
         page_number = self.request.GET.get('page', 1)
         try:
             page_number = max(int(page_number), 1)
         except (TypeError, ValueError):
             page_number = 1
 
-        offset = (page_number - 1) * self.paginate_by
-        result = SQLExecutor.get_all(
-            self.structure_type,
-            limit=self.paginate_by,
-            offset=offset,
-        )
-        records = result.get('records', []) if result.get('success') else []
-        total = result.get('total', 0) if result.get('success') else 0
+        if search_query:
+            result = SQLExecutor.get_all(self.structure_type, limit=None, offset=0)
+            raw_records = result.get('records', []) if result.get('success') else []
+            records = self._build_records(raw_records)
+            records = [
+                record for record in records
+                if search_query.lower() in record['label'].lower()
+            ]
+            total = len(records)
+            offset = (page_number - 1) * self.paginate_by
+            records = records[offset:offset + self.paginate_by]
+        else:
+            offset = (page_number - 1) * self.paginate_by
+            result = SQLExecutor.get_all(
+                self.structure_type,
+                limit=self.paginate_by,
+                offset=offset,
+            )
+            records = self._build_records(result.get('records', []) if result.get('success') else [])
+            total = result.get('total', 0) if result.get('success') else 0
+
         num_pages = max((total + self.paginate_by - 1) // self.paginate_by, 1)
 
-        context['records'] = [
-            {
-                'id': record['id'],
-                'created_at': record.get('created_at'),
-                'label': structure_record_label(record, self.structure_type),
-            }
-            for record in records
-        ]
+        pagination_query = self.request.GET.copy()
+        pagination_query.pop('page', None)
+
+        context['records'] = records
         context['page_number'] = page_number
         context['num_pages'] = num_pages
         context['total'] = total
         context['has_previous'] = page_number > 1
         context['has_next'] = page_number < num_pages
+        context['search_query'] = search_query
+        context['search_param'] = 'q'
+        context['search_placeholder'] = 'Название или параметры записи...'
+        context['list_filters'] = []
+        context['has_active_filters'] = bool(search_query)
+        context['filter_reset_url'] = self.request.path
+        context['pagination_query'] = pagination_query.urlencode()
         return context
 
 

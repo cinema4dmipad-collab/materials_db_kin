@@ -14,7 +14,8 @@
             <a href="{% url 'structures:select_type' %}" class="btn btn-outline-secondary btn-sm">К типам</a>
         </div>
     </div>
-    <div class="card-body">
+    <div class="card-body p-0">
+        {% include 'includes/list_filter_bar.html' %}
         {% if records %}
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle mb-0">
@@ -47,7 +48,7 @@
             <ul class="pagination justify-content-center mb-0">
                 {% if has_previous %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_number|add:'-1' }}">Назад</a>
+                    <a class="page-link" href="?{% if pagination_query %}{{ pagination_query }}&{% endif %}page={{ page_number|add:'-1' }}">Назад</a>
                 </li>
                 {% else %}
                 <li class="page-item disabled"><span class="page-link">Назад</span></li>
@@ -57,7 +58,7 @@
                 </li>
                 {% if has_next %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_number|add:'1' }}">Вперёд</a>
+                    <a class="page-link" href="?{% if pagination_query %}{{ pagination_query }}&{% endif %}page={{ page_number|add:'1' }}">Вперёд</a>
                 </li>
                 {% else %}
                 <li class="page-item disabled"><span class="page-link">Вперёд</span></li>
@@ -67,9 +68,13 @@
         {% endif %}
 
         {% else %}
-        <div class="alert alert-info mb-0">
+        <div class="alert alert-info mb-0 m-3">
+            {% if has_active_filters %}
+            По вашему запросу записи не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
+            {% else %}
             Записей пока нет.
             <a href="{% url 'structures:create' structure_type.code %}">Создайте первую запись</a>.
+            {% endif %}
         </div>
         {% endif %}
     </div>

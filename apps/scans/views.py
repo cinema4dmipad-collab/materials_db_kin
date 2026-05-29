@@ -3,19 +3,37 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.core.list_filters import QuerySetFilterMixin
 from apps.samples.models import Sample
 from apps.scans.forms import ScanRecordForm
 from apps.scans.models import ScanRecord
 
 
-class AllScansListView(ListView):
+class AllScansListView(QuerySetFilterMixin, ListView):
     model = ScanRecord
     template_name = 'scans/all_list.html'
     context_object_name = 'scans'
     paginate_by = 12
+    enable_tag_filter = True
+    search_fields = (
+        'title',
+        'description',
+        'sample__code',
+        'sample__name',
+        'sample__material__code',
+        'sample__material__name',
+    )
+    search_placeholder = 'Название, образец, материал или тег...'
+    choice_filters = (('method', 'method'),)
+    choice_filter_labels = {'method': 'Метод', 'tag': 'Тег'}
 
     def get_queryset(self):
-        return ScanRecord.objects.select_related('sample', 'sample__material').all()
+        return self.filter_queryset(
+            ScanRecord.objects.select_related('sample', 'sample__material').prefetch_related('tags')
+        )
+
+    def get_choice_filter_options(self):
+        return {'method': ScanRecord.METHODS}
 
 
 class SampleScanMixin:
@@ -34,10 +52,18 @@ class SampleScanMixin:
         return context
 
 
-class ScanListView(SampleScanMixin, ListView):
+class ScanListView(QuerySetFilterMixin, SampleScanMixin, ListView):
     model = ScanRecord
     template_name = 'scans/list.html'
     context_object_name = 'scans'
+    enable_tag_filter = True
+    search_fields = ('title', 'description', 'file')
+    search_placeholder = 'Название, описание, файл или тег...'
+    choice_filters = (('method', 'method'),)
+    choice_filter_labels = {'method': 'Метод', 'tag': 'Тег'}
+
+    def get_choice_filter_options(self):
+        return {'method': ScanRecord.METHODS}
 
     def get_scan_form(self):
         if hasattr(self, '_scan_form'):
@@ -55,6 +81,7 @@ class ScanListView(SampleScanMixin, ListView):
             scan = form.save(commit=False)
             scan.sample = self.sample
             scan.save()
+            form.save_tags(scan)
             messages.success(request, 'Скан прикреплён к образцу.')
             return redirect('scans:list', sample_pk=self.sample.pk)
 
@@ -68,7 +95,7 @@ class ScanListView(SampleScanMixin, ListView):
         return context
 
     def get_queryset(self):
-        return self.sample.scans.all()
+        return self.filter_queryset(self.sample.scans.prefetch_related('tags'))
 
 
 class ScanDetailView(SampleScanMixin, DetailView):
@@ -77,7 +104,7 @@ class ScanDetailView(SampleScanMixin, DetailView):
     context_object_name = 'scan'
 
     def get_queryset(self):
-        return self.sample.scans.all()
+        return self.sample.scans.prefetch_related('tags')
 
 
 class ScanCreateView(SampleScanMixin, CreateView):
@@ -106,7 +133,7 @@ class ScanUpdateView(SampleScanMixin, UpdateView):
     context_object_name = 'scan'
 
     def get_queryset(self):
-        return self.sample.scans.all()
+        return self.sample.scans.prefetch_related('tags')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -127,7 +154,7 @@ class ScanDeleteView(SampleScanMixin, DeleteView):
     context_object_name = 'scan'
 
     def get_queryset(self):
-        return self.sample.scans.all()
+        return self.sample.scans.prefetch_related('tags')
 
     def get_success_url(self):
         return reverse('scans:list', kwargs={'sample_pk': self.sample.pk})

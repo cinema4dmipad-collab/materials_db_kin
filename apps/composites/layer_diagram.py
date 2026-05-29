@@ -12,8 +12,18 @@ LAYER_COLORS = (
 )
 
 
-def _layer_color(layer_index: int) -> str:
-    return LAYER_COLORS[layer_index % len(LAYER_COLORS)]
+def _layer_color(color_index: int) -> str:
+    return LAYER_COLORS[color_index % len(LAYER_COLORS)]
+
+
+def _material_color_map(layer_list) -> dict:
+    colors: dict = {}
+    color_index = 0
+    for layer in layer_list:
+        if layer.material_id not in colors:
+            colors[layer.material_id] = _layer_color(color_index)
+            color_index += 1
+    return colors
 
 
 def _normalize_angle(angle) -> str:
@@ -32,11 +42,12 @@ def build_layer_diagram(layers):
     if total_thickness <= 0:
         total_thickness = float(len(layer_list))
 
+    material_colors = _material_color_map(layer_list)
     diagram_layers = []
     material_legend = []
 
-    for index, layer in enumerate(layer_list):
-        color = _layer_color(index)
+    for layer in layer_list:
+        color = material_colors[layer.material_id]
 
         if not any(entry['material_id'] == layer.material_id for entry in material_legend):
             material_legend.append(
@@ -51,6 +62,7 @@ def build_layer_diagram(layers):
         diagram_layers.append(
             {
                 'layer_number': layer.layer_number,
+                'material_id': layer.material_id,
                 'material_label': str(layer.material),
                 'material_code': layer.material.code,
                 'angle': _normalize_angle(layer.angle),

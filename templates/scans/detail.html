@@ -25,6 +25,8 @@
         <dl class="row mb-0">
             <dt class="col-sm-3">Метод</dt>
             <dd class="col-sm-9">{{ scan.get_method_display }}</dd>
+            <dt class="col-sm-3">Теги</dt>
+            <dd class="col-sm-9">{% url 'scans:list' sample.pk as sample_scans_url %}{% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}</dd>
             <dt class="col-sm-3">Описание</dt>
             <dd class="col-sm-9">{{ scan.description|default:"—" }}</dd>
             <dt class="col-sm-3">Загружен</dt>

@@ -73,12 +73,15 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.core.context_processors.tag_suggestions',
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+
+FORM_RENDERER = 'django.forms.renderers.DjangoTemplates'
 
 if env_str('DB_ENGINE').lower() == 'postgresql':
     DATABASES = {

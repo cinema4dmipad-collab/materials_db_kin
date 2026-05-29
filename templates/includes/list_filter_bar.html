@@ -1,0 +1,70 @@
+<form method="get" class="list-filter-panel">
+    <div class="list-filter-panel__header">
+        <div class="list-filter-panel__title">
+            <span class="list-filter-panel__icon">
+                {% include 'includes/search_input_icon.html' %}
+            </span>
+            <div>
+                <div class="list-filter-panel__heading">Поиск и фильтры</div>
+                <div class="list-filter-panel__hint">Найдите нужную запись по ключевым полям</div>
+            </div>
+        </div>
+        {% if has_active_filters %}
+        <a href="{{ filter_reset_url }}" class="list-filter-panel__reset">Сбросить всё</a>
+        {% endif %}
+    </div>
+
+    <div class="row g-3 align-items-end">
+        <div class="col-lg-5">
+            <label class="list-filter-panel__field-label" for="list-filter-search">Поисковый запрос</label>
+            <div class="search-input-wrap">
+                {% include 'includes/search_input_icon.html' %}
+                <input type="search"
+                       id="list-filter-search"
+                       name="{{ search_param|default:'q' }}"
+                       value="{{ search_query }}"
+                       class="form-control search-input-field"
+                       placeholder="{{ search_placeholder|default:'Введите текст для поиска...' }}"
+                       autocomplete="off">
+            </div>
+        </div>
+        {% for filter in list_filters %}
+        <div class="col-md-4 col-lg-3">
+            <label class="list-filter-panel__field-label" for="list-filter-{{ filter.param }}">{{ filter.label }}</label>
+            <select id="list-filter-{{ filter.param }}" name="{{ filter.param }}" class="form-select">
+                <option value="">Все значения</option>
+                {% for value, label in filter.options %}
+                <option value="{{ value }}"{% if filter.value == value|stringformat:'s' %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endfor %}
+        <div class="col-lg-auto ms-lg-auto">
+            <button type="submit" class="btn btn-primary list-filter-panel__submit w-100">Применить</button>
+        </div>
+    </div>
+
+    {% if has_active_filters %}
+    <div class="list-filter-panel__chips">
+        <span class="list-filter-panel__chips-label">Активно:</span>
+        {% if search_query %}
+        <span class="list-filter-chip">
+            <span class="list-filter-chip__key">Поиск</span>
+            «{{ search_query }}»
+        </span>
+        {% endif %}
+        {% for filter in list_filters %}
+            {% if filter.value %}
+                {% for value, label in filter.options %}
+                    {% if filter.value == value|stringformat:'s' %}
+        <span class="list-filter-chip">
+            <span class="list-filter-chip__key">{{ filter.label }}</span>
+            {{ label }}
+        </span>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</form>

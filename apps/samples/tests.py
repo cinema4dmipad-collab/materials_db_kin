@@ -12,9 +12,10 @@ from django.urls import reverse
 
 
 
-from apps.materials.models import Material
-
-from apps.samples.models import Sample, SampleAttachment
+from apps.materials.models import Material, MaterialProperty
+from apps.references.models import Property
+from apps.samples.forms import SamplePropertyFormSet
+from apps.samples.models import Sample, SampleAttachment, SampleProperty
 
 from apps.scans.models import ScanRecord
 
@@ -55,18 +56,27 @@ class SampleViewsTests(TestCase):
         self.material = Material.objects.create(code='MAT-SMP-UI', name='UI material')
 
         self.sample = Sample.objects.create(
-
             code='SMP-UI-001',
-
             name='UI sample',
-
             material=self.material,
-
             object_type='test',
-
         )
 
+    def _property_formset_management_data(self, total='0', initial='0'):
+        return {
+            'properties-TOTAL_FORMS': total,
+            'properties-INITIAL_FORMS': initial,
+            'properties-MIN_NUM_FORMS': '0',
+            'properties-MAX_NUM_FORMS': '1000',
+        }
 
+    def _property_formset_data(self, property_obj, prefix='properties-0', **overrides):
+        data = {
+            f'{prefix}-property': str(property_obj.pk),
+            f'{prefix}-value': '1.55',
+        }
+        data.update(overrides)
+        return data
 
     def tearDown(self):
 
@@ -85,30 +95,161 @@ class SampleViewsTests(TestCase):
 
 
         create_response = self.client.post(
-
             reverse('samples:create'),
-
             {
-
                 'code': 'SMP-UI-002',
-
                 'name': 'Second sample',
-
                 'material': self.material.pk,
-
                 'object_type': 'control',
-
                 'created_by': 'tester',
-
+                **self._property_formset_management_data(),
             },
-
         )
 
         self.assertEqual(create_response.status_code, 302)
 
         self.assertTrue(Sample.objects.filter(code='SMP-UI-002').exists())
 
+    def test_sample_property_formset_save_directly(self):
+        density = Property.objects.create(
+            name='direct_density',
+            display_name='Density',
+            data_type='number',
+        )
+        formset = SamplePropertyFormSet(
+            {
+                'properties-TOTAL_FORMS': '1',
+                'properties-INITIAL_FORMS': '0',
+                'properties-MIN_NUM_FORMS': '0',
+                'properties-MAX_NUM_FORMS': '1000',
+                'properties-0-property': str(density.pk),
+                'properties-0-value': '1.62',
+            },
+            instance=self.sample,
+            prefix='properties',
+        )
+        self.assertTrue(formset.is_valid(), formset.errors)
+        formset.save()
+        self.assertEqual(
+            SampleProperty.objects.get(sample=self.sample, property=density).value,
+            '1.62',
+        )
 
+    def test_sample_create_view_saves_property_formset(self):
+        density = Property.objects.create(
+            name='sample_density',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+        MaterialProperty.objects.create(
+            material=self.material,
+            property=density,
+            value='1.60',
+        )
+
+        response = self.client.post(
+            reverse('samples:create'),
+            {
+                'code': 'SMP-UI-PROP',
+                'name': 'Sample with properties',
+                'material': self.material.pk,
+                'object_type': 'test',
+                'created_by': 'tester',
+                **self._property_formset_management_data(total='1'),
+                **self._property_formset_data(density, **{'properties-0-value': '1.62'}),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        sample = Sample.objects.get(code='SMP-UI-PROP')
+        link = SampleProperty.objects.get(sample=sample, property=density)
+        self.assertEqual(link.value, '1.62')
+
+    def test_sample_create_shows_warning_for_property_missing_on_material(self):
+        density = Property.objects.create(
+            name='material_density',
+            display_name='Density',
+            data_type='number',
+        )
+        custom = Property.objects.create(
+            name='custom_prop',
+            display_name='Custom property',
+            data_type='number',
+        )
+        MaterialProperty.objects.create(
+            material=self.material,
+            property=density,
+            value='1.60',
+        )
+
+        response = self.client.post(
+            reverse('samples:create'),
+            {
+                'code': 'SMP-UI-EXTRA',
+                'name': 'Sample with extra property',
+                'material': self.material.pk,
+                'object_type': 'test',
+                'created_by': 'tester',
+                **self._property_formset_management_data(total='2'),
+                **self._property_formset_data(density, prefix='properties-0'),
+                **self._property_formset_data(
+                    custom,
+                    prefix='properties-1',
+                    **{'properties-1-value': '42'},
+                ),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        messages = [str(message) for message in response.context['messages']]
+        self.assertTrue(
+            any('Custom property' in message and 'отсутствуют у материала' in message for message in messages),
+            messages,
+        )
+
+    def test_material_properties_json_view(self):
+        density = Property.objects.create(
+            name='json_density',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+        MaterialProperty.objects.create(
+            material=self.material,
+            property=density,
+            value='1.55',
+        )
+
+        response = self.client.get(
+            reverse('materials:properties_json', kwargs={'pk': self.material.pk}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload['properties']), 1)
+        self.assertEqual(payload['properties'][0]['property_id'], str(density.pk))
+        self.assertEqual(payload['properties'][0]['value'], '1.55')
+
+    def test_sample_detail_shows_properties(self):
+        density = Property.objects.create(
+            name='detail_density',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+        SampleProperty.objects.create(
+            sample=self.sample,
+            property=density,
+            value='2.10',
+        )
+
+        response = self.client.get(reverse('samples:detail', kwargs={'pk': self.sample.pk}))
+
+        self.assertContains(response, 'Свойства')
+        self.assertContains(response, 'Density')
+        self.assertContains(response, '2.10')
 
     def test_attach_scan_on_sample_scans_tab(self):
 
@@ -143,19 +284,13 @@ class SampleViewsTests(TestCase):
     def test_create_sample_does_not_attach_scan_on_create_form(self):
 
         create_response = self.client.post(
-
             reverse('samples:create'),
-
             {
-
                 'code': 'SMP-WITH-SCAN',
-
                 'name': 'Sample with scan',
-
                 'material': self.material.pk,
-
                 'object_type': 'test',
-
+                **self._property_formset_management_data(),
                 'scan-title': 'Create scan',
 
                 'scan-method': 'echo',
@@ -177,19 +312,13 @@ class SampleViewsTests(TestCase):
     def test_create_sample_does_not_attach_file_on_create_form(self):
 
         create_response = self.client.post(
-
             reverse('samples:create'),
-
             {
-
                 'code': 'SMP-WITH-FILE',
-
                 'name': 'Sample with file',
-
                 'material': self.material.pk,
-
                 'object_type': 'test',
-
+                **self._property_formset_management_data(),
                 'attachment-title': 'Report',
 
                 'attachment-file': SimpleUploadedFile(

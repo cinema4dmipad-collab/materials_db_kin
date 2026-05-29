@@ -1,0 +1,21 @@
+<div class="tag-input-widget" data-tag-suggestions="{{ widget.tag_suggestions_json }}">
+    <div class="tag-input-widget__field-wrap">
+        <input type="{{ widget.type }}" name="{{ widget.name }}"{% if widget.value != None %} value="{{ widget.value|stringformat:'s' }}"{% endif %}{{ widget.extra_attrs|safe }}>
+        <div class="tag-input-dropdown" hidden role="listbox" aria-label="Подсказки тегов"></div>
+    </div>
+    {% if widget.tag_suggestions %}
+    <div class="tag-input-existing">
+        <div class="tag-input-existing__label">Существующие теги — нажмите, чтобы подставить каноническое название</div>
+        <div class="tag-input-existing__list">
+            {% for tag in widget.tag_suggestions %}
+            <button type="button"
+                    class="entity-tag tag-input-pick"
+                    data-tag-name="{{ tag.name }}"
+                    title="Добавить тег «{{ tag.name }}»">
+                {{ tag.name }}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>

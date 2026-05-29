@@ -27,6 +27,12 @@ class Material(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создан')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлён')
     created_by = models.CharField(max_length=100, blank=True, verbose_name='Создал')
+    tags = models.ManyToManyField(
+        'core.Tag',
+        blank=True,
+        related_name='materials',
+        verbose_name='Теги',
+    )
 
     def __str__(self):
         return f'{self.code} - {self.name}'

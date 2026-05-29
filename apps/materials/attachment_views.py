@@ -3,6 +3,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import DeleteView, ListView
 
+from apps.core.list_filters import QuerySetFilterMixin
 from apps.materials.forms_attachments import MaterialAttachmentForm
 from apps.materials.models import MaterialAttachment
 from apps.materials.tab_mixins import MaterialTabMixin
@@ -12,10 +13,12 @@ class MaterialAttachmentMixin(MaterialTabMixin):
     active_tab = 'attachments'
 
 
-class MaterialAttachmentListView(MaterialAttachmentMixin, ListView):
+class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, ListView):
     model = MaterialAttachment
     template_name = 'materials/attachments/list.html'
     context_object_name = 'attachments'
+    search_fields = ('title', 'description', 'file')
+    search_placeholder = 'Название, описание или имя файла...'
 
     def get_attachment_form(self):
         if hasattr(self, '_attachment_form'):
@@ -46,7 +49,7 @@ class MaterialAttachmentListView(MaterialAttachmentMixin, ListView):
         return context
 
     def get_queryset(self):
-        return self.material.attachments.all()
+        return self.filter_queryset(self.material.attachments.all())
 
 
 class MaterialAttachmentDeleteView(MaterialAttachmentMixin, DeleteView):

@@ -477,7 +477,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def _formset_management_data(self):
         return {
-            'properties-TOTAL_FORMS': '3',
+            'properties-TOTAL_FORMS': '0',
             'properties-INITIAL_FORMS': '0',
             'properties-MIN_NUM_FORMS': '0',
             'properties-MAX_NUM_FORMS': '1000',
@@ -497,6 +497,22 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             f'{prefix}-material': str(material.pk),
             f'{prefix}-angle': '45',
             f'{prefix}-thickness': '0.25',
+        }
+        data.update(overrides)
+        return data
+
+    def _property_formset_management_data(self, total='1', initial='0'):
+        return {
+            'properties-TOTAL_FORMS': total,
+            'properties-INITIAL_FORMS': initial,
+            'properties-MIN_NUM_FORMS': '0',
+            'properties-MAX_NUM_FORMS': '1000',
+        }
+
+    def _property_formset_data(self, property_obj, prefix='properties-0', **overrides):
+        data = {
+            f'{prefix}-property': str(property_obj.pk),
+            f'{prefix}-value': '1.55',
         }
         data.update(overrides)
         return data
@@ -576,6 +592,56 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(detail_response, 'Skin material')
         self.assertContains(detail_response, 'MAT-LINKED-001 - Linked material')
 
+    def test_public_material_create_view_saves_property_formset(self):
+        density = Property.objects.create(
+            name='density_create',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._property_formset_management_data(),
+                **self._property_formset_data(density),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        link = MaterialProperty.objects.get(material=material, property=density)
+        self.assertEqual(link.value, '1.55')
+
+    def test_public_material_update_view_saves_new_property(self):
+        density = Property.objects.create(
+            name='density_update',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+        row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
+        material = Material.objects.create(
+            code='MAT-PUBLIC-PROP-001',
+            name='Public material without properties',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-PROP-001',
+                name='Public material without properties',
+                **self._property_formset_management_data(),
+                **self._property_formset_data(density, **{'properties-0-value': '2.10'}),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        link = MaterialProperty.objects.get(material=material, property=density)
+        self.assertEqual(link.value, '2.10')
+
     def test_public_material_create_view_saves_layer_formset_and_detail_shows_layers(self):
         layer_material = Material.objects.create(
             code='MAT-LAYER-001',
@@ -601,7 +667,9 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
         self.assertContains(detail_response, 'Слои')
         self.assertContains(detail_response, 'composite-layer-diagram')
-        self.assertContains(detail_response, 'Схема укладки слоёв')
+        self.assertContains(detail_response, 'Схема укладки')
+        self.assertContains(detail_response, 'composite-thickness-summary')
+        self.assertContains(detail_response, 'Σt =')
         self.assertContains(detail_response, 'layer-stack-column')
         self.assertContains(detail_response, 'layer-material-legend')
         self.assertContains(detail_response, 'flex:')

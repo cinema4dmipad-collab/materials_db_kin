@@ -1,13 +1,48 @@
 from django import forms
+from django.forms import inlineformset_factory
 
-from apps.samples.models import Sample, SampleAttachment
+from apps.core.tag_forms import TagNamesFormMixin
+from apps.samples.models import Sample, SampleAttachment, SampleProperty
 from apps.samples.validators import validate_attachment_file
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
 
 
-class SampleForm(forms.ModelForm):
+class SamplePropertyInlineFormSet(forms.BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        seen = {}
+        for form in self.forms:
+            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+                continue
+            prop = form.cleaned_data.get('property')
+            if not prop:
+                continue
+            if prop.pk in seen:
+                form.add_error(
+                    'property',
+                    'Это свойство уже указано в другой строке.',
+                )
+            else:
+                seen[prop.pk] = True
+
+
+SamplePropertyFormSet = inlineformset_factory(
+    Sample,
+    SampleProperty,
+    fields=['property', 'value'],
+    extra=0,
+    can_delete=True,
+    formset=SamplePropertyInlineFormSet,
+    widgets={
+        'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
+        'value': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
+    },
+)
+
+
+class SampleForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = Sample
         fields = ['code', 'name', 'material', 'object_type', 'created_by']
@@ -21,7 +56,7 @@ class SampleForm(forms.ModelForm):
         widgets = {
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
-            'material': forms.Select(attrs=_BOOTSTRAP_SELECT),
+            'material': forms.Select(attrs={**_BOOTSTRAP_SELECT, 'data-sample-material-select': 'true'}),
             'object_type': forms.Select(attrs=_BOOTSTRAP_SELECT),
             'created_by': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
         }
