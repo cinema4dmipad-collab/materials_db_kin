@@ -2,15 +2,11 @@ import shutil
 
 import tempfile
 
-
-
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from django.test import TestCase, override_settings
 
 from django.urls import reverse
-
-
 
 from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Property
@@ -20,8 +16,6 @@ from apps.samples.models import Sample, SampleAttachment, SampleProperty
 from apps.scans.models import ScanRecord
 
 from apps.scans.test_utils import make_hdf5_upload
-
-
 
 _STORAGE_OVERRIDE = {
 
@@ -35,10 +29,6 @@ _STORAGE_OVERRIDE = {
 
 }
 
-
-
-
-
 @override_settings(**_STORAGE_OVERRIDE)
 
 class SampleViewsTests(TestCase):
@@ -50,8 +40,6 @@ class SampleViewsTests(TestCase):
         self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
 
         self.settings_override.enable()
-
-
 
         self.material = Material.objects.create(code='MAT-SMP-UI', name='UI material')
 
@@ -84,15 +72,11 @@ class SampleViewsTests(TestCase):
 
         shutil.rmtree(self.media_root, ignore_errors=True)
 
-
-
     def test_sample_crud_views(self):
 
         list_response = self.client.get(reverse('samples:list'))
 
         self.assertContains(list_response, 'SMP-UI-001')
-
-
 
         create_response = self.client.post(
             reverse('samples:create'),
@@ -279,8 +263,6 @@ class SampleViewsTests(TestCase):
 
         self.assertEqual(scan.sample, self.sample)
 
-
-
     def test_create_sample_does_not_attach_scan_on_create_form(self):
 
         create_response = self.client.post(
@@ -306,8 +288,6 @@ class SampleViewsTests(TestCase):
         sample = Sample.objects.get(code='SMP-WITH-SCAN')
 
         self.assertFalse(ScanRecord.objects.filter(sample=sample).exists())
-
-
 
     def test_create_sample_does_not_attach_file_on_create_form(self):
 
@@ -341,8 +321,6 @@ class SampleViewsTests(TestCase):
 
         self.assertFalse(SampleAttachment.objects.filter(sample=sample).exists())
 
-
-
     def test_attachments_tab(self):
 
         attachments_url = reverse('attachments:list', kwargs={'sample_pk': self.sample.pk})
@@ -352,8 +330,6 @@ class SampleViewsTests(TestCase):
         self.assertContains(get_response, 'Файлы')
 
         self.assertContains(get_response, 'Прикрепить файл')
-
-
 
         post_response = self.client.post(
 
@@ -373,8 +349,6 @@ class SampleViewsTests(TestCase):
 
         self.assertTrue(SampleAttachment.objects.filter(title='Photo').exists())
 
-
-
     def test_sample_detail_shows_tabs(self):
 
         detail_response = self.client.get(reverse('samples:detail', kwargs={'pk': self.sample.pk}))
@@ -382,8 +356,6 @@ class SampleViewsTests(TestCase):
         self.assertContains(detail_response, 'Сканы')
 
         self.assertContains(detail_response, 'Файлы')
-
-
 
     def test_global_scans_list(self):
 
@@ -401,10 +373,6 @@ class SampleViewsTests(TestCase):
 
         self.assertContains(response, 'Global list scan')
 
-
-
-
-
 @override_settings(**_STORAGE_OVERRIDE)
 
 class ScanUiViewsTests(TestCase):
@@ -416,8 +384,6 @@ class ScanUiViewsTests(TestCase):
         self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
 
         self.settings_override.enable()
-
-
 
         self.material = Material.objects.create(code='MAT-SCN-UI', name='Scan UI material')
 
@@ -431,15 +397,11 @@ class ScanUiViewsTests(TestCase):
 
         )
 
-
-
     def tearDown(self):
 
         self.settings_override.disable()
 
         shutil.rmtree(self.media_root, ignore_errors=True)
-
-
 
     def test_scan_detail_and_edit_views(self):
 
@@ -467,8 +429,6 @@ class ScanUiViewsTests(TestCase):
 
         scan = ScanRecord.objects.get(title='Echo scan')
 
-
-
         detail_response = self.client.get(
 
             reverse('scans:detail', kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk}),
@@ -478,8 +438,6 @@ class ScanUiViewsTests(TestCase):
         self.assertContains(detail_response, 'Echo scan')
 
         self.assertContains(detail_response, 'HDF5')
-
-
 
         edit_response = self.client.post(
 
@@ -502,5 +460,3 @@ class ScanUiViewsTests(TestCase):
         scan.refresh_from_db()
 
         self.assertEqual(scan.title, 'Echo scan updated')
-
-

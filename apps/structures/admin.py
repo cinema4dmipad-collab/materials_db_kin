@@ -90,34 +90,18 @@ class StructureFieldInline(admin.TabularInline):
         return super().get_max_num(request, obj, **kwargs)
 
 
-class LegacyReadOnlyAdminMixin:
-    legacy_notice = 'Legacy: сохранено только для просмотра старых данных.'
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    def get_actions(self, request):
-        actions = super().get_actions(request)
-        actions.pop('delete_selected', None)
-        return actions
-
-    def get_readonly_fields(self, request, obj=None):
-        return [field.name for field in self.model._meta.fields]
-
-    def change_view(self, request, object_id, form_url='', extra_context=None):
-        messages.warning(request, self.legacy_notice)
-        return super().change_view(request, object_id, form_url, extra_context)
-
-
 @admin.register(StructureType)
 class StructureTypeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'table_name', 'code', 'allow_layers', 'is_created', 'is_active', 'created_at']
+    list_display = [
+        'name',
+        'table_name',
+        'code',
+        'allow_layers',
+        'is_created',
+        'is_active',
+        'create_table_button',
+        'created_at',
+    ]
     list_filter = ['allow_layers', 'is_created', 'is_active']
     search_fields = ['name', 'code', 'table_name']
     prepopulated_fields = {'code': ('name',)}

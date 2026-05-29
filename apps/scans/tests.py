@@ -2,15 +2,11 @@ import shutil
 
 import tempfile
 
-
-
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from django.test import TestCase, override_settings
 
 from django.urls import reverse
-
-
 
 from apps.materials.models import Material
 
@@ -21,10 +17,6 @@ from apps.scans.models import ScanRecord
 from apps.scans.test_utils import make_hdf5_upload
 
 from apps.scans.validators import MAX_SCAN_FILE_SIZE, validate_scan_file
-
-
-
-
 
 class SampleModelTests(TestCase):
 
@@ -44,13 +36,9 @@ class SampleModelTests(TestCase):
 
         )
 
-
-
     def test_str(self):
 
         self.assertEqual(str(self.sample), 'SMP-001 - Test sample')
-
-
 
     def test_material_cascade_deletes_sample(self):
 
@@ -59,10 +47,6 @@ class SampleModelTests(TestCase):
         self.material.delete()
 
         self.assertFalse(Sample.objects.filter(pk=sample_id).exists())
-
-
-
-
 
 @override_settings(
 
@@ -85,8 +69,6 @@ class SampleDeleteRemovesScanFilesTests(TestCase):
         self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
 
         self.settings_override.enable()
-
-
 
         self.material = Material.objects.create(code='MAT-SMP-002', name='Cascade material')
 
@@ -112,15 +94,11 @@ class SampleDeleteRemovesScanFilesTests(TestCase):
 
         self.file_name = self.scan.file.name
 
-
-
     def tearDown(self):
 
         self.settings_override.disable()
 
         shutil.rmtree(self.media_root, ignore_errors=True)
-
-
 
     def test_sample_delete_removes_scan_file(self):
 
@@ -129,10 +107,6 @@ class SampleDeleteRemovesScanFilesTests(TestCase):
         self.assertFalse(ScanRecord.objects.filter(title='Cascade scan').exists())
 
         self.assertFalse(self.scan.file.storage.exists(self.file_name))
-
-
-
-
 
 @override_settings(
 
@@ -156,8 +130,6 @@ class SampleViewsTests(TestCase):
 
         self.settings_override.enable()
 
-
-
         self.material = Material.objects.create(code='MAT-SMP-003', name='View material')
 
         self.sample = Sample.objects.create(
@@ -170,15 +142,11 @@ class SampleViewsTests(TestCase):
 
         )
 
-
-
     def tearDown(self):
 
         self.settings_override.disable()
 
         shutil.rmtree(self.media_root, ignore_errors=True)
-
-
 
     def test_sample_list_and_detail_views(self):
 
@@ -186,17 +154,11 @@ class SampleViewsTests(TestCase):
 
         self.assertContains(list_response, 'SMP-VIEW-001')
 
-
-
         detail_response = self.client.get(reverse('samples:detail', kwargs={'pk': self.sample.pk}))
 
         self.assertContains(detail_response, 'View sample')
 
         self.assertContains(detail_response, 'MAT-SMP-003')
-
-
-
-
 
 class ScanFileValidationTests(TestCase):
 
@@ -208,8 +170,6 @@ class ScanFileValidationTests(TestCase):
 
             validate_scan_file(uploaded)
 
-
-
     def test_rejects_invalid_signature(self):
 
         uploaded = SimpleUploadedFile('scan.h5', b'not-hdf5-content', content_type='application/x-hdf5')
@@ -217,8 +177,6 @@ class ScanFileValidationTests(TestCase):
         with self.assertRaisesMessage(Exception, 'сигнатур'):
 
             validate_scan_file(uploaded)
-
-
 
     def test_rejects_oversized_file(self):
 
@@ -238,15 +196,9 @@ class ScanFileValidationTests(TestCase):
 
             validate_scan_file(uploaded)
 
-
-
     def test_accepts_valid_hdf5(self):
 
         validate_scan_file(make_hdf5_upload('scan.hdf5'))
-
-
-
-
 
 @override_settings(
 
@@ -270,8 +222,6 @@ class ScanRecordModelTests(TestCase):
 
         self.settings_override.enable()
 
-
-
         self.material = Material.objects.create(code='MAT-SCN-001', name='Scan material')
 
         self.sample = Sample.objects.create(
@@ -284,15 +234,11 @@ class ScanRecordModelTests(TestCase):
 
         )
 
-
-
     def tearDown(self):
 
         self.settings_override.disable()
 
         shutil.rmtree(self.media_root, ignore_errors=True)
-
-
 
     def test_create_scan_stores_file(self):
 
@@ -314,8 +260,6 @@ class ScanRecordModelTests(TestCase):
 
         self.assertTrue(scan.is_hdf5)
 
-
-
     def test_delete_scan_removes_file(self):
 
         scan = ScanRecord.objects.create(
@@ -333,10 +277,6 @@ class ScanRecordModelTests(TestCase):
         scan.delete()
 
         self.assertFalse(scan.file.storage.exists(file_name))
-
-
-
-
 
 @override_settings(
 
@@ -360,8 +300,6 @@ class ScanViewsTests(TestCase):
 
         self.settings_override.enable()
 
-
-
         self.material = Material.objects.create(code='MAT-SCN-002', name='Upload material')
 
         self.sample = Sample.objects.create(
@@ -374,15 +312,11 @@ class ScanViewsTests(TestCase):
 
         )
 
-
-
     def tearDown(self):
 
         self.settings_override.disable()
 
         shutil.rmtree(self.media_root, ignore_errors=True)
-
-
 
     def test_upload_list_and_delete_scan(self):
 
@@ -412,13 +346,9 @@ class ScanViewsTests(TestCase):
 
         self.assertTrue(scan.file.storage.exists(scan.file.name))
 
-
-
         list_response = self.client.get(reverse('scans:list', kwargs={'sample_pk': self.sample.pk}))
 
         self.assertContains(list_response, 'Surface scan')
-
-
 
         file_name = scan.file.name
 
@@ -433,8 +363,6 @@ class ScanViewsTests(TestCase):
         self.assertFalse(ScanRecord.objects.filter(pk=scan.pk).exists())
 
         self.assertFalse(scan.file.storage.exists(file_name))
-
-
 
     def test_upload_rejects_invalid_extension(self):
 
@@ -459,5 +387,3 @@ class ScanViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
         self.assertFalse(ScanRecord.objects.filter(title='Bad file').exists())
-
-

@@ -22,7 +22,8 @@ class PropertyFormTests(TestCase):
         self.assertEqual(form.cleaned_data['name'], 'predel_prochnosti')
 
 
-class PropertyViewsTests(TestCase):    def setUp(self):
+class PropertyViewsTests(TestCase):
+    def setUp(self):
         self.group = PropertyGroup.objects.create(name='Mechanical', sort_order=1)
         self.property = Property.objects.create(
             name='density',
@@ -56,6 +57,7 @@ class PropertyViewsTests(TestCase):    def setUp(self):
         created = Property.objects.get(name='predel_prochnosti')
         self.assertEqual(created.display_name, 'Предел прочности')
         self.assertEqual(created.group, self.group)
+
     def test_property_update_view(self):
         response = self.client.post(
             reverse('references:edit', kwargs={'pk': self.property.pk}),

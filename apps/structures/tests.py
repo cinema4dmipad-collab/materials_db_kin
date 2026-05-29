@@ -21,7 +21,6 @@ from apps.structures.admin import (
     StructureFieldAdminForm,
     StructureFieldInline,
 )
-from apps.structures.dynamic_models import REGISTERED_MODELS
 from apps.structures.forms import get_dynamic_form
 from apps.structures.models import (
     StructureField,
@@ -376,7 +375,6 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
 
     def tearDown(self):
         SQLExecutor.drop_table(self.structure_type)
-        REGISTERED_MODELS.clear()
 
     def _mark_field_as_legacy_foreign_key(self, field):
         with connection.cursor() as cursor:
@@ -413,7 +411,6 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertEqual(result, {'success': True, 'error': None})
         self.assertTrue(self.structure_type.is_created)
         self.assertTrue(SQLExecutor.table_exists(self.structure_type))
-        self.assertEqual(REGISTERED_MODELS, {})
         self.assertEqual(set(apps.all_models['structures']), before_models)
         with self.assertRaises(LookupError):
             apps.get_model('structures', 'dynamic_test_panel')

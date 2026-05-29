@@ -20,9 +20,9 @@ class PropertyListView(QuerySetFilterMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            Property.objects.select_related('group').annotate(
-                material_count=Count('material_values'),
-            )
+            Property.objects.select_related('group')
+            .annotate(material_count=Count('material_values'))
+            .order_by('group__sort_order', 'display_name', 'name')
         )
 
     def get_choice_filter_options(self):
