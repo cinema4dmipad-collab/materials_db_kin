@@ -10,7 +10,6 @@ GENERATED_HEADER = '''# Автоматически генерируемые мо
 
 from django.db import models
 
-from apps.structures.models import StructureInstance
 
 '''
 

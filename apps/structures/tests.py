@@ -20,15 +20,11 @@ from apps.structures.admin import (
     StructureFieldAdmin,
     StructureFieldAdminForm,
     StructureFieldInline,
-    StructureFieldValueAdmin,
-    StructureInstanceAdmin,
 )
 from apps.structures.dynamic_models import REGISTERED_MODELS
 from apps.structures.forms import get_dynamic_form
 from apps.structures.models import (
     StructureField,
-    StructureFieldValue,
-    StructureInstance,
     StructureType,
 )
 from apps.structures.identifiers import (
@@ -344,39 +340,6 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(StructureType.objects.filter(name='UI Duplicate Fields').exists())
         self.assertContains(response, 'разными', status_code=200)
-
-
-class LegacyStructureAdminReadOnlyTests(TestCase):
-    def setUp(self):
-        self.site = AdminSite()
-        self.request = RequestFactory().get('/')
-        self.request.user = PermissiveAdminUser()
-
-    def test_structure_instance_admin_is_legacy_read_only(self):
-        admin_model = StructureInstanceAdmin(StructureInstance, self.site)
-
-        self.assertFalse(admin_model.has_add_permission(self.request))
-        self.assertFalse(admin_model.has_change_permission(self.request))
-        self.assertFalse(admin_model.has_delete_permission(self.request))
-        self.assertTrue(admin_model.has_view_permission(self.request))
-        self.assertNotIn('delete_selected', admin_model.get_actions(self.request))
-        self.assertEqual(
-            set(admin_model.get_readonly_fields(self.request)),
-            {field.name for field in StructureInstance._meta.fields},
-        )
-
-    def test_structure_field_value_admin_is_legacy_read_only(self):
-        admin_model = StructureFieldValueAdmin(StructureFieldValue, self.site)
-
-        self.assertFalse(admin_model.has_add_permission(self.request))
-        self.assertFalse(admin_model.has_change_permission(self.request))
-        self.assertFalse(admin_model.has_delete_permission(self.request))
-        self.assertTrue(admin_model.has_view_permission(self.request))
-        self.assertNotIn('delete_selected', admin_model.get_actions(self.request))
-        self.assertEqual(
-            set(admin_model.get_readonly_fields(self.request)),
-            {field.name for field in StructureFieldValue._meta.fields},
-        )
 
 
 class SQLOnlyDynamicStructureTests(TransactionTestCase):
@@ -890,71 +853,15 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             'row-code',
             {'title': 'Form panel', 'skin_material': material.pk},
         )
-        instance = self.structure_type.structureinstance_set.create(
-            code='row-code',
-            dynamic_row_id=row_id,
-        )
 
         form_class = get_dynamic_form(self.structure_type)
-        form = form_class(instance=instance)
-        form_field = form.fields[f'field_{link_field.id}']
+        form = form_class()
+        form_field = form.fields[f'structure_field_{link_field.pk}']
 
         self.assertIsInstance(form_field, forms.ModelChoiceField)
         self.assertFalse(form_field.required)
         self.assertEqual(list(form_field.queryset), [material, other_material])
         self.assertEqual(form_field.label_from_instance(material), 'MAT-FORM-001 - Form material')
-        self.assertEqual(form_field.initial, material)
-
-        invalid_form = form_class(
-            data={
-                'code': 'invalid-row',
-                f'field_{self.structure_type.fields.get(name="title").id}': 'Invalid row',
-                f'field_{link_field.id}': '00000000-0000-0000-0000-000000000000',
-            }
-        )
-        self.assertFalse(invalid_form.is_valid())
-        self.assertIn(f'field_{link_field.id}', invalid_form.errors)
-
-        valid_form = form_class(
-            data={
-                'code': 'updated-row',
-                f'field_{self.structure_type.fields.get(name="title").id}': 'Updated row',
-                f'field_{link_field.id}': str(other_material.pk),
-            },
-            instance=instance,
-        )
-        self.assertTrue(valid_form.is_valid(), valid_form.errors)
-        valid_form.save()
-        loaded = table_storage.load_field_data(self.structure_type, row_id)
-        self.assertEqual(str(loaded['skin_material']), str(other_material.pk))
-
-    def test_material_link_eav_form_saves_uuid_and_loads_initial_object(self):
-        material = Material.objects.create(code='MAT-EAV-001', name='EAV material')
-        link_field = StructureField.objects.create(
-            structure_type=self.structure_type,
-            name='skin_material',
-            label='Skin material',
-            field_type='MaterialLink',
-            sort_order=4,
-        )
-
-        form_class = get_dynamic_form(self.structure_type)
-        form = form_class(
-            data={
-                'code': 'eav-row',
-                f'field_{self.structure_type.fields.get(name="title").id}': 'EAV row',
-                f'field_{link_field.id}': str(material.pk),
-            }
-        )
-
-        self.assertTrue(form.is_valid(), form.errors)
-        instance = form.save()
-        field_value = instance.values.get(field=link_field)
-        self.assertEqual(field_value.value_fk_id, material.pk)
-        self.assertEqual(field_value.get_value(), material.pk)
-
-        edit_form = form_class(instance=instance)
-        self.assertEqual(edit_form.fields[f'field_{link_field.id}'].initial, material)
 
     def test_unlimited_offset_pagination_uses_postgresql_compatible_sql(self):
         with mock.patch.object(connection, 'vendor', 'postgresql'):
@@ -1075,7 +982,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         form_class = get_dynamic_form(self.structure_type)
         form = form_class()
 
-        self.assertNotIn(f'field_{fk_field.id}', form.fields)
+        self.assertNotIn(f'structure_field_{fk_field.pk}', form.fields)
 
     def test_table_storage_excludes_legacy_foreign_key_field(self):
         fk_field = self._add_material_fk_field(legacy=False, is_required=False)
@@ -1106,25 +1013,25 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         form_class = get_dynamic_form(self.structure_type)
         form = form_class()
 
-        self.assertNotIn(f'field_{fk_field.id}', form.fields)
+        self.assertNotIn(f'structure_field_{fk_field.pk}', form.fields)
 
     def test_dynamic_table_form_saves_without_legacy_foreign_key_field(self):
         fk_field = self._add_material_fk_field(legacy=False, is_required=False)
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
         self._mark_field_as_legacy_foreign_key(fk_field)
 
+        title_field = self.structure_type.fields.get(name='title')
         form_class = get_dynamic_form(self.structure_type)
         form = form_class(
             data={
                 'code': 'form-row',
-                f'field_{self.structure_type.fields.get(name="title").id}': 'Form row',
-                f'field_{fk_field.id}': '00000000-0000-0000-0000-000000000000',
+                f'structure_field_{title_field.pk}': 'Form row',
             }
         )
         self.assertTrue(form.is_valid(), form.errors)
 
-        instance = form.save()
-        loaded = table_storage.load_field_data(self.structure_type, instance.dynamic_row_id)
+        row_id = form.save()
+        loaded = table_storage.load_field_data(self.structure_type, row_id)
         self.assertEqual(loaded['title'], 'Form row')
         self.assertNotIn(fk_field.name, loaded)
 

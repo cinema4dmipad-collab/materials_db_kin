@@ -95,11 +95,11 @@
                                             <th>Цифр</th>
                                             <th>Дробь</th>
                                             {% if field_formset.can_delete and not fields_locked %}
-                                            <th></th>
+                                            <th>Действия</th>
                                             {% endif %}
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody id="structure-field-rows">
                                         {% for field_form in field_formset %}
                                         <tr data-structure-field-row>
                                             <td>
@@ -117,13 +117,42 @@
                                             <td>{{ field_form.max_digits }}</td>
                                             <td>{{ field_form.decimal_places }}</td>
                                             {% if field_formset.can_delete and not fields_locked %}
-                                            <td>{% if field_form.DELETE %}{{ field_form.DELETE }}{% endif %}</td>
+                                             <td><button type="button" class="btn btn-sm btn-secondary duplicate-row-btn me-2">⧉</button><button type="button" class="btn btn-sm btn-danger delete-row-btn">✖</button></td>
                                             {% endif %}
                                         </tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
                             </div>
+                            {% if not fields_locked %}
+                            <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="add-field-btn">+ Добавить поле</button>
+                            {% endif %}
+
+                            <template id="field-row-template">
+                                <tr data-structure-field-row>
+                                    <td><input type="text" name="fields-__idx__-label" class="form-control" placeholder="Толщина, мм" data-structure-field-label maxlength="200" id="id_fields-__idx__-label"></td>
+                                    <td><input type="text" name="fields-__idx__-name" class="form-control" placeholder="thickness_mm" data-structure-field-name maxlength="100" id="id_fields-__idx__-name"></td>
+                                    <td>
+                                        <select name="fields-__idx__-field_type" class="form-select" id="id_fields-__idx__-field_type">
+                                            <option value="CharField">Строка</option>
+                                            <option value="TextField">Текст</option>
+                                            <option value="IntegerField">Целое число</option>
+                                            <option value="DecimalField" selected>Десятичная дробь</option>
+                                            <option value="FloatField">Число с плавающей точкой</option>
+                                            <option value="BooleanField">Да/Нет</option>
+                                            <option value="DateField">Дата</option>
+                                            <option value="DateTimeField">Дата и время</option>
+                                            <option value="MaterialLink">Материал</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="checkbox" name="fields-__idx__-is_required" class="form-check-input" id="id_fields-__idx__-is_required"></td>
+                                    <td><input type="number" name="fields-__idx__-sort_order" class="form-control" value="0" min="0" id="id_fields-__idx__-sort_order"></td>
+                                    <td><input type="number" name="fields-__idx__-max_length" class="form-control" value="255" min="1" max="4000" id="id_fields-__idx__-max_length"></td>
+                                    <td><input type="number" name="fields-__idx__-max_digits" class="form-control" value="10" min="1" max="18" id="id_fields-__idx__-max_digits"></td>
+                                    <td><input type="number" name="fields-__idx__-decimal_places" class="form-control" value="2" min="0" max="10" id="id_fields-__idx__-decimal_places"></td>
+                                     <td><button type="button" class="btn btn-sm btn-danger delete-row-btn">✖</button></td>
+                                </tr>
+                            </template>
                         </div>
                     </div>
 

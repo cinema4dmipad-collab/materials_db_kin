@@ -1,6 +1,9 @@
 from django import forms
-from django.http import HttpResponseRedirect
+from django.contrib import messages
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
+from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
@@ -230,3 +233,24 @@ class MaterialDeleteView(DeleteView):
     template_name = 'materials/material_confirm_delete.html'
     context_object_name = 'material'
     success_url = reverse_lazy('materials:list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        material = self.object
+        context['used_as_layer'] = material.used_in_composite_layers.select_related(
+            'parent_material'
+        ).all()
+        context['has_layers'] = material.composite_layers.exists()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        try:
+            return super().post(request, *args, **kwargs)
+        except ProtectedError:
+            messages.error(
+                request,
+                'Нельзя удалить материал — он используется как слой в композитных материалах. '
+                'Сначала удалите связи из композитных материалов.',
+            )
+            return redirect('materials:detail', pk=self.object.pk)

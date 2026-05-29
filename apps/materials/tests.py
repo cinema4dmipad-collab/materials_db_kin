@@ -15,7 +15,7 @@ from apps.materials.admin import CompositeLayerInline, MaterialAdmin, MaterialFo
 from apps.materials.forms import CompositeLayerFormSet, MaterialForm as PublicMaterialForm
 from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Property, PropertyGroup
-from apps.structures.models import StructureField, StructureInstance, StructureType
+from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 
 urlpatterns = []
@@ -563,8 +563,6 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         material = Material.objects.get(code='MAT-PUBLIC-001')
         self.assertEqual(material.struct_type, self.structure_type)
         self.assertIsNotNone(material.struct_props_id)
-        self.assertFalse(StructureInstance.objects.exists())
-
         params = material.get_structure_params()
         self.assertEqual(params['title'], 'Public panel')
         self.assertEqual(str(params['thickness']), '12.50')
@@ -735,7 +733,6 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(response.status_code, 302)
         material.refresh_from_db()
         self.assertEqual(str(material.struct_props_id), row_id)
-        self.assertFalse(StructureInstance.objects.exists())
         params = material.get_structure_params()
         self.assertEqual(params['title'], 'Updated panel')
         self.assertEqual(str(params['thickness']), '9.75')

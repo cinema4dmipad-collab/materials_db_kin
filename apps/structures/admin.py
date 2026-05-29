@@ -9,8 +9,6 @@ from apps.structures.models import (
     MATERIAL_LINK_FIELD_TYPE,
     STRUCTURE_FIELD_LOCK_ERROR,
     StructureField,
-    StructureFieldValue,
-    StructureInstance,
     StructureType,
 )
 from apps.structures.sql_executor import SQLExecutor
@@ -90,24 +88,6 @@ class StructureFieldInline(admin.TabularInline):
         if self._is_locked(obj):
             return obj.fields.count()
         return super().get_max_num(request, obj, **kwargs)
-
-
-class StructureFieldValueInline(admin.TabularInline):
-    model = StructureFieldValue
-    extra = 0
-    can_delete = False
-
-    def has_add_permission(self, request, obj=None):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    def get_readonly_fields(self, request, obj=None):
-        return [field.name for field in self.model._meta.fields]
 
 
 class LegacyReadOnlyAdminMixin:
@@ -221,18 +201,6 @@ class StructureTypeAdmin(admin.ModelAdmin):
             self.message_user(request, f'Создано таблиц: {created}', level=messages.SUCCESS)
 
 
-@admin.register(StructureInstance)
-class StructureInstanceAdmin(LegacyReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ['code', 'structure_type', 'dynamic_row_id', 'created_at', 'legacy_status']
-    search_fields = ['code']
-    list_filter = ['structure_type']
-    inlines = [StructureFieldValueInline]
-
-    @admin.display(description='Статус')
-    def legacy_status(self, obj):
-        return 'Legacy/read-only'
-
-
 @admin.register(StructureField)
 class StructureFieldAdmin(admin.ModelAdmin):
     form = StructureFieldAdminForm
@@ -292,15 +260,3 @@ class StructureFieldAdmin(admin.ModelAdmin):
             self.message_user(request, STRUCTURE_FIELD_LOCK_ERROR, level=messages.ERROR)
 
 
-@admin.register(StructureFieldValue)
-class StructureFieldValueAdmin(LegacyReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ['instance', 'field', 'get_display_value', 'legacy_status']
-    list_filter = ['field__structure_type']
-
-    @admin.display(description='Значение')
-    def get_display_value(self, obj):
-        return obj.get_value()
-
-    @admin.display(description='Статус')
-    def legacy_status(self, obj):
-        return 'Legacy/read-only'
