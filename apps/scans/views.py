@@ -29,7 +29,9 @@ class AllScansListView(QuerySetFilterMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            ScanRecord.objects.select_related('sample', 'sample__material').prefetch_related('tags')
+            ScanRecord.objects.select_related(
+                'sample', 'sample__material', 'sample__material__struct_type'
+            ).prefetch_related('tags')
         )
 
     def get_choice_filter_options(self):

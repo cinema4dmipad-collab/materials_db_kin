@@ -23,10 +23,21 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
+def env_list(name: str, default: list[str] | None = None) -> list[str]:
+    value = env_str(name)
+    if not value:
+        return list(default or [])
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
 SECRET_KEY = env_str('SECRET_KEY')
 DEBUG = env_bool('DEBUG', False)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+if not DEBUG and not SECRET_KEY:
+    raise ImproperlyConfigured('SECRET_KEY обязателен при DEBUG=False.')
+
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', ['localhost', '127.0.0.1'])
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -35,7 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'apps.core',
+    'apps.core.apps.CoreConfig',
     'apps.references',
     'apps.composites',
     'apps.materials',
@@ -75,6 +86,9 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'apps.core.context_processors.tag_suggestions',
             ],
+            'libraries': {
+                'ui_tags': 'apps.core.templatetags.ui_tags',
+            },
         },
     },
 ]
@@ -122,9 +136,10 @@ TIME_ZONE = 'Europe/Moscow'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
-MEDIA_URL = 'media/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Большие HDF5-файлы (до 20 ГБ) не держим целиком в памяти — пишем во временный файл.
@@ -178,6 +193,15 @@ else:
     }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', False)
+    CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', False)
+    if env_bool('SECURE_SSL_REDIRECT', False):
+        SECURE_SSL_REDIRECT = True
 
 INTERNAL_IPS = [
     '127.0.0.1',

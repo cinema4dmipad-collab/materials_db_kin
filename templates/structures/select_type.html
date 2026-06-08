@@ -19,15 +19,17 @@
             <div class="col-md-6 col-lg-4" data-card-search-item>
                 <div class="card h-100">
                     <div class="card-body d-flex flex-column">
-                        <h2 class="h5 card-title">{{ st.name }}</h2>
+                        <h2 class="h5 card-title d-flex align-items-center gap-2 flex-wrap">
+                            {% include 'includes/type_badge.html' with label=st.name tone=st.display_color %}
+                        </h2>
                         <p class="card-text text-muted small mb-2">
                             Код: <code>{{ st.code }}</code><br>
                             Таблица: <code>{{ st.table_name }}</code><br>
                             Полей: {{ st.fields.count }}
                             {% if st.is_created %}
-                            <span class="badge bg-success ms-1">БД готова</span>
+                            <span class="type-pill tone-green ms-1"><span class="type-pill__dot" aria-hidden="true"></span><span class="type-pill__label">БД готова</span></span>
                             {% else %}
-                            <span class="badge bg-warning text-dark ms-1">Таблица не создана</span>
+                            <span class="type-pill tone-amber ms-1"><span class="type-pill__dot" aria-hidden="true"></span><span class="type-pill__label">Таблица не создана</span></span>
                             {% endif %}
                         </p>
                         {% if st.description %}

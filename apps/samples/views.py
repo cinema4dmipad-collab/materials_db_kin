@@ -105,7 +105,7 @@ class SampleListView(QuerySetFilterMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            Sample.objects.select_related('material').prefetch_related('tags')
+            Sample.objects.select_related('material', 'material__struct_type').prefetch_related('tags')
         )
 
     def get_choice_filter_options(self):

@@ -155,7 +155,10 @@
     <div class="card-body p-0">
         {% if structure_type %}
         <div class="px-3 pt-3">
-            <p class="text-muted mb-3">Тип структуры: <strong>{{ structure_type.name }}</strong></p>
+            <p class="text-muted mb-3">
+                Тип структуры:
+                {% include 'includes/type_badge.html' with label=structure_type.name tone=structure_type.display_color %}
+            </p>
         </div>
         {% endif %}
 

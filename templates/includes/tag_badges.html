@@ -2,9 +2,9 @@
 <div class="entity-tags">
     {% for tag in tags %}
     {% if filter_url %}
-    <a href="{{ filter_url }}?tag={{ tag.slug }}" class="entity-tag">{{ tag.name }}</a>
+    <a href="{{ filter_url }}?tag={{ tag.slug }}" class="entity-tag tone-tag">{{ tag.name }}</a>
     {% else %}
-    <span class="entity-tag">{{ tag.name }}</span>
+    <span class="entity-tag tone-tag">{{ tag.name }}</span>
     {% endif %}
     {% endfor %}
 </div>

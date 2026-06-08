@@ -1,0 +1,9 @@
+{% load ui_tags %}
+{% if label %}
+<span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
+    <span class="type-pill__dot" aria-hidden="true"></span>
+    <span class="type-pill__label">{{ label }}</span>
+</span>
+{% else %}
+<span class="text-muted">—</span>
+{% endif %}

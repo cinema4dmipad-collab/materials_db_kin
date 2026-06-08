@@ -27,6 +27,10 @@
         {% endif %}
 
         <dl class="row mb-0">
+            <dt class="col-sm-3">Цвет в материалах</dt>
+            <dd class="col-sm-9">
+                {% include 'includes/type_badge.html' with label=structure_type.name tone=structure_type.display_color %}
+            </dd>
             <dt class="col-sm-3">SQL-таблица</dt>
             <dd class="col-sm-9">
                 {% if structure_type.is_created %}
@@ -40,6 +44,19 @@
             <dt class="col-sm-3">Материалов с типом</dt>
             <dd class="col-sm-9">{{ linked_materials_count }}</dd>
         </dl>
+
+        <form method="post" class="mt-4 pt-3 border-top">
+            {% csrf_token %}
+            <label class="form-label fw-semibold" for="{{ color_form.display_color.id_for_label }}">{{ color_form.display_color.label }}</label>
+            {% if color_form.display_color.help_text %}
+            <div class="form-text mb-2">{{ color_form.display_color.help_text }}</div>
+            {% endif %}
+            {% include 'includes/structure_color_picker.html' with field=color_form.display_color %}
+            {% for error in color_form.display_color.errors %}
+            <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+            <button type="submit" class="btn btn-outline-primary btn-sm mt-3">Сохранить цвет</button>
+        </form>
     </div>
 </div>
 

@@ -12,8 +12,8 @@
         {% include 'includes/list_filter_bar.html' %}
         {% if samples %}
         <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle mb-0">
-                <thead class="table-dark">
+            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                <thead>
                     <tr>
                         <th>Код</th>
                         <th>Название</th>
@@ -27,18 +27,24 @@
                 <tbody>
                     {% for sample in samples %}
                     <tr>
-                        <td><a href="{% url 'samples:detail' sample.pk %}">{{ sample.code }}</a></td>
+                        <td>
+                            {% url 'samples:detail' sample.pk as sample_detail_url %}
+                            {% include 'includes/entity_code.html' with code=sample.code url=sample_detail_url tone=sample.material.struct_type.display_color %}
+                        </td>
                         <td>{{ sample.name }}</td>
                         <td>
-                            <a href="{% url 'materials:detail' sample.material.pk %}">{{ sample.material.code }}</a>
+                            {% url 'materials:detail' sample.material.pk as sample_material_url %}
+                            {% include 'includes/entity_code.html' with code=sample.material.code url=sample_material_url tone=sample.material.struct_type.display_color %}
                         </td>
-                        <td>{{ sample.get_object_type_display }}</td>
+                        <td>{% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type %}</td>
                         <td>{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</td>
                         <td>{{ sample.created_at|date:"d.m.Y H:i" }}</td>
-                        <td class="text-end text-nowrap">
-                            <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-sm btn-outline-secondary">Просмотр</a>
-                            <a href="{% url 'samples:edit' sample.pk %}" class="btn btn-sm btn-outline-primary">Изменить</a>
+                        <td class="text-end">
+                            <div class="table-actions">
+                            <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view">Просмотр</a>
+                            <a href="{% url 'samples:edit' sample.pk %}" class="btn btn-sm btn-outline-primary btn-action-edit">Изменить</a>
                             <a href="{% url 'samples:delete' sample.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

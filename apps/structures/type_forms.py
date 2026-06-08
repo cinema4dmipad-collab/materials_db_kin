@@ -20,10 +20,11 @@ _BOOTSTRAP_CHECK = {'class': 'form-check-input'}
 class StructureTypeForm(forms.ModelForm):
     class Meta:
         model = StructureType
-        fields = ['name', 'description', 'allow_layers', 'is_active']
+        fields = ['name', 'description', 'display_color', 'allow_layers', 'is_active']
         labels = {
             'name': 'Название типа',
             'description': 'Описание для операторов',
+            'display_color': 'Цвет в списке материалов',
             'allow_layers': 'Разрешить слои композита',
             'is_active': 'Активен',
         }
@@ -42,6 +43,7 @@ class StructureTypeForm(forms.ModelForm):
                     'placeholder': 'Кратко: для каких материалов и параметров используется этот тип.',
                 }
             ),
+            'display_color': forms.RadioSelect(choices=StructureType._meta.get_field('display_color').choices),
             'allow_layers': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECK),
             'is_active': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECK),
         }
@@ -49,6 +51,10 @@ class StructureTypeForm(forms.ModelForm):
             'name': (
                 'Понятное название на русском. Код и имя SQL-таблицы '
                 'сформируются автоматически (транслит + snake_case).'
+            ),
+            'display_color': (
+                'Один цвет для всех материалов этого типа — инженеру проще '
+                'отличать классы структур, не путая похожие материалы.'
             ),
             'allow_layers': 'Включите, если материалы этого типа могут иметь слои композита.',
         }
@@ -320,3 +326,12 @@ StructureFieldInlineFormSet = inlineformset_factory(
     extra=1,
     can_delete=True,
 )
+
+
+class StructureTypeDisplayColorForm(forms.ModelForm):
+    class Meta:
+        model = StructureType
+        fields = ['display_color']
+        labels = {'display_color': 'Цвет в списке материалов'}
+        widgets = {'display_color': forms.RadioSelect(choices=StructureType._meta.get_field('display_color').choices)}
+

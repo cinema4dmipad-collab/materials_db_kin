@@ -7,7 +7,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView, View
 from apps.materials.models import Material
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
-from apps.structures.type_forms import StructureFieldInlineFormSet, StructureTypeForm
+from apps.structures.type_forms import StructureFieldInlineFormSet, StructureTypeDisplayColorForm, StructureTypeForm
 
 
 class StructureTypeFormsetMixin:
@@ -122,10 +122,21 @@ class StructureTypeManageView(TemplateView):
             is_active=True,
         )
 
+    def post(self, request, type_code):
+        structure_type = self.get_structure_type()
+        form = StructureTypeDisplayColorForm(request.POST, instance=structure_type)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Цвет типа структуры обновлён.')
+        else:
+            messages.error(request, 'Не удалось сохранить цвет. Проверьте выбранное значение.')
+        return redirect('structures:type_manage', type_code=type_code)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         structure_type = self.get_structure_type()
         context['structure_type'] = structure_type
+        context['color_form'] = StructureTypeDisplayColorForm(instance=structure_type)
         context['fields'] = structure_type.fields.all()
         context['can_create_table'] = (
             not structure_type.is_created and structure_type.fields.exists()

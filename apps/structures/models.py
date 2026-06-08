@@ -10,6 +10,9 @@ STRUCTURE_FIELD_LOCK_ERROR = (
 MATERIAL_LINK_FIELD_TYPE = 'MaterialLink'
 
 
+from apps.structures.colors import DEFAULT_STRUCTURE_DISPLAY_COLOR, STRUCTURE_DISPLAY_COLOR_CHOICES
+
+
 class StructureType(models.Model):
     """Тип структуры — метаданные о таблице."""
 
@@ -21,6 +24,13 @@ class StructureType(models.Model):
         default=False,
         verbose_name='Добавить слои',
         help_text='Разрешить добавление слоёв композита для материалов этого типа.',
+    )
+    display_color = models.CharField(
+        max_length=20,
+        choices=STRUCTURE_DISPLAY_COLOR_CHOICES,
+        default=DEFAULT_STRUCTURE_DISPLAY_COLOR,
+        verbose_name='Цвет в интерфейсе',
+        help_text='Отображается в списке материалов и карточках с этим типом структуры.',
     )
     is_active = models.BooleanField(default=True)
     is_created = models.BooleanField(default=False)

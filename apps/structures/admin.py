@@ -110,7 +110,7 @@ class StructureTypeAdmin(admin.ModelAdmin):
     actions = ['create_table_action']
     fieldsets = (
         (None, {
-            'fields': ('name', 'code', 'table_name', 'description', 'allow_layers', 'is_active'),
+            'fields': ('name', 'code', 'table_name', 'description', 'display_color', 'allow_layers', 'is_active'),
         }),
         ('Статус', {
             'fields': ('is_created',),

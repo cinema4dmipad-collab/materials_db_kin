@@ -2,6 +2,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from apps.core.list_filters import QuerySetFilterMixin
+from apps.core.templatetags.ui_tags import category_tone, semantic_tone, ui_category_tone, ui_tone
 from apps.core.models import Tag
 from apps.core.tag_utils import assign_tags, get_or_create_tags, parse_tag_input, tag_slug_from_name
 from apps.materials.models import Material
@@ -126,3 +127,23 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Справка по работе с базой')
         self.assertContains(response, 'Справочник свойств')
         self.assertContains(response, 'Образцы')
+
+
+class UiToneTests(TestCase):
+    def test_semantic_tone_uses_known_mapping(self):
+        self.assertEqual(ui_tone('test'), 'tone-amber')
+        self.assertEqual(ui_tone('echo'), 'tone-blue')
+
+    def test_semantic_tone_unknown_is_neutral(self):
+        self.assertEqual(semantic_tone('mat-001'), 'tone-slate')
+        self.assertEqual(semantic_tone('carbon_fiber'), 'tone-slate')
+
+    def test_category_tone_is_stable_for_structure_type_code(self):
+        self.assertEqual(
+            ui_category_tone('composite_panel'),
+            ui_category_tone('composite_panel'),
+        )
+
+    def test_category_tone_differs_for_different_types(self):
+        tones = {category_tone(f'type_{index}') for index in range(12)}
+        self.assertGreater(len(tones), 1)

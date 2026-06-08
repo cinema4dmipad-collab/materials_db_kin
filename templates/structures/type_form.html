@@ -33,8 +33,11 @@
 
                     <div class="row g-3">
                         {% for field in form %}
-                        <div class="col-md-6">
-                            {% if field.field.widget.input_type == 'checkbox' %}
+                        <div class="col-md-6{% if field.name == 'display_color' or field.name == 'description' %} col-12{% endif %}">
+                            {% if field.name == 'display_color' %}
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {% include 'includes/structure_color_picker.html' with field=field %}
+                            {% elif field.field.widget.input_type == 'checkbox' %}
                             <div class="form-check mt-4">
                                 {{ field }}
                                 <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>

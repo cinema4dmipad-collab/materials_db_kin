@@ -57,6 +57,7 @@ class StructureIdentifierTests(TestCase):
             data={
                 'name': 'UI Sandwich',
                 'description': '',
+                'display_color': 'tone-teal',
                 'is_active': 'on',
             }
         )
@@ -246,6 +247,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
             {
                 'name': 'UI Sandwich',
                 'description': 'Created from public UI',
+                'display_color': 'tone-blue',
                 'allow_layers': 'on',
                 'is_active': 'on',
                 'fields-TOTAL_FORMS': '1',
@@ -263,6 +265,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         self.assertEqual(response.status_code, 302)
         structure_type = StructureType.objects.get(code='ui_sandwich')
         self.assertFalse(structure_type.is_created)
+        self.assertEqual(structure_type.display_color, 'tone-blue')
         self.assertEqual(structure_type.fields.count(), 1)
 
         manage_url = reverse('structures:type_manage', args=[structure_type.code])
@@ -317,6 +320,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
             {
                 'name': 'UI Duplicate Fields',
                 'description': '',
+                'display_color': 'tone-teal',
                 'is_active': 'on',
                 'fields-TOTAL_FORMS': '2',
                 'fields-INITIAL_FORMS': '0',
@@ -339,6 +343,18 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(StructureType.objects.filter(name='UI Duplicate Fields').exists())
         self.assertContains(response, 'разными', status_code=200)
+
+    def test_update_display_color_on_manage_page(self):
+        structure_type = StructureType.objects.create(
+            name='UI Color',
+            code='ui_color_type',
+            display_color='tone-teal',
+        )
+        manage_url = reverse('structures:type_manage', args=[structure_type.code])
+        response = self.client.post(manage_url, {'display_color': 'tone-violet'})
+        self.assertRedirects(response, manage_url)
+        structure_type.refresh_from_db()
+        self.assertEqual(structure_type.display_color, 'tone-violet')
 
 
 class SQLOnlyDynamicStructureTests(TransactionTestCase):
