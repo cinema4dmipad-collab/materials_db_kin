@@ -1,0 +1,16 @@
+<ul class="structure-color-picker list-unstyled mb-0">
+    {% for value, label in field.field.choices %}
+    <li class="structure-color-picker__item">
+        <label class="structure-color-picker__label">
+            <input type="radio"
+                   name="{{ field.html_name }}"
+                   value="{{ value }}"
+                   {% if field.value|stringformat:'s' == value|stringformat:'s' %}checked{% endif %}>
+            <span class="type-pill {{ value }}">
+                <span class="type-pill__dot" aria-hidden="true"></span>
+                <span class="type-pill__label">{{ label }}</span>
+            </span>
+        </label>
+    </li>
+    {% endfor %}
+</ul>

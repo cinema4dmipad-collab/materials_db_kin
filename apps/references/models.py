@@ -36,4 +36,4 @@ class Property(models.Model):
         return f"{self.display_name} ({self.unit})" if self.unit else self.display_name
 
     class Meta:
-        ordering = ['group__sort_order', 'name']
+        ordering = ['group__sort_order', 'display_name', 'name']

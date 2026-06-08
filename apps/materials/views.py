@@ -1,9 +1,13 @@
 from django import forms
-from django.http import HttpResponseRedirect
+from django.contrib import messages
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
+from django.http import HttpResponseRedirect, JsonResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView, View
 
+from apps.core.list_filters import QuerySetFilterMixin
 from apps.materials.forms import (
     MaterialForm,
     MaterialPropertyFormSet,
@@ -45,13 +49,12 @@ class MaterialFormsetMixin:
         return bool(structure_type and structure_type.allow_layers)
 
     def get_formset(self):
+        kwargs = {'prefix': 'properties'}
         if self.request.method == 'POST':
-            if getattr(self, 'object', None):
-                return MaterialPropertyFormSet(self.request.POST, instance=self.object)
-            return MaterialPropertyFormSet(self.request.POST)
+            kwargs['data'] = self.request.POST
         if getattr(self, 'object', None):
-            return MaterialPropertyFormSet(instance=self.object)
-        return MaterialPropertyFormSet()
+            kwargs['instance'] = self.object
+        return MaterialPropertyFormSet(**kwargs)
 
     def get_layer_formset(self):
         if not self.layers_allowed():
@@ -75,56 +78,106 @@ class MaterialFormsetMixin:
         return context
 
     def form_valid(self, form):
-        formset = self.get_formset()
-        layer_formset = self.get_layer_formset()
-        if not formset.is_valid() or (
-            layer_formset is not None and not layer_formset.is_valid()
-        ):
-            return self.render_to_response(
-                self.get_context_data(
-                    form=form,
-                    formset=formset,
-                    layer_formset=layer_formset,
-                )
-            )
+        is_update = isinstance(self, UpdateView)
+        original_pk = self.object.pk if is_update else None
+        formset = None
+        layer_formset = None
+        saved = False
+
         try:
             with transaction.atomic():
                 self.object = form.save()
-                formset.instance = self.object
-                formset.save()
-                if layer_formset is not None:
-                    layer_formset.instance = self.object
-                    layer_formset.save()
+                formset = MaterialPropertyFormSet(
+                    self.request.POST,
+                    instance=self.object,
+                    prefix='properties',
+                )
+                if self.layers_allowed():
+                    layer_formset = get_composite_layer_formset()(
+                        self.request.POST,
+                        instance=self.object,
+                        prefix='layers',
+                    )
+                properties_valid = formset.is_valid()
+                layers_valid = layer_formset is None or layer_formset.is_valid()
+                if not properties_valid or not layers_valid:
+                    transaction.set_rollback(True)
+                else:
+                    formset.save()
+                    if layer_formset is not None:
+                        layer_formset.save()
+                    saved = True
         except forms.ValidationError as exc:
             form.add_error(None, exc)
-            return self.render_to_response(
-                self.get_context_data(
-                    form=form,
-                    formset=formset,
-                    layer_formset=layer_formset,
-                )
+
+        if saved:
+            return HttpResponseRedirect(self.get_success_url())
+
+        if is_update and original_pk:
+            self.object = Material.objects.get(pk=original_pk)
+        elif not is_update:
+            self.object = None
+
+        if formset is not None and not formset.is_valid():
+            messages.error(self.request, 'Проверьте значения свойств материала.')
+        elif layer_formset is not None and not layer_formset.is_valid():
+            messages.error(self.request, 'Проверьте данные слоёв композита.')
+
+        return self.render_to_response(
+            self.get_context_data(
+                form=form,
+                formset=formset or self.get_formset(),
+                layer_formset=(
+                    layer_formset
+                    if layer_formset is not None
+                    else self.get_layer_formset()
+                ),
             )
-        return HttpResponseRedirect(self.get_success_url())
+        )
 
 
-class MaterialListView(ListView):
+class MaterialListView(QuerySetFilterMixin, ListView):
     model = Material
     template_name = 'materials/material_list.html'
     context_object_name = 'materials'
     paginate_by = 10
+    enable_tag_filter = True
+    search_fields = ('code', 'name', 'description')
+    search_placeholder = 'Код, название, описание или тег...'
+    choice_filters = (('struct_type', 'struct_type_id'),)
+    choice_filter_labels = {'struct_type': 'Тип структуры', 'tag': 'Тег'}
 
     def get_queryset(self):
-        return super().get_queryset().select_related('struct_type')
+        return self.filter_queryset(
+            Material.objects.select_related('struct_type').prefetch_related('tags')
+        )
+
+    def get_choice_filter_options(self):
+        return {
+            'struct_type': list(
+                StructureType.objects.filter(is_active=True)
+                .order_by('name')
+                .values_list('pk', 'name')
+            ),
+        }
 
 
 class MaterialDetailView(DetailView):
     model = Material
     template_name = 'materials/material_detail.html'
     context_object_name = 'material'
+    active_tab = 'material'
     structure_service_columns = {'id', 'created_at', 'updated_at', 'created_by'}
+
+    def get_queryset(self):
+        return Material.objects.select_related('struct_type').prefetch_related('tags')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['active_tab'] = self.active_tab
+        context['attachment_count'] = self.object.attachments.count()
+        context['sample_count'] = self.object.samples.count()
+        context['attachments'] = self.object.attachments.all()[:5]
         context['properties'] = (
             self.object.properties.select_related('property', 'property__group').order_by(
                 'property__group__sort_order',
@@ -225,3 +278,46 @@ class MaterialDeleteView(DeleteView):
     template_name = 'materials/material_confirm_delete.html'
     context_object_name = 'material'
     success_url = reverse_lazy('materials:list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        material = self.object
+        context['used_as_layer'] = material.used_in_composite_layers.select_related(
+            'parent_material'
+        ).all()
+        context['has_layers'] = material.composite_layers.exists()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        try:
+            return super().post(request, *args, **kwargs)
+        except ProtectedError:
+            messages.error(
+                request,
+                'Нельзя удалить материал — он используется как слой в композитных материалах. '
+                'Сначала удалите связи из композитных материалов.',
+            )
+            return redirect('materials:detail', pk=self.object.pk)
+
+
+class MaterialPropertiesJSONView(View):
+    def get(self, request, pk):
+        material = get_object_or_404(Material, pk=pk)
+        properties = material.properties.select_related('property').order_by(
+            'property__group__sort_order',
+            'property__name',
+        )
+        return JsonResponse(
+            {
+                'properties': [
+                    {
+                        'property_id': str(item.property_id),
+                        'display_name': item.property.display_name,
+                        'unit': item.property.unit,
+                        'value': item.value,
+                    }
+                    for item in properties
+                ],
+            }
+        )

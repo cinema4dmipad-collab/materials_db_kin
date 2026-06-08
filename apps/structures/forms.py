@@ -4,12 +4,8 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from apps.materials.models import Material
-from apps.structures.models import (
-    MATERIAL_LINK_FIELD_TYPE,
-    StructureField,
-    StructureFieldValue,
-    StructureInstance,
-)
+from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField
+from apps.structures.sql_executor import SQLExecutor
 from apps.structures import table_storage
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
@@ -153,140 +149,98 @@ def _collect_field_data(structure_type, cleaned_data):
     return data
 
 
-def _save_field_value(field_value: StructureFieldValue, structure_field: StructureField, value):
-    field_type = structure_field.field_type
-    field_value.value_text = ''
-    field_value.value_number = None
-    field_value.value_integer = None
-    field_value.value_boolean = None
-    field_value.value_date = None
-    field_value.value_datetime = None
-    field_value.value_fk_id = None
-
-    if value is None or value == '':
-        field_value.save()
-        return
-
-    if field_type in ('CharField', 'TextField'):
-        field_value.value_text = str(value)
-    elif field_type == 'IntegerField':
-        field_value.value_integer = int(value)
-    elif field_type in ('DecimalField', 'FloatField'):
-        field_value.value_number = Decimal(str(value))
-    elif field_type == 'BooleanField':
-        field_value.value_boolean = bool(value)
-    elif field_type == 'DateField':
-        field_value.value_date = value
-    elif field_type == 'DateTimeField':
-        field_value.value_datetime = value
-    elif field_type == MATERIAL_LINK_FIELD_TYPE:
-        field_value.value_fk_id = getattr(value, 'pk', value)
-    field_value.save()
-
-
-def _get_eav_form(structure_type):
+def get_dynamic_form(structure_type):
     structure_fields = _supported_structure_fields(structure_type)
 
-    class DynamicStructureForm(forms.ModelForm):
-        class Meta:
-            model = StructureInstance
-            fields = ['code']
-            widgets = {'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT)}
-
+    class DynamicStructureForm(StructureRecordForm):
         def __init__(self, *args, **kwargs):
-            self.structure_type = structure_type
-            super().__init__(*args, **kwargs)
-            for sf in structure_fields:
-                self.fields[f'field_{sf.id}'] = _build_dynamic_field(sf)
-            if self.instance and self.instance.pk:
-                self._load_existing_values()
+            instance = kwargs.pop('instance', None)
+            super().__init__(structure_type=structure_type, record=None, *args, **kwargs)
+            self.fields['code'] = forms.CharField(
+                label='Код структуры',
+                required=True,
+                widget=forms.TextInput(attrs=_BOOTSTRAP_INPUT),
+            )
+            if instance is not None:
+                code = getattr(instance, 'code', None)
+                if code:
+                    self.fields['code'].initial = code
+                row_id = getattr(instance, 'dynamic_row_id', None)
+                if row_id:
+                    row_data = table_storage.load_field_data(structure_type, row_id)
+                    self._apply_initial_values(row_data)
 
-        def _load_existing_values(self):
-            values = {fv.field_id: fv for fv in self.instance.values.select_related('field')}
-            for sf in structure_fields:
-                fv = values.get(sf.id)
-                if fv:
-                    value = fv.get_value()
-                    if sf.field_type == MATERIAL_LINK_FIELD_TYPE:
-                        value = material_from_value(value)
-                    self.fields[f'field_{sf.id}'].initial = value
-
-        def save(self, commit=True):
-            instance = super().save(commit=False)
-            instance.structure_type = self.structure_type
-            if commit:
-                instance.save()
-            for sf in structure_fields:
-                value = self.cleaned_data.get(f'field_{sf.id}')
-                field_value, _ = StructureFieldValue.objects.get_or_create(
-                    instance=instance, field=sf
-                )
-                _save_field_value(field_value, sf, value)
-            return instance
+        def save(self, created_by=''):
+            if not self.structure_type.is_created:
+                raise ValidationError('Таблица для этого типа ещё не создана в БД.')
+            data = self.collect_data()
+            data['code'] = self.cleaned_data['code']
+            result = SQLExecutor.insert(self.structure_type, data)
+            if not result['success']:
+                raise ValidationError(result.get('error') or 'Не удалось создать запись.')
+            return result['id']
 
     return DynamicStructureForm
 
 
-def _get_table_form(structure_type):
-    structure_fields = _supported_structure_fields(structure_type)
-
-    class DynamicTableForm(forms.ModelForm):
-        class Meta:
-            model = StructureInstance
-            fields = ['code']
-            widgets = {'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT)}
-
-        def __init__(self, *args, **kwargs):
-            self.structure_type = structure_type
-            super().__init__(*args, **kwargs)
-            for sf in structure_fields:
-                self.fields[f'field_{sf.id}'] = _build_dynamic_field(sf)
-            if self.instance and self.instance.pk and self.instance.dynamic_row_id:
-                row_data = table_storage.load_field_data(
-                    structure_type, self.instance.dynamic_row_id
-                )
-                for sf in structure_fields:
-                    if sf.name in row_data:
-                        value = row_data[sf.name]
-                        if sf.field_type == MATERIAL_LINK_FIELD_TYPE:
-                            value = material_from_value(value)
-                        self.fields[f'field_{sf.id}'].initial = value
-
-        def save(self, commit=True):
-            if not self.structure_type.is_created:
-                raise ValidationError('Таблица для этого типа ещё не создана в БД.')
-
-            field_data = _collect_field_data(self.structure_type, self.cleaned_data)
-            code = self.cleaned_data['code']
-
-            if self.instance and self.instance.pk and self.instance.dynamic_row_id:
-                table_storage.update_row(
-                    self.structure_type,
-                    self.instance.dynamic_row_id,
-                    field_data,
-                    code=code,
-                )
-                self.instance.code = code
-                if commit:
-                    self.instance.save()
-                return self.instance
-
-            row_id = table_storage.insert_row(
-                self.structure_type, code, field_data
-            )
-            instance = StructureInstance(
-                structure_type=self.structure_type,
-                code=code,
-                dynamic_row_id=row_id,
-            )
-            if commit:
-                instance.save()
-            return instance
-
-    return DynamicTableForm
+STRUCTURE_FIELD_PREFIX = 'structure_field_'
 
 
-def get_dynamic_form(structure_type):
-    if structure_type.is_created:
-        return _get_table_form(structure_type)
-    return _get_eav_form(structure_type)
+class StructureRecordForm(forms.Form):
+    """Форма записи в SQL-таблице динамической структуры (публичный UI)."""
+
+    def __init__(self, structure_type, record=None, *args, **kwargs):
+        self.structure_type = structure_type
+        self.record = record
+        super().__init__(*args, **kwargs)
+        self.structure_fields = _supported_structure_fields(structure_type)
+        for structure_field in self.structure_fields:
+            field = _build_dynamic_field(structure_field)
+            self.fields[self.field_name(structure_field)] = field
+        if record:
+            self._apply_initial_values(record)
+
+    @classmethod
+    def field_name(cls, structure_field):
+        return f'{STRUCTURE_FIELD_PREFIX}{structure_field.pk}'
+
+    @property
+    def bound_structure_fields(self):
+        return [self[self.field_name(field)] for field in self.structure_fields]
+
+    def _apply_initial_values(self, record):
+        for structure_field in self.structure_fields:
+            if structure_field.name not in record:
+                continue
+            value = record[structure_field.name]
+            if structure_field.field_type == MATERIAL_LINK_FIELD_TYPE:
+                value = material_from_value(value)
+            self.fields[self.field_name(structure_field)].initial = value
+
+    def collect_data(self):
+        data = {}
+        for structure_field in self.structure_fields:
+            value = self.cleaned_data.get(self.field_name(structure_field))
+            if value not in (None, '') or structure_field.is_required:
+                data[structure_field.name] = value
+            else:
+                data[structure_field.name] = None
+        return data
+
+    def save(self, created_by=''):
+        from apps.structures.sql_executor import SQLExecutor
+
+        data = self.collect_data()
+        if self.record:
+            row_id = self.record['id']
+            result = SQLExecutor.update(self.structure_type, row_id, data)
+            if not result['success']:
+                raise ValidationError(result.get('error') or 'Не удалось сохранить запись.')
+            return row_id
+
+        if created_by:
+            data['created_by'] = created_by
+        result = SQLExecutor.insert(self.structure_type, data)
+        if not result['success']:
+            raise ValidationError(result.get('error') or 'Не удалось создать запись.')
+        return result['id']

@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}Образцы — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-0">Образцы</h1>
+        <a href="{% url 'samples:create' %}" class="btn btn-primary btn-sm">Добавить образец</a>
+    </div>
+    <div class="card-body p-0">
+        {% include 'includes/list_filter_bar.html' %}
+        {% if samples %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                <thead>
+                    <tr>
+                        <th>Код</th>
+                        <th>Название</th>
+                        <th>Материал</th>
+                        <th>Тип объекта</th>
+                        <th>Теги</th>
+                        <th>Создан</th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sample in samples %}
+                    <tr>
+                        <td>
+                            {% url 'samples:detail' sample.pk as sample_detail_url %}
+                            {% include 'includes/entity_code.html' with code=sample.code url=sample_detail_url tone=sample.material.struct_type.display_color %}
+                        </td>
+                        <td>{{ sample.name }}</td>
+                        <td>
+                            {% url 'materials:detail' sample.material.pk as sample_material_url %}
+                            {% include 'includes/entity_code.html' with code=sample.material.code url=sample_material_url tone=sample.material.struct_type.display_color %}
+                        </td>
+                        <td>{% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type %}</td>
+                        <td>{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</td>
+                        <td>{{ sample.created_at|date:"d.m.Y H:i" }}</td>
+                        <td class="text-end">
+                            <div class="table-actions">
+                            <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view">Просмотр</a>
+                            <a href="{% url 'samples:edit' sample.pk %}" class="btn btn-sm btn-outline-primary btn-action-edit">Изменить</a>
+                            <a href="{% url 'samples:delete' sample.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="p-3">
+        {% include 'includes/pagination.html' %}
+        </div>
+
+        {% else %}
+        <div class="alert alert-info mb-0 m-3">
+            {% if has_active_filters %}
+            По вашему запросу образцы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
+            {% else %}
+            Образцов пока нет. <a href="{% url 'samples:create' %}">Создать первый</a>.
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

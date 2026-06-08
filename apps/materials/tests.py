@@ -15,7 +15,7 @@ from apps.materials.admin import CompositeLayerInline, MaterialAdmin, MaterialFo
 from apps.materials.forms import CompositeLayerFormSet, MaterialForm as PublicMaterialForm
 from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Property, PropertyGroup
-from apps.structures.models import StructureField, StructureInstance, StructureType
+from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 
 urlpatterns = []
@@ -477,7 +477,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def _formset_management_data(self):
         return {
-            'properties-TOTAL_FORMS': '3',
+            'properties-TOTAL_FORMS': '0',
             'properties-INITIAL_FORMS': '0',
             'properties-MIN_NUM_FORMS': '0',
             'properties-MAX_NUM_FORMS': '1000',
@@ -497,6 +497,22 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             f'{prefix}-material': str(material.pk),
             f'{prefix}-angle': '45',
             f'{prefix}-thickness': '0.25',
+        }
+        data.update(overrides)
+        return data
+
+    def _property_formset_management_data(self, total='1', initial='0'):
+        return {
+            'properties-TOTAL_FORMS': total,
+            'properties-INITIAL_FORMS': initial,
+            'properties-MIN_NUM_FORMS': '0',
+            'properties-MAX_NUM_FORMS': '1000',
+        }
+
+    def _property_formset_data(self, property_obj, prefix='properties-0', **overrides):
+        data = {
+            f'{prefix}-property': str(property_obj.pk),
+            f'{prefix}-value': '1.55',
         }
         data.update(overrides)
         return data
@@ -563,8 +579,6 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         material = Material.objects.get(code='MAT-PUBLIC-001')
         self.assertEqual(material.struct_type, self.structure_type)
         self.assertIsNotNone(material.struct_props_id)
-        self.assertFalse(StructureInstance.objects.exists())
-
         params = material.get_structure_params()
         self.assertEqual(params['title'], 'Public panel')
         self.assertEqual(str(params['thickness']), '12.50')
@@ -577,6 +591,56 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(detail_response, '12,50')
         self.assertContains(detail_response, 'Skin material')
         self.assertContains(detail_response, 'MAT-LINKED-001 - Linked material')
+
+    def test_public_material_create_view_saves_property_formset(self):
+        density = Property.objects.create(
+            name='density_create',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._property_formset_management_data(),
+                **self._property_formset_data(density),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        link = MaterialProperty.objects.get(material=material, property=density)
+        self.assertEqual(link.value, '1.55')
+
+    def test_public_material_update_view_saves_new_property(self):
+        density = Property.objects.create(
+            name='density_update',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+        row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
+        material = Material.objects.create(
+            code='MAT-PUBLIC-PROP-001',
+            name='Public material without properties',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-PROP-001',
+                name='Public material without properties',
+                **self._property_formset_management_data(),
+                **self._property_formset_data(density, **{'properties-0-value': '2.10'}),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        link = MaterialProperty.objects.get(material=material, property=density)
+        self.assertEqual(link.value, '2.10')
 
     def test_public_material_create_view_saves_layer_formset_and_detail_shows_layers(self):
         layer_material = Material.objects.create(
@@ -603,7 +667,9 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
         self.assertContains(detail_response, 'Слои')
         self.assertContains(detail_response, 'composite-layer-diagram')
-        self.assertContains(detail_response, 'Схема укладки слоёв')
+        self.assertContains(detail_response, 'Схема укладки')
+        self.assertContains(detail_response, 'composite-thickness-summary')
+        self.assertContains(detail_response, 'Σt =')
         self.assertContains(detail_response, 'layer-stack-column')
         self.assertContains(detail_response, 'layer-material-legend')
         self.assertContains(detail_response, 'flex:')
@@ -735,7 +801,6 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(response.status_code, 302)
         material.refresh_from_db()
         self.assertEqual(str(material.struct_props_id), row_id)
-        self.assertFalse(StructureInstance.objects.exists())
         params = material.get_structure_params()
         self.assertEqual(params['title'], 'Updated panel')
         self.assertEqual(str(params['thickness']), '9.75')
@@ -1102,3 +1167,88 @@ class SeedDataCommandTests(TestCase):
         self.assertEqual(counts_after_first_run, counts_after_second_run)
         self.assertIn('materials: created 12, updated 0', first_output)
         self.assertIn('materials: created 0, updated 12', second_output)
+
+
+@override_settings(
+    STORAGES={
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    },
+)
+class MaterialAttachmentViewsTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.media_root = tempfile.mkdtemp()
+        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.settings_override.enable()
+        self.material = Material.objects.create(code='MAT-ATT-001', name='Attachment material')
+
+    def tearDown(self):
+        import shutil
+
+        self.settings_override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def test_material_detail_shows_files_and_samples_tabs(self):
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': self.material.pk}))
+        self.assertContains(response, 'Файлы')
+        self.assertContains(response, 'Образцы')
+        self.assertContains(response, reverse('material_attachments:list', kwargs={'material_pk': self.material.pk}))
+        self.assertContains(response, reverse('material_samples:list', kwargs={'material_pk': self.material.pk}))
+
+    def test_material_samples_tab_lists_samples(self):
+        from apps.samples.models import Sample
+
+        sample = Sample.objects.create(
+            material=self.material,
+            code='SMP-001',
+            name='Test sample',
+            object_type='plate',
+        )
+        samples_url = reverse('material_samples:list', kwargs={'material_pk': self.material.pk})
+        response = self.client.get(samples_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, sample.code)
+        self.assertContains(response, reverse('samples:create'))
+
+    def test_attach_file_on_material_attachments_tab(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.materials.models import MaterialAttachment
+
+        attachments_url = reverse('material_attachments:list', kwargs={'material_pk': self.material.pk})
+        get_response = self.client.get(attachments_url)
+        self.assertContains(get_response, 'Прикрепить файл')
+
+        post_response = self.client.post(
+            attachments_url,
+            {
+                'attachment-title': 'Datasheet',
+                'attachment-file': SimpleUploadedFile(
+                    'datasheet.pdf',
+                    b'%PDF-1.4 test',
+                    content_type='application/pdf',
+                ),
+            },
+        )
+        self.assertRedirects(post_response, attachments_url)
+        attachment = MaterialAttachment.objects.get(title='Datasheet')
+        self.assertEqual(attachment.material, self.material)
+        self.assertTrue(attachment.file.storage.exists(attachment.file.name))
+
+    def test_material_delete_removes_attachment_files(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.materials.models import MaterialAttachment
+
+        attachment = MaterialAttachment.objects.create(
+            material=self.material,
+            title='To delete',
+            file=SimpleUploadedFile('doc.txt', b'content', content_type='text/plain'),
+        )
+        file_name = attachment.file.name
+        self.material.delete()
+        self.assertFalse(MaterialAttachment.objects.filter(title='To delete').exists())
+        self.assertFalse(attachment.file.storage.exists(file_name))

@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}Сканы — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-0">Сканы</h1>
+    </div>
+    <div class="card-body p-0">
+        {% include 'includes/list_filter_bar.html' %}
+        {% if scans %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Метод</th>
+                        <th>Образец</th>
+                        <th>Теги</th>
+                        <th>Материал</th>
+                        <th>Загружен</th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for scan in scans %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'scans:detail' scan.sample.pk scan.pk %}">{{ scan.title }}</a>
+                        </td>
+                        <td>{% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method %}</td>
+                        <td>
+                            {% url 'samples:detail' scan.sample.pk as scan_sample_url %}
+                            {% include 'includes/entity_code.html' with code=scan.sample.code url=scan_sample_url tone=scan.sample.material.struct_type.display_color %}
+                        </td>
+                        <td>{% url 'scans_all' as scans_all_url %}{% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=scans_all_url %}</td>
+                        <td>{{ scan.sample.material.code }}</td>
+                        <td>{{ scan.uploaded_at|date:"d.m.Y H:i" }}</td>
+                        <td class="text-end">
+                            <div class="table-actions">
+                            <a href="{{ scan.file.url }}" class="btn btn-sm btn-outline-secondary btn-action-view" target="_blank" rel="noopener">Скачать</a>
+                            <a href="{% url 'scans:detail' scan.sample.pk scan.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view">Просмотр</a>
+                            <a href="{% url 'scans:list' scan.sample.pk %}" class="btn btn-sm btn-outline-primary btn-action-link">Образец</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="p-3">
+        {% include 'includes/pagination.html' %}
+        </div>
+
+        {% else %}
+        <div class="alert alert-info mb-0 m-3">
+            {% if has_active_filters %}
+            По вашему запросу сканы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
+            {% else %}
+            Сканов пока нет. Прикрепите их на вкладке «Сканы» в карточке образца.
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% if sample %}
+<ul class="nav nav-tabs app-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link{% if active_tab == 'sample' %} active{% endif %}"
+           href="{% url 'samples:detail' sample.pk %}">Образец</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if active_tab == 'scans' %} active{% endif %}"
+           href="{% url 'scans:list' sample.pk %}">
+            Сканы{% if scan_count %} ({{ scan_count }}){% endif %}
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if active_tab == 'attachments' %} active{% endif %}"
+           href="{% url 'attachments:list' sample.pk %}">
+            Файлы{% if attachment_count %} ({{ attachment_count }}){% endif %}
+        </a>
+    </li>
+</ul>
+{% endif %}

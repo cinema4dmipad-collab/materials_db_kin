@@ -9,8 +9,6 @@ from apps.structures.models import (
     MATERIAL_LINK_FIELD_TYPE,
     STRUCTURE_FIELD_LOCK_ERROR,
     StructureField,
-    StructureFieldValue,
-    StructureInstance,
     StructureType,
 )
 from apps.structures.sql_executor import SQLExecutor
@@ -92,52 +90,18 @@ class StructureFieldInline(admin.TabularInline):
         return super().get_max_num(request, obj, **kwargs)
 
 
-class StructureFieldValueInline(admin.TabularInline):
-    model = StructureFieldValue
-    extra = 0
-    can_delete = False
-
-    def has_add_permission(self, request, obj=None):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    def get_readonly_fields(self, request, obj=None):
-        return [field.name for field in self.model._meta.fields]
-
-
-class LegacyReadOnlyAdminMixin:
-    legacy_notice = 'Legacy: сохранено только для просмотра старых данных.'
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    def get_actions(self, request):
-        actions = super().get_actions(request)
-        actions.pop('delete_selected', None)
-        return actions
-
-    def get_readonly_fields(self, request, obj=None):
-        return [field.name for field in self.model._meta.fields]
-
-    def change_view(self, request, object_id, form_url='', extra_context=None):
-        messages.warning(request, self.legacy_notice)
-        return super().change_view(request, object_id, form_url, extra_context)
-
-
 @admin.register(StructureType)
 class StructureTypeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'table_name', 'code', 'allow_layers', 'is_created', 'is_active', 'created_at']
+    list_display = [
+        'name',
+        'table_name',
+        'code',
+        'allow_layers',
+        'is_created',
+        'is_active',
+        'create_table_button',
+        'created_at',
+    ]
     list_filter = ['allow_layers', 'is_created', 'is_active']
     search_fields = ['name', 'code', 'table_name']
     prepopulated_fields = {'code': ('name',)}
@@ -146,7 +110,7 @@ class StructureTypeAdmin(admin.ModelAdmin):
     actions = ['create_table_action']
     fieldsets = (
         (None, {
-            'fields': ('name', 'code', 'table_name', 'description', 'allow_layers', 'is_active'),
+            'fields': ('name', 'code', 'table_name', 'description', 'display_color', 'allow_layers', 'is_active'),
         }),
         ('Статус', {
             'fields': ('is_created',),
@@ -221,18 +185,6 @@ class StructureTypeAdmin(admin.ModelAdmin):
             self.message_user(request, f'Создано таблиц: {created}', level=messages.SUCCESS)
 
 
-@admin.register(StructureInstance)
-class StructureInstanceAdmin(LegacyReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ['code', 'structure_type', 'dynamic_row_id', 'created_at', 'legacy_status']
-    search_fields = ['code']
-    list_filter = ['structure_type']
-    inlines = [StructureFieldValueInline]
-
-    @admin.display(description='Статус')
-    def legacy_status(self, obj):
-        return 'Legacy/read-only'
-
-
 @admin.register(StructureField)
 class StructureFieldAdmin(admin.ModelAdmin):
     form = StructureFieldAdminForm
@@ -292,15 +244,3 @@ class StructureFieldAdmin(admin.ModelAdmin):
             self.message_user(request, STRUCTURE_FIELD_LOCK_ERROR, level=messages.ERROR)
 
 
-@admin.register(StructureFieldValue)
-class StructureFieldValueAdmin(LegacyReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ['instance', 'field', 'get_display_value', 'legacy_status']
-    list_filter = ['field__structure_type']
-
-    @admin.display(description='Значение')
-    def get_display_value(self, obj):
-        return obj.get_value()
-
-    @admin.display(description='Статус')
-    def legacy_status(self, obj):
-        return 'Legacy/read-only'

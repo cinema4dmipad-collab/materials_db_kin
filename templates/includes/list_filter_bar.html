@@ -1,0 +1,57 @@
+<form method="get" class="list-filter-panel">
+    <div class="list-filter-panel__toolbar">
+        <div class="list-filter-panel__field list-filter-panel__field--search">
+            <label class="list-filter-panel__field-label" for="list-filter-search">Поиск</label>
+            <div class="search-input-wrap">
+                {% include 'includes/search_input_icon.html' %}
+                <input type="search"
+                       id="list-filter-search"
+                       name="{{ search_param|default:'q' }}"
+                       value="{{ search_query }}"
+                       class="form-control search-input-field"
+                       placeholder="{{ search_placeholder|default:'Введите текст для поиска...' }}"
+                       autocomplete="off">
+            </div>
+        </div>
+        {% for filter in list_filters %}
+        <div class="list-filter-panel__field list-filter-panel__field--filter">
+            <label class="list-filter-panel__field-label" for="list-filter-{{ filter.param }}">{{ filter.label }}</label>
+            <select id="list-filter-{{ filter.param }}" name="{{ filter.param }}" class="form-select">
+                <option value="">Все</option>
+                {% for value, label in filter.options %}
+                <option value="{{ value }}"{% if filter.value == value|stringformat:'s' %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endfor %}
+        <div class="list-filter-panel__actions">
+            {% if has_active_filters %}
+            <a href="{{ filter_reset_url }}" class="list-filter-panel__reset">Сбросить</a>
+            {% endif %}
+            <button type="submit" class="btn btn-primary btn-sm list-filter-panel__submit">Применить</button>
+        </div>
+    </div>
+
+    {% if has_active_filters %}
+    <div class="list-filter-panel__chips">
+        {% if search_query %}
+        <span class="list-filter-chip">
+            <span class="list-filter-chip__key">Поиск</span>
+            «{{ search_query }}»
+        </span>
+        {% endif %}
+        {% for filter in list_filters %}
+            {% if filter.value %}
+                {% for value, label in filter.options %}
+                    {% if filter.value == value|stringformat:'s' %}
+        <span class="list-filter-chip">
+            <span class="list-filter-chip__key">{{ filter.label }}</span>
+            {{ label }}
+        </span>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</form>

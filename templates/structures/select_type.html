@@ -4,36 +4,44 @@
 
 {% block content %}
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h1 class="h4 mb-0">Типы структур</h1>
-            <p class="text-muted small mb-0">Метаданные динамических параметров материалов</p>
+            <p class="text-muted small mb-0">Метаданные и SQL-таблицы динамических параметров</p>
         </div>
+        <a href="{% url 'structures:type_create' %}" class="btn btn-primary btn-sm">+ Новый тип</a>
     </div>
     <div class="card-body">
-        <div class="alert alert-info">
-            Параметры структуры заполняются в карточке материала.
-        </div>
         {% if types %}
-        <div class="row g-3">
+        {% include 'includes/card_search_bar.html' with target_selector='#structure-types-grid' placeholder='Поиск по названию или коду типа...' %}
+        <div class="row g-3" id="structure-types-grid">
             {% for st in types %}
-            <div class="col-md-6 col-lg-4">
+            <div class="col-md-6 col-lg-4" data-card-search-item>
                 <div class="card h-100">
-                    <div class="card-body">
-                        <h2 class="h5 card-title">{{ st.name }}</h2>
+                    <div class="card-body d-flex flex-column">
+                        <h2 class="h5 card-title d-flex align-items-center gap-2 flex-wrap">
+                            {% include 'includes/type_badge.html' with label=st.name tone=st.display_color %}
+                        </h2>
                         <p class="card-text text-muted small mb-2">
                             Код: <code>{{ st.code }}</code><br>
                             Таблица: <code>{{ st.table_name }}</code><br>
                             Полей: {{ st.fields.count }}
                             {% if st.is_created %}
-                            <span class="badge bg-success ms-1">БД готова</span>
+                            <span class="type-pill tone-green ms-1"><span class="type-pill__dot" aria-hidden="true"></span><span class="type-pill__label">БД готова</span></span>
                             {% else %}
-                            <span class="badge bg-warning text-dark ms-1">Таблица не создана</span>
+                            <span class="type-pill tone-amber ms-1"><span class="type-pill__dot" aria-hidden="true"></span><span class="type-pill__label">Таблица не создана</span></span>
                             {% endif %}
                         </p>
                         {% if st.description %}
                         <p class="card-text small">{{ st.description }}</p>
                         {% endif %}
+                        <div class="mt-auto d-flex gap-2 flex-wrap">
+                            <a href="{% url 'structures:type_manage' st.code %}" class="btn btn-outline-secondary btn-sm">Управление</a>
+                            {% if st.is_created %}
+                            <a href="{% url 'structures:list' st.code %}" class="btn btn-outline-secondary btn-sm">Записи</a>
+                            <a href="{% url 'structures:create' st.code %}" class="btn btn-primary btn-sm">+ Запись</a>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -41,7 +49,7 @@
         </div>
         {% else %}
         <div class="alert alert-info mb-0">
-            Нет активных типов структур. Создайте тип в <a href="/admin/structures/structuretype/">админке</a>.
+            Нет активных типов. <a href="{% url 'structures:type_create' %}">Создайте первый тип структуры</a>.
         </div>
         {% endif %}
     </div>

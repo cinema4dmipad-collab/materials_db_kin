@@ -157,7 +157,7 @@ class CompositeLayerDiagramTests(TestCase):
         self.assertEqual(len(diagram['material_legend']), 2)
         self.assertEqual(diagram['layers'][1]['angle'], '45')
 
-    def test_build_layer_diagram_uses_distinct_colors_for_repeated_material_layers(self):
+    def test_build_layer_diagram_uses_same_color_for_repeated_material_layers(self):
         CompositeLayer.objects.create(
             parent_material=self.parent,
             material=self.layer_material_a,
@@ -185,4 +185,4 @@ class CompositeLayerDiagramTests(TestCase):
         self.assertEqual(len(diagram['material_legend']), 1)
         self.assertEqual(diagram['material_legend'][0]['color'], '#0066FF')
         colors = [item['color'] for item in diagram['layers']]
-        self.assertEqual(colors, ['#0066FF', '#FF5500', '#00B050'])
+        self.assertEqual(colors, ['#0066FF', '#0066FF', '#0066FF'])

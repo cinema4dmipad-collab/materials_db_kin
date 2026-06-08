@@ -8,15 +8,34 @@
         <h1 class="h4 mb-0">Удаление материала</h1>
     </div>
     <div class="card-body">
+        {% if used_as_layer %}
+        <div class="alert alert-danger">
+            <strong>Нельзя удалить этот материал.</strong>
+            Он используется как слой в следующих композитных материалах:
+            <ul class="mb-0 mt-1">
+                {% for layer in used_as_layer %}
+                <li>
+                    <a href="{% url 'materials:detail' layer.parent_material.pk %}">
+                        {{ layer.parent_material.code }} — {{ layer.parent_material.name }}
+                    </a>
+                    (слой №{{ layer.layer_number }})
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <a href="{% url 'materials:detail' material.pk %}" class="btn btn-outline-secondary">Вернуться к материалу</a>
+        {% else %}
         <div class="alert alert-warning">
             Вы уверены, что хотите удалить материал <strong>{{ material.code }} — {{ material.name }}</strong>?
-            Связанные свойства и образцы могут быть затронуты ограничениями базы данных.
+            Связанные свойства, образцы и сканы будут удалены вместе с материалом.
+            {% if has_layers %}Также будут удалены все слои этого композитного материала.{% endif %}
         </div>
         <form method="post" class="d-flex gap-2">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">Удалить</button>
             <a href="{% url 'materials:detail' material.pk %}" class="btn btn-outline-secondary">Отмена</a>
         </form>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

@@ -1,0 +1,322 @@
+/* Панель серверного поиска и фильтров (списки) */
+
+.list-filter-panel {
+    padding: 0.65rem 1rem 0.7rem;
+    background: linear-gradient(180deg, var(--kx-brand-soft) 0%, var(--kx-surface) 70%);
+    border-bottom: 1px solid var(--kx-border);
+    box-shadow: inset 3px 0 0 var(--kx-brand);
+}
+
+.list-filter-panel__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 0.65rem;
+}
+
+.list-filter-panel__field {
+    min-width: 0;
+}
+
+.list-filter-panel__field--search {
+    flex: 1 1 12rem;
+    min-width: 10rem;
+}
+
+.list-filter-panel__field--filter {
+    flex: 0 1 9.5rem;
+    min-width: 8.5rem;
+}
+
+.list-filter-panel__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.list-filter-panel__field-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--kx-text-muted);
+    margin-bottom: 0.2rem;
+    line-height: 1.2;
+}
+
+.list-filter-panel__reset {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--kx-brand-dark);
+    text-decoration: none;
+    padding: 0.28rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 118, 121, 0.28);
+    background: #fff;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.list-filter-panel__reset:hover {
+    color: var(--kx-brand-dark);
+    background: var(--kx-brand-soft);
+    border-color: rgba(0, 118, 121, 0.45);
+}
+
+.list-filter-panel__submit {
+    min-width: 5.5rem;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0, 118, 121, 0.18);
+}
+
+.list-filter-panel__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.55rem;
+    padding-top: 0.55rem;
+    border-top: 1px dashed rgba(0, 118, 121, 0.18);
+}
+
+.list-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--kx-brand-soft);
+    border: 1px solid rgba(0, 118, 121, 0.22);
+    color: var(--kx-brand-dark);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.list-filter-chip__key {
+    color: rgba(0, 90, 92, 0.85);
+    font-weight: 500;
+}
+
+/* Поле поиска с иконкой */
+
+.search-input-wrap {
+    position: relative;
+}
+
+.search-input-icon {
+    position: absolute;
+    left: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0.95rem;
+    height: 0.95rem;
+    color: var(--kx-text-subtle);
+    pointer-events: none;
+}
+
+.search-input-field {
+    padding-left: 2.1rem !important;
+    min-height: 2.15rem;
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--kx-border-strong);
+    border-radius: 0.35rem;
+    background: #fff;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-input-field:focus {
+    border-color: rgba(0, 118, 121, 0.55);
+    box-shadow: 0 0 0 0.2rem rgba(0, 118, 121, 0.14);
+}
+
+.search-input-field::placeholder {
+    color: var(--kx-text-subtle);
+}
+
+.list-filter-panel .form-select {
+    min-height: 2.15rem;
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+    font-size: 0.875rem;
+    border-radius: 0.35rem;
+    border-color: var(--kx-border-strong);
+    background-color: #fff;
+}
+
+.list-filter-panel .form-select:focus {
+    border-color: rgba(0, 118, 121, 0.55);
+    box-shadow: 0 0 0 0.2rem rgba(0, 118, 121, 0.14);
+}
+
+/* Быстрый поиск в таблице (клиентский) */
+
+.inline-search-panel {
+    padding: 0.85rem 1rem;
+    background: linear-gradient(90deg, var(--tone-blue-bg) 0%, rgba(255, 255, 255, 0) 100%);
+    border-bottom: 1px solid var(--kx-border);
+}
+
+.inline-search-panel__label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--tone-blue-text);
+    margin-bottom: 0.45rem;
+}
+
+.inline-search-panel .search-input-field {
+    min-height: 2.45rem;
+}
+
+/* Поиск по карточкам */
+
+.card-search-panel {
+    margin-bottom: 1rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid rgba(106, 143, 192, 0.18);
+    border-radius: 0.35rem;
+    background: linear-gradient(180deg, var(--tone-blue-bg) 0%, #fff 100%);
+}
+
+.card-search-panel__title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tone-blue-text);
+    margin-bottom: 0.55rem;
+}
+
+.entity-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.tag-input-widget {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.tag-input-widget__field-wrap {
+    position: relative;
+}
+
+.tag-input-field {
+    min-height: 2.65rem;
+}
+
+.tag-input-dropdown {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.35rem;
+    border: 1px solid rgba(0, 118, 121, 0.22);
+    border-radius: 0.35rem;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.tag-input-dropdown__item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    width: 100%;
+    padding: 0.45rem 0.65rem;
+    border: none;
+    border-radius: 0.35rem;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.tag-input-dropdown__item:hover,
+.tag-input-dropdown__item:focus {
+    background: var(--kx-brand-soft);
+    outline: none;
+}
+
+.tag-input-dropdown__name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--kx-brand-dark);
+}
+
+.tag-input-dropdown__hint {
+    font-size: 0.75rem;
+    color: var(--kx-text-muted);
+}
+
+.tag-input-existing {
+    padding: 0.75rem 0.85rem;
+    border: 1px dashed rgba(0, 118, 121, 0.22);
+    border-radius: 0.35rem;
+    background: var(--kx-brand-soft);
+}
+
+.tag-input-existing__label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--kx-text-muted);
+    margin-bottom: 0.55rem;
+}
+
+.tag-input-existing__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    max-height: 148px;
+    overflow-y: auto;
+}
+
+button.tag-input-pick {
+    cursor: pointer;
+}
+
+button.tag-input-pick--selected {
+    background: var(--kx-brand);
+    color: #fff;
+    border-color: var(--kx-brand);
+}
+
+button.tag-input-pick--selected::before {
+    background: rgba(255, 255, 255, 0.85);
+}
+
+@media (max-width: 767.98px) {
+    .list-filter-panel {
+        padding: 0.6rem 0.75rem 0.65rem;
+    }
+
+    .list-filter-panel__field--search,
+    .list-filter-panel__field--filter {
+        flex: 1 1 100%;
+    }
+
+    .list-filter-panel__actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-end;
+    }
+
+    .list-filter-panel__submit {
+        flex: 1 1 auto;
+    }
+}

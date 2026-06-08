@@ -65,35 +65,71 @@
             </div>
 
             <div class="card mb-4">
-                <div class="card-header">Свойства</div>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Свойства</span>
+                    <button type="button" id="add-property-btn" class="btn btn-sm btn-outline-primary">+ Добавить свойство</button>
+                </div>
                 <div class="card-body">
                     {{ formset.management_form }}
                     {% if formset.non_form_errors %}
                     <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
                     {% endif %}
-                    {% for form in formset %}
-                    <div class="row g-2 align-items-end mb-3 border-bottom pb-3">
-                        {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
-                        <div class="col-md-5">
-                            <label class="form-label">Свойство</label>
-                            {{ form.property }}
-                            {% if form.property.errors %}<div class="text-danger small">{{ form.property.errors }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label">Значение</label>
-                            {{ form.value }}
-                            {% if form.value.errors %}<div class="text-danger small">{{ form.value.errors }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-2">
-                            {% if formset.can_delete %}
-                            <div class="form-check">
-                                {{ form.DELETE }}
-                                <label class="form-check-label" for="{{ form.DELETE.id_for_label }}">Удалить</label>
+                    {% if formset.errors and not formset.non_form_errors %}
+                    <div class="alert alert-danger">Исправьте ошибки в свойствах материала ниже.</div>
+                    {% endif %}
+                    <div id="property-forms-container">
+                        {% for form in formset %}
+                        <div class="row g-2 align-items-end mb-3 border-bottom pb-3 property-form-row">
+                            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                            <div class="col-md-5">
+                                <label class="form-label">Свойство</label>
+                                {{ form.property }}
+                                {% if form.property.errors %}<div class="text-danger small">{{ form.property.errors }}</div>{% endif %}
                             </div>
+                            <div class="col-md-5">
+                                <label class="form-label">Значение</label>
+                                {{ form.value }}
+                                {% if form.value.errors %}<div class="text-danger small">{{ form.value.errors }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Действия</label>
+                                <div class="text-nowrap">
+                                    {% if formset.can_delete %}
+                                    <span class="visually-hidden">{{ form.DELETE }}</span>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-sm btn-danger delete-property-btn" title="Удалить свойство">✖</button>
+                                </div>
+                            </div>
+                            {% if form.non_field_errors %}
+                            <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
                             {% endif %}
                         </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
+                    <template id="empty-property-form-template">
+                        {% with form=formset.empty_form %}
+                        <div class="row g-2 align-items-end mb-3 border-bottom pb-3 property-form-row">
+                            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                            <div class="col-md-5">
+                                <label class="form-label">Свойство</label>
+                                {{ form.property }}
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label">Значение</label>
+                                {{ form.value }}
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Действия</label>
+                                <div class="text-nowrap">
+                                    {% if formset.can_delete %}
+                                    <span class="visually-hidden">{{ form.DELETE }}</span>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-sm btn-danger delete-property-btn" title="Удалить свойство">✖</button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endwith %}
+                    </template>
                 </div>
             </div>
 
@@ -133,12 +169,14 @@
                                 {% if layer_form.thickness.errors %}<div class="text-danger small">{{ layer_form.thickness.errors }}</div>{% endif %}
                             </div>
                             <div class="col-md-2">
-                                {% if layer_formset.can_delete %}
-                                <div class="form-check">
-                                    {{ layer_form.DELETE }}
-                                    <label class="form-check-label" for="{{ layer_form.DELETE.id_for_label }}">Удалить</label>
+                                <label class="form-label">Действия</label>
+                                <div class="text-nowrap">
+                                    {% if layer_formset.can_delete %}
+                                    <span class="visually-hidden">{{ layer_form.DELETE }}</span>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-sm btn-secondary duplicate-layer-btn me-1" title="Дублировать слой">⧉</button>
+                                    <button type="button" class="btn btn-sm btn-danger delete-layer-btn" title="Удалить слой">✖</button>
                                 </div>
-                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
@@ -164,12 +202,14 @@
                                 {{ layer_form.thickness }}
                             </div>
                             <div class="col-md-2">
-                                {% if layer_formset.can_delete %}
-                                <div class="form-check">
-                                    {{ layer_form.DELETE }}
-                                    <label class="form-check-label" for="{{ layer_form.DELETE.id_for_label }}">Удалить</label>
+                                <label class="form-label">Действия</label>
+                                <div class="text-nowrap">
+                                    {% if layer_formset.can_delete %}
+                                    <span class="visually-hidden">{{ layer_form.DELETE }}</span>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-sm btn-secondary duplicate-layer-btn me-1" title="Дублировать слой">⧉</button>
+                                    <button type="button" class="btn btn-sm btn-danger delete-layer-btn" title="Удалить слой">✖</button>
                                 </div>
-                                {% endif %}
                             </div>
                         </div>
                         {% endwith %}
@@ -190,6 +230,7 @@
     </div>
 </div>
 
+<script src="{% static 'js/material_properties_formset.js' %}"></script>
 <script src="{% static 'js/composite_layers_formset.js' %}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {

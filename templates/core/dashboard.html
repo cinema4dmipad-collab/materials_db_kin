@@ -3,26 +3,46 @@
 {% block title %}Дашборд — База композитов{% endblock %}
 
 {% block content %}
+<div class="app-hero">
+    <p class="app-hero__eyebrow">KEENETICA</p>
+    <h1 class="app-hero__title">База композитов</h1>
+    <p class="app-hero__subtitle">Учёт материалов, структур, образцов и сканов лазерно-ультразвуковой структуроскопии</p>
+</div>
+
 <div class="card mb-4">
     <div class="card-header">
-        <h1 class="h4 mb-0">Дашборд</h1>
+        <h2 class="h5 mb-0">Сводка</h2>
     </div>
     <div class="card-body">
+        <p class="text-muted mb-3">
+            Краткая статистика по базе. Подробнее — на странице
+            <a href="{% url 'core:help' %}">Справка</a>.
+        </p>
         <div class="row g-3">
-            <div class="col-md-6">
-                <div class="card text-center h-100">
+            <div class="col-md-4">
+                <div class="card stat-card stat-card--materials text-center h-100">
                     <div class="card-body">
                         <h3 class="card-title h5">Материалы</h3>
-                        <p class="display-6 mb-0">{{ materials_count }}</p>
+                        <p class="display-6 mb-0 stat-card__value">{{ materials_count }}</p>
                         <a href="{% url 'materials:list' %}" class="btn btn-sm btn-outline-primary mt-2">Открыть список</a>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="card text-center h-100">
+            <div class="col-md-4">
+                <div class="card stat-card stat-card--structures text-center h-100">
+                    <div class="card-body">
+                        <h3 class="card-title h5">Структуры</h3>
+                        <p class="display-6 mb-0 stat-card__value">{{ structures_count }}</p>
+                        <a href="{% url 'structures:select_type' %}" class="btn btn-sm btn-outline-primary mt-2">Типы структур</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card stat-card stat-card--samples text-center h-100">
                     <div class="card-body">
                         <h3 class="card-title h5">Образцы</h3>
-                        <p class="display-6 mb-0">{{ samples_count }}</p>
+                        <p class="display-6 mb-0 stat-card__value">{{ samples_count }}</p>
+                        <a href="{% url 'samples:list' %}" class="btn btn-sm btn-outline-primary mt-2">Открыть список</a>
                     </div>
                 </div>
             </div>
@@ -40,7 +60,7 @@
             {% for material in recent_materials %}
             <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                 <span>{{ material.code }} — {{ material.name }}</span>
-                <a href="{% url 'materials:detail' material.pk %}" class="btn btn-sm btn-outline-secondary">Открыть</a>
+                <a href="{% url 'materials:detail' material.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view">Открыть</a>
             </li>
             {% endfor %}
         </ul>

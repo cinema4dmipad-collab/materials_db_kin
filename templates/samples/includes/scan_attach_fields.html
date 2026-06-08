@@ -1,0 +1,47 @@
+{% if scan_form.non_field_errors %}
+<div class="alert alert-danger">{{ scan_form.non_field_errors }}</div>
+{% endif %}
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <label class="form-label" for="{{ scan_form.title.id_for_label }}">{{ scan_form.title.label }}</label>
+        {{ scan_form.title }}
+        {% for error in scan_form.title.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="{{ scan_form.method.id_for_label }}">{{ scan_form.method.label }}</label>
+        {{ scan_form.method }}
+        {% for error in scan_form.method.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="col-12">
+        <label class="form-label" for="{{ scan_form.file.id_for_label }}">{{ scan_form.file.label }}</label>
+        {{ scan_form.file }}
+        {% if scan_form.file.help_text %}
+        <div class="form-text">{{ scan_form.file.help_text }}</div>
+        {% endif %}
+        {% for error in scan_form.file.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="col-12">
+        <label class="form-label" for="{{ scan_form.description.id_for_label }}">{{ scan_form.description.label }}</label>
+        {{ scan_form.description }}
+        {% for error in scan_form.description.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="col-12">
+        <label class="form-label" for="{{ scan_form.tag_names.id_for_label }}">{{ scan_form.tag_names.label }}</label>
+        {{ scan_form.tag_names }}
+        {% if scan_form.tag_names.help_text %}
+        <div class="form-text">{{ scan_form.tag_names.help_text }}</div>
+        {% endif %}
+        {% for error in scan_form.tag_names.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+</div>

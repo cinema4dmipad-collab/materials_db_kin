@@ -19,15 +19,100 @@
         });
     }
 
-    function addLayer(container, template, totalFormsInput) {
+    function reindexForms(container, totalFormsInput) {
+        var rows = Array.from(container.querySelectorAll('.layer-form-row'));
+        rows.forEach(function (row, idx) {
+            row.querySelectorAll('[name]').forEach(function (input) {
+                input.name = input.name.replace(/^layers-\d+-/, 'layers-' + idx + '-');
+                if (input.id) {
+                    input.id = input.id.replace(/^id_layers-\d+-/, 'id_layers-' + idx + '-');
+                }
+            });
+            row.querySelectorAll('label[for]').forEach(function (label) {
+                var htmlFor = label.getAttribute('for');
+                if (htmlFor) {
+                    label.setAttribute(
+                        'for',
+                        htmlFor.replace(/^id_layers-\d+-/, 'id_layers-' + idx + '-'),
+                    );
+                }
+            });
+        });
+        totalFormsInput.value = String(rows.length);
+    }
+
+    function appendLayerFromTemplate(container, template, totalFormsInput) {
         var formIndex = parseInt(totalFormsInput.value, 10);
         var html = template.innerHTML.replace(/__prefix__/g, formIndex);
         var wrapper = document.createElement('div');
         wrapper.innerHTML = html.trim();
         var row = wrapper.firstElementChild;
         container.appendChild(row);
-        totalFormsInput.value = formIndex + 1;
+        totalFormsInput.value = String(formIndex + 1);
+        bindRowActions(container, row, template, totalFormsInput);
         renumberLayers(container);
+        return row;
+    }
+
+    function copyRowValues(sourceRow, targetRow) {
+        sourceRow.querySelectorAll('[name]').forEach(function (sourceInput) {
+            var suffix = sourceInput.name.replace(/^layers-\d+-/, '');
+            if (suffix === 'DELETE' || suffix === 'id' || suffix === 'layer_number') {
+                return;
+            }
+            var targetInput = targetRow.querySelector('[name$="-' + suffix + '"]');
+            if (!targetInput) {
+                return;
+            }
+            if (targetInput.type === 'checkbox') {
+                targetInput.checked = sourceInput.checked;
+            } else {
+                targetInput.value = sourceInput.value;
+            }
+        });
+    }
+
+    function bindDeleteButton(container, row, template, totalFormsInput) {
+        var deleteBtn = row.querySelector('.delete-layer-btn');
+        if (!deleteBtn || deleteBtn.dataset.bound === 'true') {
+            return;
+        }
+        deleteBtn.dataset.bound = 'true';
+
+        deleteBtn.addEventListener('click', function () {
+            var idInput = row.querySelector('input[name$="-id"]');
+            var deleteInput = row.querySelector('input[name$="-DELETE"]');
+
+            if (idInput && idInput.value && deleteInput) {
+                deleteInput.checked = true;
+                row.classList.add('d-none');
+            } else {
+                row.remove();
+                reindexForms(container, totalFormsInput);
+            }
+            renumberLayers(container);
+        });
+    }
+
+    function bindDuplicateButton(container, row, template, totalFormsInput) {
+        var dupBtn = row.querySelector('.duplicate-layer-btn');
+        if (!dupBtn || dupBtn.dataset.bound === 'true') {
+            return;
+        }
+        dupBtn.dataset.bound = 'true';
+
+        dupBtn.addEventListener('click', function () {
+            var newRow = appendLayerFromTemplate(container, template, totalFormsInput);
+            if (newRow) {
+                copyRowValues(row, newRow);
+                renumberLayers(container);
+            }
+        });
+    }
+
+    function bindRowActions(container, row, template, totalFormsInput) {
+        bindDeleteButton(container, row, template, totalFormsInput);
+        bindDuplicateButton(container, row, template, totalFormsInput);
     }
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -40,14 +125,12 @@
             return;
         }
 
-        addButton.addEventListener('click', function () {
-            addLayer(container, template, totalFormsInput);
+        container.querySelectorAll('.layer-form-row').forEach(function (row) {
+            bindRowActions(container, row, template, totalFormsInput);
         });
 
-        container.addEventListener('change', function (event) {
-            if (event.target.matches('input[name$="-DELETE"]')) {
-                renumberLayers(container);
-            }
+        addButton.addEventListener('click', function () {
+            appendLayerFromTemplate(container, template, totalFormsInput);
         });
 
         renumberLayers(container);
