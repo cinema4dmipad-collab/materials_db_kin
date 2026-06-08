@@ -3,13 +3,19 @@
 {% block title %}Дашборд — База композитов{% endblock %}
 
 {% block content %}
+<div class="app-hero">
+    <p class="app-hero__eyebrow">KEENETICA</p>
+    <h1 class="app-hero__title">База композитов</h1>
+    <p class="app-hero__subtitle">Учёт материалов, структур, образцов и сканов лазерно-ультразвуковой структуроскопии</p>
+</div>
+
 <div class="card mb-4">
     <div class="card-header">
-        <h1 class="h4 mb-0">Дашборд</h1>
+        <h2 class="h5 mb-0">Сводка</h2>
     </div>
     <div class="card-body">
         <p class="text-muted mb-3">
-            Краткая сводка по базе. Подробнее — на странице
+            Краткая статистика по базе. Подробнее — на странице
             <a href="{% url 'core:help' %}">Справка</a>.
         </p>
         <div class="row g-3">
