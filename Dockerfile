@@ -1,26 +1,34 @@
-FROM python:3.13-slim-bookworm
+ARG PYTHON_IMAGE=python:3.13-slim-bookworm
+FROM ${PYTHON_IMAGE}
+
+ARG PIP_INDEX_URL=
+ARG PIP_TRUSTED_HOST=
+ARG PIP_MIRROR_URLS=
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=false \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
+    POETRY_CACHE_DIR=/tmp/poetry_cache \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10
 
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq5 libpq-dev gcc \
+    && apt-get install -y --no-install-recommends libpq5 libpq-dev gcc curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir poetry
+COPY deploy/ci/pip_mirror_env.sh /tmp/pip_mirror_env.sh
+RUN chmod +x /tmp/pip_mirror_env.sh
 
 COPY pyproject.toml poetry.lock* ./
-RUN poetry install --no-ansi --no-root \
+RUN . /tmp/pip_mirror_env.sh \
+    && python -c "import tomllib; from pathlib import Path; deps = tomllib.loads(Path('pyproject.toml').read_text())['project']['dependencies']; print('\n'.join(deps))" > /tmp/requirements.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
     && rm -rf "$POETRY_CACHE_DIR"
 
 COPY . .
-RUN poetry install --no-ansi --no-root \
-    && rm -rf "$POETRY_CACHE_DIR"
 
 RUN adduser --disabled-password --gecos '' appuser \
     && mkdir -p /app/staticfiles /app/media \

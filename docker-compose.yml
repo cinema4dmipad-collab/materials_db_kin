@@ -15,49 +15,58 @@ services:
       retries: 10
     restart: unless-stopped
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ':9001'
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: server -dir=/data -s3 -s3.port=8333
     environment:
-      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-seaweedfs}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-seaweedfs}
     volumes:
-      - minio_data:/data
+      - seaweedfs_data:/data
     ports:
-      - '${MINIO_API_PORT:-9000}:9000'
-      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+      - '${SEAWEEDFS_S3_PORT:-8333}:8333'
+      - '${SEAWEEDFS_FILER_PORT:-8888}:8888'
     restart: unless-stopped
 
-  minio-init:
-    image: minio/mc:latest
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:latest
     depends_on:
-      - minio
+      - seaweedfs
     environment:
-      MINIO_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:-minioadmin}
-      MINIO_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-materials-db}
     entrypoint:
       - /bin/sh
       - -c
       - |
-        for i in $$(seq 1 30); do
-          mc alias set local http://minio:9000 "$$MINIO_ACCESS_KEY" "$$MINIO_SECRET_KEY" && break
+        for i in $$(seq 1 60); do
+          if printf 's3.bucket.create -name %s\nexit\n' "$$AWS_STORAGE_BUCKET_NAME" \
+            | timeout 20 weed shell -filer=seaweedfs:8888 -master=seaweedfs:9333; then
+            exit 0
+          fi
           sleep 1
         done
-        mc mb --ignore-existing "local/$$AWS_STORAGE_BUCKET_NAME"
+        echo "SeaweedFS S3 bucket init failed" >&2
+        exit 1
     restart: 'no'
 
   web:
-    build: .
+    build:
+      context: .
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim-bookworm}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+        PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
+    image: ${WEB_IMAGE:-materials-db-web:local}
     env_file: .env
     environment:
       DB_HOST: postgres
       DB_ENGINE: postgresql
-      AWS_S3_ENDPOINT_URL: http://minio:9000
+      AWS_S3_ENDPOINT_URL: http://seaweedfs:8333
     depends_on:
       postgres:
         condition: service_healthy
-      minio-init:
+      seaweedfs-init:
         condition: service_completed_successfully
     volumes:
       - staticfiles:/app/staticfiles
@@ -78,5 +87,5 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  seaweedfs_data:
   staticfiles:
