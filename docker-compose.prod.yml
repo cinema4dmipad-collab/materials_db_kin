@@ -1,13 +1,11 @@
 # Прод / внешний сервер (Dokploy и т.п.):
 # Postgres и S3 уже развёрнуты отдельно — поднимаем только приложение.
 #
-# Запуск:
-#   docker compose -f docker-compose.prod.yml up -d
-#
 # Dokploy:
-#   Add Service → Docker Compose → compose file: docker-compose.prod.yml
-#   Domain → nginx:80 (Traefik уже слушает :80 на хосте)
-#   Подключите сервисы к сети dokploy-network (см. networks ниже).
+#   Add Service → Docker Compose
+#   Compose file: docker-compose.prod.yml
+#   Environment: WEB_IMAGE, DB_*, AWS_* (см. .env.prod.example)
+#   Domain → nginx:80
 #
 # Переменные DB_* и AWS_* задаются в .env (см. .env.prod.example).
 
@@ -17,7 +15,7 @@ configs:
 
 services:
   web:
-    image: ${WEB_IMAGE:?WEB_IMAGE is required}
+    image: ${WEB_IMAGE}
     env_file: .env
     environment:
       DB_ENGINE: postgresql
