@@ -22,13 +22,16 @@ RUN apt-get update \
 COPY deploy/ci/pip_mirror_env.sh /tmp/pip_mirror_env.sh
 RUN chmod +x /tmp/pip_mirror_env.sh
 
-COPY pyproject.toml poetry.lock* ./
 RUN . /tmp/pip_mirror_env.sh \
-    && python -c "import tomllib; from pathlib import Path; deps = tomllib.loads(Path('pyproject.toml').read_text())['project']['dependencies']; print('\n'.join(deps))" > /tmp/requirements.txt \
-    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    && pip install --no-cache-dir poetry
+
+COPY pyproject.toml poetry.lock* ./
+RUN poetry install --no-ansi --no-root \
     && rm -rf "$POETRY_CACHE_DIR"
 
 COPY . .
+RUN poetry install --no-ansi --no-root \
+    && rm -rf "$POETRY_CACHE_DIR"
 
 RUN adduser --disabled-password --gecos '' appuser \
     && mkdir -p /app/staticfiles /app/media \

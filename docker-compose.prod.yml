@@ -1,17 +1,15 @@
-# Прод / внешний сервер (Dokploy и т.п.):
-# Postgres и S3 уже развёрнуты отдельно — поднимаем только приложение.
+# Прод / Dokploy (Docker Compose mode, не Stack):
+# Postgres и S3 — отдельные сервисы в том же проекте Dokploy.
 #
-# Dokploy:
+# Настройка:
 #   Add Service → Docker Compose
 #   Compose file: docker-compose.prod.yml
-#   Environment: WEB_IMAGE, DB_*, AWS_* (см. .env.prod.example)
+#   Compose Type: Docker Compose (не Stack — нужен build для nginx)
+#   Environment: WEB_IMAGE + DB_* + AWS_* (см. .env.prod.example)
 #   Domain → nginx:80
 #
-# Переменные DB_* и AWS_* задаются в .env (см. .env.prod.example).
-
-configs:
-  nginx_default_conf:
-    file: ./deploy/nginx/nginx.conf
+# Важно: отключите Auto Deploy на старом Application (djangoapp),
+# иначе каждый push будет пытаться пересобрать его отдельно.
 
 services:
   web:
@@ -24,14 +22,12 @@ services:
     expose:
       - '8000'
     restart: unless-stopped
-    networks:
-      - dokploy-network
 
   nginx:
-    image: nginx:1.27-alpine
-    configs:
-      - source: nginx_default_conf
-        target: /etc/nginx/conf.d/default.conf
+    build:
+      context: ./deploy/nginx
+      dockerfile: Dockerfile
+    image: materials-db-nginx:prod
     volumes:
       - staticfiles:/var/www/static:ro
     depends_on:
@@ -39,12 +35,11 @@ services:
     expose:
       - '80'
     restart: unless-stopped
-    networks:
-      - dokploy-network
 
 volumes:
   staticfiles:
 
 networks:
-  dokploy-network:
+  default:
+    name: dokploy-network
     external: true
