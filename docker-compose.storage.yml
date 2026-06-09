@@ -10,10 +10,13 @@
 #   Admin  — http://<host>:23646
 #   S3 API — http://<host>:8333  (CLI / Django, без веб-UI)
 #
-# Django (.env приложения):
-#   AWS_S3_ENDPOINT_URL=http://<internal-hostname>:8333
-#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — как ниже
+# Django (.env приложения, тот же проект Dokploy):
+#   AWS_S3_ENDPOINT_URL=http://seaweedfs:8333
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — те же, что в .env SeaweedFS ниже
 #   AWS_STORAGE_BUCKET_NAME=materials-db
+#
+# Dokploy: compose должен быть в сети dokploy-network (см. networks внизу),
+# иначе Django не достучится до seaweedfs:8333.
 
 services:
   seaweedfs:
@@ -68,6 +71,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+    networks:
+      - dokploy-network
 
   seaweedfs-admin:
     image: chrislusf/seaweedfs:${SEAWEEDFS_IMAGE_TAG:-latest}
@@ -79,6 +84,8 @@ services:
     ports:
       - '${SEAWEEDFS_ADMIN_PORT:-23646}:23646'
     command: admin -masters=seaweedfs:9333 -ip=0.0.0.0
+    networks:
+      - dokploy-network
 
   seaweedfs-init:
     image: chrislusf/seaweedfs:${SEAWEEDFS_IMAGE_TAG:-latest}
@@ -103,7 +110,13 @@ services:
         echo "SeaweedFS S3 bucket init failed" >&2
         exit 1
     restart: 'no'
+    networks:
+      - dokploy-network
 
 volumes:
   seaweed_data:
   seaweed_s3_config:
+
+networks:
+  dokploy-network:
+    external: true
