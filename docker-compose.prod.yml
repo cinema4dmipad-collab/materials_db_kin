@@ -8,19 +8,12 @@
 #   Environment: DB_* + AWS_* (см. .env.prod.example)
 #   Domain → nginx:80
 #
-# WEB_IMAGE — опционально. Если не задан, образ web собирается из Dockerfile
-# (Dokploy запускает compose с --build). Для CI/SSH-deploy укажите готовый тег.
+# Образы без build — Dokploy при деплое не тянет Docker Hub.
+# Первый build: GitLab CI (job build) или вручную на сервере, когда сеть до registry есть.
+# WEB_IMAGE / NGINX_IMAGE — теги локальных или GitLab registry образов.
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim-bookworm}
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
-        PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
     image: ${WEB_IMAGE:-materials-db-web:prod}
     env_file: .env
     environment:
@@ -32,9 +25,6 @@ services:
     restart: unless-stopped
 
   nginx:
-    build:
-      context: ./deploy/nginx
-      dockerfile: Dockerfile
     image: ${NGINX_IMAGE:-materials-db-nginx:prod}
     volumes:
       - staticfiles:/var/www/static:ro
