@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    ".cursor/bootstrap.md",
+    ".cursor/core.md",
+    ".cursor/core_views.md",
+    ".cursor/dynamic_models.md",
+    ".cursor/plan_fk.md",
+    ".cursor/samples_scans_plan.md",
+    ".cursor/schema_plan.md",
+    ".cursor/sctructure_gen_plan.md",
+    ".cursor/sql_structure_plan.md",
+    ".cursor/structure_extend.md"
+  ]
+}

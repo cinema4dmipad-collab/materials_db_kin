@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}Свойства — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-0">Справочник свойств</h1>
+        <a href="{% url 'references:create' %}" class="btn btn-primary btn-sm">Добавить свойство</a>
+    </div>
+    <div class="card-body p-0">
+        {% include 'includes/list_filter_bar.html' %}
+        {% if properties %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Системное имя</th>
+                        <th>Единица</th>
+                        <th>Тип</th>
+                        <th>Группа</th>
+                        <th>Материалов</th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for property in properties %}
+                    <tr>
+                        <td>{{ property.display_name }}</td>
+                        <td><code>{{ property.name }}</code></td>
+                        <td>{{ property.unit|default:"—" }}</td>
+                        <td>{% include 'includes/type_badge.html' with label=property.get_data_type_display value=property.data_type %}</td>
+                        <td>{{ property.group.name|default:"—" }}</td>
+                        <td>{{ property.material_count }}</td>
+                        <td class="text-end">
+                            <div class="table-actions">
+                            <a href="{% url 'references:edit' property.pk %}" class="btn btn-sm btn-outline-primary btn-action-edit">Изменить</a>
+                            <a href="{% url 'references:delete' property.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="p-3">
+        {% include 'includes/pagination.html' %}
+        </div>
+
+        {% else %}
+        <div class="alert alert-info mb-0 m-3">
+            {% if has_active_filters %}
+            По вашему запросу свойств не найдено. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
+            {% else %}
+            Свойств пока нет. <a href="{% url 'references:create' %}">Создать первое</a>.
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

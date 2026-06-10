@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Debug — База композитов{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <p class="text-uppercase text-muted small fw-semibold mb-1">Diagnostics</p>
+        <h1 class="h2 mb-1">Debug</h1>
+        <p class="text-muted mb-0">Служебная диагностика для технического специалиста.</p>
+    </div>
+    <span class="badge {% if database_status.ok %}text-bg-success{% else %}text-bg-danger{% endif %} mt-2">
+        {{ database_status.label }}
+    </span>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Подключение к БД</h2>
+            </div>
+            <div class="card-body">
+                <p class="mb-3">{{ database_status.detail }}</p>
+                <dl class="row mb-0">
+                    {% for item in database_info %}
+                    <dt class="col-sm-4 text-muted">{{ item.label }}</dt>
+                    <dd class="col-sm-8"><code>{{ item.value }}</code></dd>
+                    {% endfor %}
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Окружение</h2>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% for item in runtime_info %}
+                    <dt class="col-sm-5 text-muted">{{ item.label }}</dt>
+                    <dd class="col-sm-7"><code>{{ item.value }}</code></dd>
+                    {% endfor %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center gap-3">
+        <h2 class="h5 mb-0">Последние строки логов</h2>
+        <span class="text-muted small">{{ log_file_name }}</span>
+    </div>
+    <div class="card-body">
+        {% if log_lines %}
+        <pre class="bg-light border rounded p-3 mb-0 small" style="max-height: 420px; overflow: auto;"><code>{% for line in log_lines %}{{ line }}
+{% endfor %}</code></pre>
+        {% else %}
+        <p class="text-muted mb-0">{{ log_message }}</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

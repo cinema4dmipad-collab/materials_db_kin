@@ -1,0 +1,2 @@
+deploy/entrypoint.sh text eol=lf
+deploy/ci/*.sh text eol=lf

@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block title %}
+{% if is_edit %}Редактирование{% else %}Новая запись{% endif %} — {{ structure_type.name }}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h1 class="h5 mb-0">
+                    {% if is_edit %}Редактирование: {{ record_label }}{% else %}Новая запись: {{ structure_type.name }}{% endif %}
+                </h1>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    {% for field in form.bound_structure_fields %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                        <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                        {% if is_edit %}
+                        <a href="{% url 'structures:detail' structure_type.code record.id %}" class="btn btn-outline-secondary">Отмена</a>
+                        {% else %}
+                        <a href="{% url 'structures:list' structure_type.code %}" class="btn btn-outline-secondary">Отмена</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

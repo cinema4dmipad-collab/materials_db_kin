@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}
+{% if is_edit %}Редактирование {{ structure_type.name }}{% else %}Новый тип структуры{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/structure_type_form.css' %}" rel="stylesheet">
+<script src="{% static 'js/structure_type_form.js' %}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-10">
+        <div class="alert alert-info">
+            <strong>Для инженеров:</strong> задайте название типа структуры и добавьте нужные свойства
+            из справочника или ссылку на материал.
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h1 class="h4 mb-0">
+                    {% if is_edit %}Редактирование типа «{{ structure_type.name }}»{% else %}Новый тип структуры{% endif %}
+                </h1>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate id="structure-type-form">
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="row g-3">
+                        {% for field in form %}
+                        <div class="col-md-6{% if field.name == 'display_color' or field.name == 'description' %} col-12{% endif %}">
+                            {% if field.name == 'display_color' %}
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {% include 'includes/structure_color_picker.html' with field=field %}
+                            {% elif field.field.widget.input_type == 'checkbox' %}
+                            <div class="form-check mt-4">
+                                {{ field }}
+                                <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            </div>
+                            {% else %}
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field }}
+                            {% endif %}
+                            {% if field.help_text %}
+                            <div class="form-text">{{ field.help_text }}</div>
+                            {% endif %}
+                            {% for error in field.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <h2 class="h6 mb-0">Свойства структуры</h2>
+                            {% if not fields_locked %}
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="add-from-properties-btn">+ Из свойств</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="add-material-link-btn">+ Ссылка на материал</button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="card-body">
+                            {% if fields_locked %}
+                            <div class="alert alert-warning mb-3">
+                                Таблица уже создана в базе — состав свойств изменить нельзя.
+                            </div>
+                            {% endif %}
+
+                            {{ field_formset.management_form }}
+                            {% if field_formset.non_form_errors %}
+                            <div class="alert alert-danger">{{ field_formset.non_form_errors }}</div>
+                            {% endif %}
+
+                            <ul id="structure-field-list" class="structure-field-list">
+                                {% for field_form in field_formset %}
+                                {% if field_formset.can_delete and not fields_locked %}
+                                {% include 'structures/includes/structure_field_list_item.html' with field_form=field_form show_actions=True %}
+                                {% else %}
+                                {% include 'structures/includes/structure_field_list_item.html' with field_form=field_form show_actions=False %}
+                                {% endif %}
+                                {% endfor %}
+                            </ul>
+                            <div id="structure-field-empty" class="structure-field-empty{% if field_formset.forms %} d-none{% endif %}">
+                                Пока нет свойств. Добавьте их из справочника или ссылку на материал.
+                            </div>
+
+                            {% if not fields_locked %}
+                            {{ reference_properties|json_script:"reference-properties-data" }}
+                            {% url 'references:create' as property_create_url %}
+
+                            <div class="modal fade" id="reference-properties-modal" tabindex="-1" aria-labelledby="reference-properties-modal-label" aria-hidden="true">
+                                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h2 class="modal-title h5" id="reference-properties-modal-label">Выбор свойств</h2>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+                                                <input type="search" class="form-control form-control-sm flex-grow-1" id="reference-properties-search" placeholder="Поиск по названию, коду или группе..." autocomplete="off">
+                                                <a href="{{ property_create_url }}?next={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary btn-sm text-nowrap" id="create-reference-property-btn">+ Новое свойство</a>
+                                            </div>
+                                            <div id="reference-properties-empty" class="alert alert-info mb-0">
+                                                В справочнике пока нет свойств. Создайте первое свойство кнопкой выше.
+                                            </div>
+                                            <div id="reference-properties-list"></div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+                                            <button type="button" class="btn btn-primary btn-sm" id="reference-properties-add-btn" disabled>Добавить выбранные</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <template id="field-row-template">
+                                <li class="structure-field-item" data-structure-field-row>
+                                    <div class="structure-field-item__body">
+                                        <div class="structure-field-item__main">
+                                            <div class="structure-field-item__label" data-field-summary="label">—</div>
+                                            <div class="structure-field-item__meta">
+                                                <code data-field-summary="name">—</code>
+                                                <span class="badge rounded-pill structure-field-item__type" data-field-summary="type" data-field-type-value="">—</span>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-danger delete-row-btn">Удалить</button>
+                                    </div>
+                                    <div class="structure-field-item__inputs visually-hidden" aria-hidden="true">
+                                        <input type="text" name="fields-__idx__-label" maxlength="200" data-structure-field-label id="id_fields-__idx__-label">
+                                        <input type="text" name="fields-__idx__-name" maxlength="100" data-structure-field-name id="id_fields-__idx__-name">
+                                        <select name="fields-__idx__-field_type" data-structure-field-type id="id_fields-__idx__-field_type">
+                                            <option value="CharField">Строка</option>
+                                            <option value="TextField">Текст</option>
+                                            <option value="IntegerField">Целое число</option>
+                                            <option value="DecimalField">Десятичная дробь</option>
+                                            <option value="FloatField">Число с плавающей точкой</option>
+                                            <option value="BooleanField">Да/Нет</option>
+                                            <option value="DateField">Дата</option>
+                                            <option value="DateTimeField">Дата и время</option>
+                                            <option value="MaterialLink">Материал</option>
+                                        </select>
+                                        <input type="checkbox" name="fields-__idx__-is_required" id="id_fields-__idx__-is_required">
+                                        <input type="number" name="fields-__idx__-sort_order" value="0" min="0" id="id_fields-__idx__-sort_order">
+                                        <input type="number" name="fields-__idx__-max_length" value="255" min="1" max="4000" id="id_fields-__idx__-max_length">
+                                        <input type="number" name="fields-__idx__-max_digits" value="10" min="1" max="18" id="id_fields-__idx__-max_digits">
+                                        <input type="number" name="fields-__idx__-decimal_places" value="2" min="0" max="10" id="id_fields-__idx__-decimal_places">
+                                        <input type="text" name="fields-__idx__-default_value" maxlength="500" id="id_fields-__idx__-default_value">
+                                        <input type="checkbox" name="fields-__idx__-DELETE" id="id_fields-__idx__-DELETE" class="d-none">
+                                    </div>
+                                </li>
+                            </template>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        {% if not fields_locked %}
+                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                        {% endif %}
+                        {% if is_edit %}
+                        <a href="{% url 'structures:type_manage' structure_type.code %}" class="btn btn-outline-secondary">К управлению</a>
+                        {% else %}
+                        <a href="{% url 'structures:select_type' %}" class="btn btn-outline-secondary">Отмена</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

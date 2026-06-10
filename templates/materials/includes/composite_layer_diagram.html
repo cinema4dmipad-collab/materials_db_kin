@@ -1,0 +1,31 @@
+{% if layer_diagram %}
+<div class="composite-layer-diagram p-3 p-lg-4 h-100">
+    <h3 class="composite-layer-diagram__title">Схема укладки</h3>
+
+    {% if layer_diagram.material_legend %}
+    <div class="layer-material-legend mb-3">
+        {% for entry in layer_diagram.material_legend %}
+        <span class="layer-material-chip">
+            <span class="layer-material-chip-swatch" style="background-color: {{ entry.color }};"></span>
+            {{ entry.material_label }}
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="layer-stack-panel">
+        <div class="layer-stack-title">Сверху ↓ вниз</div>
+        <div class="layer-stack-column">
+            {% for item in layer_diagram.layers %}
+            <div class="layer-stack-segment"
+                 style="flex: {{ item.flex_grow }} 1 0%; background-color: {{ item.color }};"
+                 title="Слой {{ item.layer_number }}: {{ item.material_label }} · {{ item.thickness }} мм">
+                <span class="layer-stack-segment-index">#{{ item.layer_number }}</span>
+                <span class="layer-stack-material-code">{{ item.material_code }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="layer-stack-caption">Один материал — один цвет</div>
+    </div>
+</div>
+{% endif %}

@@ -1,0 +1,43 @@
+# Прод / Dokploy (Docker Compose mode, не Stack):
+# Postgres и S3 — отдельные сервисы в том же проекте Dokploy.
+#
+# Настройка:
+#   Add Service → Docker Compose
+#   Compose file: docker-compose.prod.yml
+#   Compose Type: Docker Compose (не Stack)
+#   Environment: DB_* + AWS_* (см. .env.prod.example)
+#   Domain → nginx:80
+#
+# Образы без build — Dokploy при деплое не тянет Docker Hub.
+# Первый build: GitLab CI (job build) или вручную на сервере, когда сеть до registry есть.
+# WEB_IMAGE / NGINX_IMAGE — теги локальных или GitLab registry образов.
+
+services:
+  web:
+    image: ${WEB_IMAGE:-materials-db-web:prod}
+    env_file: .env
+    environment:
+      DB_ENGINE: postgresql
+    volumes:
+      - staticfiles:/app/staticfiles
+    expose:
+      - '8000'
+    restart: unless-stopped
+
+  nginx:
+    image: ${NGINX_IMAGE:-materials-db-nginx:prod}
+    volumes:
+      - staticfiles:/var/www/static:ro
+    depends_on:
+      - web
+    expose:
+      - '80'
+    restart: unless-stopped
+
+volumes:
+  staticfiles:
+
+networks:
+  default:
+    name: dokploy-network
+    external: true

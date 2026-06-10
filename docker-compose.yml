@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: server -dir=/data -s3 -s3.port=8333
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-seaweedfs}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-seaweedfs}
+    volumes:
+      - seaweedfs_data:/data
+    ports:
+      - '${SEAWEEDFS_S3_PORT:-8333}:8333'
+      - '${SEAWEEDFS_FILER_PORT:-8888}:8888'
+    restart: unless-stopped
+
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:latest
+    depends_on:
+      - seaweedfs
+    environment:
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-materials-db}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        for i in $$(seq 1 60); do
+          if printf 's3.bucket.create -name %s\nexit\n' "$$AWS_STORAGE_BUCKET_NAME" \
+            | timeout 20 weed shell -filer=seaweedfs:8888 -master=seaweedfs:9333; then
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "SeaweedFS S3 bucket init failed" >&2
+        exit 1
+    restart: 'no'
+
+  web:
+    build:
+      context: .
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim-bookworm}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+        PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
+    image: ${WEB_IMAGE:-materials-db-web:local}
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_ENGINE: postgresql
+      AWS_S3_ENDPOINT_URL: http://seaweedfs:8333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seaweedfs-init:
+        condition: service_completed_successfully
+    volumes:
+      - staticfiles:/app/staticfiles
+    expose:
+      - '8000'
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - '${NGINX_HTTP_PORT:-80}:80'
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - staticfiles:/var/www/static:ro
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  seaweedfs_data:
+  staticfiles:

@@ -1,0 +1,47 @@
+{% load ui_tags list_filter_tags %}
+{% if label %}
+{% if use_struct_type_filter %}
+<a href="{% if filter_base_path %}{% struct_type_filter_link label filter_base_path %}{% else %}{% struct_type_filter_link label %}{% endif %}"
+   class="type-pill-link"
+   title="Искать по типу «{{ label }}»">
+    <span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
+        <span class="type-pill__dot" aria-hidden="true"></span>
+        <span class="type-pill__label">{{ label }}</span>
+    </span>
+</a>
+{% elif use_object_type_filter %}
+<a href="{% if filter_base_path %}{% object_type_filter_link label filter_base_path %}{% else %}{% object_type_filter_link label %}{% endif %}"
+   class="type-pill-link"
+   title="Искать по типу «{{ label }}»">
+    <span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
+        <span class="type-pill__dot" aria-hidden="true"></span>
+        <span class="type-pill__label">{{ label }}</span>
+    </span>
+</a>
+{% elif use_scan_method_filter %}
+<a href="{% if filter_base_path %}{% scan_method_filter_link label filter_base_path %}{% else %}{% scan_method_filter_link label %}{% endif %}"
+   class="type-pill-link"
+   title="Искать по методу «{{ label }}»">
+    <span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
+        <span class="type-pill__dot" aria-hidden="true"></span>
+        <span class="type-pill__label">{{ label }}</span>
+    </span>
+</a>
+{% elif filter_url and filter_query %}
+<a href="{{ filter_url }}?q={{ filter_query|urlencode }}{% if filter_scope %}&amp;q_in={{ filter_scope|urlencode }}{% endif %}"
+   class="type-pill-link"
+   title="Искать по типу «{{ label }}»">
+    <span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
+        <span class="type-pill__dot" aria-hidden="true"></span>
+        <span class="type-pill__label">{{ label }}</span>
+    </span>
+</a>
+{% else %}
+<span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
+    <span class="type-pill__dot" aria-hidden="true"></span>
+    <span class="type-pill__label">{{ label }}</span>
+</span>
+{% endif %}
+{% else %}
+<span class="text-muted">—</span>
+{% endif %}

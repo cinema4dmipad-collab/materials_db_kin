@@ -1,0 +1,22 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    {% if original and not original.is_created %}
+        <li>
+            <a href="{% url 'admin:structures_structuretype_create_table' original.pk %}"
+               class="button" style="background-color: #28a745; color: white;">
+                Создать таблицу в БД
+            </a>
+        </li>
+    {% endif %}
+    {% if original and original.is_created %}
+        <li>
+            <a href="{% url 'admin:structures_structuretype_drop_table' original.pk %}"
+               class="button" style="background-color: #dc3545; color: white;"
+               onclick="return confirm('Удалить таблицу? Данные будут потеряны!');">
+                Удалить таблицу
+            </a>
+        </li>
+    {% endif %}
+{% endblock %}

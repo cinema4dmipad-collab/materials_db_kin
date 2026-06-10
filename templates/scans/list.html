@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}Сканы — {{ sample.code }}{% endblock %}
+
+{% block content %}
+{% include 'samples/includes/sample_tabs.html' %}
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h1 class="h5 mb-0">Сканы HDF5 — {{ sample.code }}</h1>
+    </div>
+    <div class="card-body p-0">
+        {% include 'includes/list_filter_bar.html' %}
+        {% if scans %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0 align-middle app-data-table">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Метод</th>
+                        <th>Теги</th>
+                        <th>Файл</th>
+                        <th>Загружен</th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for scan in scans %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'scans:detail' sample.pk scan.pk %}">{{ scan.title }}</a>
+                        </td>
+                        <td>{% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method use_scan_method_filter=True %}</td>
+                        <td>{% url 'scans:list' sample.pk as sample_scans_url %}{% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}</td>
+                        <td>
+                            <span class="file-badge file-badge--hdf5">HDF5</span>
+                            {{ scan.filename }}
+                        </td>
+                        <td>{{ scan.uploaded_at|date:"d.m.Y H:i" }}</td>
+                        <td class="text-end">
+                            <div class="table-actions">
+                            <a href="{{ scan.file.url }}" class="btn btn-outline-secondary btn-sm btn-action-view" target="_blank" rel="noopener">Скачать</a>
+                            <a href="{% url 'scans:edit' sample.pk scan.pk %}" class="btn btn-outline-primary btn-sm btn-action-edit">Изменить</a>
+                            <a href="{% url 'scans:delete' sample.pk scan.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-3 mb-0 text-muted">
+            {% if has_active_filters %}
+            По вашему запросу сканы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
+            {% else %}
+            Сканов пока нет.
+            {% endif %}
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Прикрепить скан HDF5</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">Только файлы формата HDF5 (.h5, .hdf5).</p>
+        {% include 'samples/includes/scan_attach_form.html' %}
+    </div>
+</div>
+{% endblock %}

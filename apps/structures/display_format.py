@@ -1,0 +1,40 @@
+from decimal import Decimal, InvalidOperation
+import uuid
+
+from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
+
+
+def _decimal_places(field) -> int:
+    places = getattr(field, 'decimal_places', None)
+    if places is None:
+        return 2
+    return max(int(places), 0)
+
+
+def _decimal_quantize(value, decimal_places: int) -> Decimal:
+    if decimal_places == 0:
+        exp = Decimal('1')
+    else:
+        exp = Decimal(f'1.{"0" * decimal_places}')
+    return Decimal(str(value)).quantize(exp)
+
+
+def normalize_structure_field_value(field, value):
+    if value is None or value == '':
+        return value
+    if field.field_type == 'DecimalField':
+        return _decimal_quantize(value, _decimal_places(field))
+    if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+        return str(uuid.UUID(str(value)))
+    return value
+
+
+def format_structure_field_display(field, value):
+    if value is None or value == '':
+        return '—'
+    if field.field_type == 'DecimalField':
+        normalized = _decimal_quantize(value, _decimal_places(field))
+        return format(normalized, 'f').replace('.', ',')
+    if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+        return value
+    return value

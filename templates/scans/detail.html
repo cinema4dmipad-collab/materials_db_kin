@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ scan.title }} — Скан{% endblock %}
+
+{% block content %}
+{% include 'samples/includes/sample_tabs.html' %}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="h4 mb-1">{{ scan.title }}</h1>
+            <p class="text-muted mb-0 small">
+                Образец: <a href="{% url 'samples:detail' sample.pk %}">{{ sample.code }}</a>
+                · <span class="file-badge file-badge--hdf5">HDF5</span>
+            </p>
+        </div>
+        <div class="text-nowrap">
+            <a href="{{ scan.file.url }}" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener">Скачать</a>
+            <a href="{% url 'scans:edit' sample.pk scan.pk %}" class="btn btn-primary btn-sm">Изменить</a>
+            <a href="{% url 'scans:delete' sample.pk scan.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            <a href="{% url 'scans:list' sample.pk %}" class="btn btn-outline-secondary btn-sm">К списку</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Метод</dt>
+            <dd class="col-sm-9">
+                {% url 'scans:list' sample.pk as sample_scans_url %}
+                {% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method use_scan_method_filter=True filter_base_path=sample_scans_url %}
+            </dd>
+            <dt class="col-sm-3">Теги</dt>
+            <dd class="col-sm-9">{% url 'scans:list' sample.pk as sample_scans_url %}{% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}</dd>
+            <dt class="col-sm-3">Описание</dt>
+            <dd class="col-sm-9">{{ scan.description|default:"—" }}</dd>
+            <dt class="col-sm-3">Загружен</dt>
+            <dd class="col-sm-9">{{ scan.uploaded_at|date:"d.m.Y H:i" }}</dd>
+            <dt class="col-sm-3">Файл</dt>
+            <dd class="col-sm-9">{{ scan.filename }}</dd>
+        </dl>
+    </div>
+</div>
+{% endblock %}

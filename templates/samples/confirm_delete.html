@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление {{ sample.code }} — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Удаление образца</h1>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            Удалить образец <strong>{{ sample.code }} — {{ sample.name }}</strong>?
+            Все связанные сканы и их файлы также будут удалены.
+        </div>
+        <form method="post" class="d-flex gap-2">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Удалить</button>
+            <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-outline-secondary">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

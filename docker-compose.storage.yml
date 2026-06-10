@@ -1,0 +1,122 @@
+# Standalone SeaweedFS (S3 + Filer + Master + Admin UI).
+#
+# Запуск:
+#   cp .env.storage.example .env
+#   docker compose -f docker-compose.storage.yml up -d
+#
+# UI:
+#   Filer  — http://<host>:8888
+#   Master — http://<host>:9333
+#   Admin  — http://<host>:23646
+#   S3 API — http://<host>:8333  (CLI / Django, без веб-UI)
+#
+# Django (.env приложения, тот же проект Dokploy):
+#   AWS_S3_ENDPOINT_URL=http://seaweedfs:8333
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — те же, что в .env SeaweedFS ниже
+#   AWS_STORAGE_BUCKET_NAME=materials-db
+#
+# Dokploy: compose должен быть в сети dokploy-network (см. networks внизу),
+# иначе Django не достучится до seaweedfs:8333.
+
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:${SEAWEEDFS_IMAGE_TAG:-latest}
+    container_name: ${SEAWEEDFS_CONTAINER_NAME:-seaweedfs}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-seaweedfs}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-seaweedfs}
+    ports:
+      - '${SEAWEEDFS_S3_PORT:-8333}:8333'
+      - '${SEAWEEDFS_MASTER_PORT:-9333}:9333'
+      - '${SEAWEEDFS_FILER_PORT:-8888}:8888'
+    volumes:
+      - seaweed_data:/data
+      - seaweed_s3_config:/etc/seaweedfs
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        cat > /etc/seaweedfs/s3.json <<EOF
+        {
+          "identities": [
+            {
+              "name": "admin",
+              "credentials": [
+                {
+                  "accessKey": "$${AWS_ACCESS_KEY_ID}",
+                  "secretKey": "$${AWS_SECRET_ACCESS_KEY}"
+                }
+              ],
+              "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+            }
+          ]
+        }
+        EOF
+        exec weed server \
+          -dir=/data \
+          -ip=0.0.0.0 \
+          -s3 \
+          -s3.port=8333 \
+          -s3.config=/etc/seaweedfs/s3.json
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q -O - http://127.0.0.1:9333/cluster/status >/dev/null 2>&1 || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - dokploy-network
+
+  seaweedfs-admin:
+    image: chrislusf/seaweedfs:${SEAWEEDFS_IMAGE_TAG:-latest}
+    container_name: ${SEAWEEDFS_CONTAINER_NAME:-seaweedfs}-admin
+    restart: unless-stopped
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    ports:
+      - '${SEAWEEDFS_ADMIN_PORT:-23646}:23646'
+    command: admin -masters=seaweedfs:9333 -ip=0.0.0.0
+    networks:
+      - dokploy-network
+
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:${SEAWEEDFS_IMAGE_TAG:-latest}
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-materials-db}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        for i in $$(seq 1 60); do
+          if printf 's3.bucket.create -name %s\nexit\n' "$$AWS_STORAGE_BUCKET_NAME" \
+            | timeout 20 weed shell -filer=seaweedfs:8888 -master=seaweedfs:9333; then
+            echo "Bucket $$AWS_STORAGE_BUCKET_NAME ready"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "SeaweedFS S3 bucket init failed" >&2
+        exit 1
+    restart: 'no'
+    networks:
+      - dokploy-network
+
+volumes:
+  seaweed_data:
+  seaweed_s3_config:
+
+networks:
+  dokploy-network:
+    external: true
