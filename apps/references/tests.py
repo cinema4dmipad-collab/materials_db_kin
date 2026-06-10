@@ -58,6 +58,27 @@ class PropertyViewsTests(TestCase):
         self.assertEqual(created.display_name, 'Предел прочности')
         self.assertEqual(created.group, self.group)
 
+    def test_property_create_redirects_to_next_with_open_properties(self):
+        next_url = reverse('structures:type_create')
+        response = self.client.post(
+            f"{reverse('references:create')}?next={next_url}",
+            {
+                'display_name': 'Young modulus',
+                'name': 'young_modulus',
+                'unit': 'GPa',
+                'data_type': 'number',
+                'group': str(self.group.pk),
+                'description': '',
+                'next': next_url,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            f'{next_url}?open_properties=1',
+            fetch_redirect_response=False,
+        )
+
     def test_property_update_view(self):
         response = self.client.post(
             reverse('references:edit', kwargs={'pk': self.property.pk}),

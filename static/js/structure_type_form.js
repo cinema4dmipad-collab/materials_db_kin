@@ -1,11 +1,31 @@
 (function () {
     'use strict';
 
+    const DRAFT_STORAGE_KEY = 'structure-type-form-draft';
+
     const CYRILLIC = {
         а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z',
         и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
         с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch',
         ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+    };
+
+    const FIELD_TYPE_LABELS = {
+        CharField: 'Строка',
+        TextField: 'Текст',
+        IntegerField: 'Целое число',
+        DecimalField: 'Число',
+        FloatField: 'Число',
+        BooleanField: 'Да/Нет',
+        DateField: 'Дата',
+        DateTimeField: 'Дата и время',
+        MaterialLink: 'Материал',
+    };
+
+    const FIELD_TYPE_DEFAULTS = {
+        CharField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
+        DecimalField: { max_length: '', max_digits: '10', decimal_places: '2', default_value: '' },
+        MaterialLink: { max_length: '', max_digits: '', decimal_places: '', default_value: '' },
     };
 
     function transliterate(text) {
@@ -34,43 +54,24 @@
         return slug;
     }
 
-    function bindTypePreview() {
-        const nameInput = document.querySelector('[data-structure-code-source]');
-        const codePreview = document.getElementById('structure-code-preview');
-        const tablePreview = document.getElementById('structure-table-preview');
-        if (!nameInput || !codePreview || !tablePreview) {
-            return;
-        }
-
-        const update = () => {
-            const code = normalizeIdentifier(nameInput.value, 50);
-            codePreview.textContent = code || '—';
-            tablePreview.textContent = code ? `structures_${code}` : '—';
-        };
-
-        nameInput.addEventListener('input', update);
-        update();
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
-    function bindFieldNameAutofill(row) {
-        const labelInput = row.querySelector('[data-structure-field-label]');
-        const nameInput = row.querySelector('[data-structure-field-name]');
-        if (!labelInput || !nameInput) {
-            return;
-        }
+    function fieldTypeLabel(fieldType) {
+        return FIELD_TYPE_LABELS[fieldType] || fieldType || '—';
+    }
 
-        let manual = Boolean(nameInput.value.trim());
+    function getStructureForm() {
+        return document.getElementById('structure-type-form');
+    }
 
-        nameInput.addEventListener('input', () => {
-            manual = Boolean(nameInput.value.trim());
-        });
-
-        labelInput.addEventListener('input', () => {
-            if (manual) {
-                return;
-            }
-            nameInput.value = normalizeIdentifier(labelInput.value, 63);
-        });
+    function getFieldList() {
+        return document.getElementById('structure-field-list');
     }
 
     function getTotalFormsInput() {
@@ -92,50 +93,127 @@
         }
     }
 
+    function getVisibleFieldRows() {
+        return Array.from(document.querySelectorAll('[data-structure-field-row]')).filter(
+            (row) => !row.classList.contains('d-none'),
+        );
+    }
+
+    function updateEmptyState() {
+        const emptyNode = document.getElementById('structure-field-empty');
+        if (!emptyNode) {
+            return;
+        }
+        emptyNode.classList.toggle('d-none', getVisibleFieldRows().length > 0);
+    }
+
+    function syncRowSummary(row) {
+        const label = row.querySelector('[name$="-label"]')?.value?.trim() || '—';
+        const name = row.querySelector('[name$="-name"]')?.value?.trim() || '—';
+        const fieldType = row.querySelector('[name$="-field_type"]')?.value || '';
+
+        const labelNode = row.querySelector('[data-field-summary="label"]');
+        const nameNode = row.querySelector('[data-field-summary="name"]');
+        const typeNode = row.querySelector('[data-field-summary="type"]');
+
+        if (labelNode) {
+            labelNode.textContent = label;
+        }
+        if (nameNode) {
+            nameNode.textContent = name;
+        }
+        if (typeNode) {
+            typeNode.textContent = fieldTypeLabel(fieldType);
+            typeNode.dataset.fieldTypeValue = fieldType;
+        }
+    }
+
+    function setRowInputValue(row, suffix, value) {
+        const input = row.querySelector(`[name$="-${suffix}"]`);
+        if (!input) {
+            return;
+        }
+        if (input.type === 'checkbox') {
+            input.checked = Boolean(value);
+            return;
+        }
+        input.value = value ?? '';
+    }
+
+    function applyHiddenFieldDefaults(row, fieldType) {
+        const defaults = FIELD_TYPE_DEFAULTS[fieldType] || {
+            max_length: '',
+            max_digits: '',
+            decimal_places: '',
+            default_value: '',
+        };
+
+        setRowInputValue(row, 'max_length', defaults.max_length ?? '');
+        setRowInputValue(row, 'max_digits', defaults.max_digits ?? '');
+        setRowInputValue(row, 'decimal_places', defaults.decimal_places ?? '');
+        setRowInputValue(row, 'default_value', defaults.default_value ?? '');
+    }
+
+    function getUsedColumnNames() {
+        const names = new Set();
+        getVisibleFieldRows().forEach((row) => {
+            const value = row.querySelector('[name$="-name"]')?.value?.trim().toLowerCase();
+            if (value) {
+                names.add(value);
+            }
+        });
+        return names;
+    }
+
+    function getUsedPropertyIds() {
+        const ids = new Set();
+        getVisibleFieldRows().forEach((row) => {
+            if (row.dataset.referencePropertyId) {
+                ids.add(row.dataset.referencePropertyId);
+            }
+        });
+        return ids;
+    }
+
+    function getNextSortOrder() {
+        let maxOrder = 0;
+        getVisibleFieldRows().forEach((row) => {
+            const value = parseInt(row.querySelector('[name$="-sort_order"]')?.value || '0', 10);
+            if (!Number.isNaN(value)) {
+                maxOrder = Math.max(maxOrder, value);
+            }
+        });
+        return maxOrder + 1;
+    }
+
     function appendRowFromTemplate() {
         const template = document.getElementById('field-row-template');
-        const tbody = document.getElementById('structure-field-rows');
-        if (!template || !tbody) {
+        const list = getFieldList();
+        if (!template || !list) {
             return null;
         }
 
         const nextIdx = getNextIndex();
         const html = template.innerHTML.replace(/__idx__/g, String(nextIdx));
-        tbody.insertAdjacentHTML('beforeend', html);
-        const newRow = tbody.lastElementChild;
+        list.insertAdjacentHTML('beforeend', html);
+        const newRow = list.lastElementChild;
         incrementTotalForms(nextIdx);
 
         if (newRow) {
-            bindFieldNameAutofill(newRow);
             bindDeleteButtons(newRow);
-            bindDuplicateButton(newRow);
+            updateEmptyState();
         }
         return newRow;
     }
 
-    function copyRowValues(sourceRow, targetRow) {
-        sourceRow.querySelectorAll('[name]').forEach((sourceInput) => {
-            const suffix = sourceInput.name.replace(/^fields-\d+-/, '');
-            const targetInput = targetRow.querySelector(`[name$="-${suffix}"]`);
-            if (!targetInput) {
-                return;
-            }
-            if (targetInput.type === 'checkbox') {
-                targetInput.checked = sourceInput.checked;
-            } else {
-                targetInput.value = sourceInput.value;
-            }
-        });
-    }
-
     function reindexForms() {
-        const tbody = document.getElementById('structure-field-rows');
+        const list = getFieldList();
         const totalInput = getTotalFormsInput();
-        if (!tbody || !totalInput) {
+        if (!list || !totalInput) {
             return;
         }
 
-        const rows = Array.from(tbody.querySelectorAll('[data-structure-field-row]'));
+        const rows = Array.from(list.querySelectorAll('[data-structure-field-row]'));
         rows.forEach((row, idx) => {
             row.querySelectorAll('[name]').forEach((input) => {
                 input.name = input.name.replace(/^fields-\d+-/, `fields-${idx}-`);
@@ -161,51 +239,432 @@
             if (idInput && idInput.value && deleteInput) {
                 deleteInput.checked = true;
                 row.classList.add('d-none');
+            } else {
+                row.remove();
+                reindexForms();
+            }
+            updateEmptyState();
+        });
+    }
+
+    function fillRowFromPropertyData(row, data) {
+        row.dataset.referencePropertyId = data.property_id;
+        setRowInputValue(row, 'label', data.label);
+        setRowInputValue(row, 'name', data.name);
+        setRowInputValue(row, 'field_type', data.field_type);
+        setRowInputValue(row, 'sort_order', String(getNextSortOrder()));
+        applyHiddenFieldDefaults(row, data.field_type);
+        syncRowSummary(row);
+    }
+
+    function suggestMaterialLinkName() {
+        const used = getUsedColumnNames();
+        if (!used.has('material')) {
+            return 'material';
+        }
+        let index = 2;
+        while (used.has(`material_${index}`)) {
+            index += 1;
+        }
+        return `material_${index}`;
+    }
+
+    function appendMaterialLinkRow() {
+        const row = appendRowFromTemplate();
+        if (!row) {
+            return null;
+        }
+        delete row.dataset.referencePropertyId;
+        setRowInputValue(row, 'label', 'Материал');
+        setRowInputValue(row, 'name', suggestMaterialLinkName());
+        setRowInputValue(row, 'field_type', 'MaterialLink');
+        setRowInputValue(row, 'sort_order', String(getNextSortOrder()));
+        applyHiddenFieldDefaults(row, 'MaterialLink');
+        syncRowSummary(row);
+        return row;
+    }
+
+    function getReferenceProperties() {
+        const node = document.getElementById('reference-properties-data');
+        if (!node) {
+            return [];
+        }
+        try {
+            return JSON.parse(node.textContent);
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function renderReferencePropertiesList(filterText = '') {
+        const listNode = document.getElementById('reference-properties-list');
+        const emptyNode = document.getElementById('reference-properties-empty');
+        const addBtn = document.getElementById('reference-properties-add-btn');
+        if (!listNode || !emptyNode || !addBtn) {
+            return;
+        }
+
+        const query = filterText.trim().toLowerCase();
+        const usedPropertyIds = getUsedPropertyIds();
+        const usedColumnNames = getUsedColumnNames();
+        const allProperties = getReferenceProperties();
+        const properties = allProperties.filter((item) => {
+            if (!query) {
+                return true;
+            }
+            const haystack = [
+                item.label,
+                item.name,
+                item.group_name,
+                item.unit,
+                item.data_type,
+            ].join(' ').toLowerCase();
+            return haystack.includes(query);
+        });
+
+        listNode.innerHTML = '';
+        if (!allProperties.length) {
+            emptyNode.classList.remove('d-none');
+            addBtn.disabled = true;
+            return;
+        }
+        emptyNode.classList.add('d-none');
+
+        if (!properties.length) {
+            listNode.innerHTML = '<p class="text-muted small mb-0">Ничего не найдено.</p>';
+            addBtn.disabled = true;
+            return;
+        }
+
+        const groups = new Map();
+        properties.forEach((item) => {
+            const groupName = item.group_name || 'Без группы';
+            if (!groups.has(groupName)) {
+                groups.set(groupName, []);
+            }
+            groups.get(groupName).push(item);
+        });
+
+        groups.forEach((items, groupName) => {
+            const groupEl = document.createElement('div');
+            groupEl.className = 'reference-properties-group';
+            groupEl.innerHTML = `<div class="reference-properties-group__title">${escapeHtml(groupName)}</div>`;
+
+            items.forEach((item) => {
+                const isUsed = usedPropertyIds.has(item.property_id)
+                    || usedColumnNames.has((item.name || '').toLowerCase());
+                const itemEl = document.createElement('label');
+                itemEl.className = `reference-property-item${isUsed ? ' is-used' : ''}`;
+                itemEl.innerHTML = `
+                    <input type="checkbox" class="form-check-input mt-1 reference-property-checkbox"
+                           value="${escapeHtml(item.property_id)}" ${isUsed ? 'disabled' : ''}>
+                    <span class="flex-grow-1">
+                        <span class="fw-semibold">${escapeHtml(item.label)}</span>
+                        <div class="reference-property-item__meta">
+                            <code>${escapeHtml(item.name)}</code>
+                            · ${escapeHtml(fieldTypeLabel(item.field_type))}
+                            ${isUsed ? ' · уже добавлено' : ''}
+                        </div>
+                    </span>
+                `;
+                itemEl.querySelector('input').dataset.propertyPayload = JSON.stringify(item);
+                groupEl.appendChild(itemEl);
+            });
+
+            listNode.appendChild(groupEl);
+        });
+
+        addBtn.disabled = true;
+        listNode.querySelectorAll('.reference-property-checkbox').forEach((checkbox) => {
+            checkbox.addEventListener('change', () => {
+                const selected = listNode.querySelectorAll('.reference-property-checkbox:checked:not(:disabled)');
+                addBtn.disabled = selected.length === 0;
+            });
+        });
+    }
+
+    function applyEntryToForm(form, name, value) {
+        const elements = form.querySelectorAll(`[name="${CSS.escape(name)}"]`);
+        if (!elements.length) {
+            return;
+        }
+        const first = elements[0];
+        if (first.type === 'checkbox') {
+            first.checked = value === 'on' || value === 'true' || value === '1';
+        } else if (first.type === 'radio') {
+            elements.forEach((radio) => {
+                radio.checked = radio.value === value;
+            });
+        } else {
+            first.value = value;
+        }
+    }
+
+    function saveFormDraft() {
+        const form = getStructureForm();
+        if (!form) {
+            return;
+        }
+
+        const entries = [];
+        form.querySelectorAll('input, select, textarea').forEach((element) => {
+            if (!element.name || element.type === 'submit' || element.type === 'button') {
+                return;
+            }
+            if (element.closest('#field-row-template')) {
+                return;
+            }
+            if (element.type === 'checkbox') {
+                if (element.checked) {
+                    entries.push({ name: element.name, value: element.value || 'on' });
+                }
+            } else if (element.type === 'radio') {
+                if (element.checked) {
+                    entries.push({ name: element.name, value: element.value });
+                }
+            } else {
+                entries.push({ name: element.name, value: element.value });
+            }
+        });
+
+        const referenceIds = {};
+        document.querySelectorAll('[data-structure-field-row]').forEach((row) => {
+            const match = row.querySelector('[name]')?.name?.match(/^fields-(\d+)-/);
+            if (match && row.dataset.referencePropertyId) {
+                referenceIds[match[1]] = row.dataset.referencePropertyId;
+            }
+        });
+
+        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ entries, referenceIds }));
+    }
+
+    function clearFormDraft() {
+        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+    }
+
+    function restoreFormDraft() {
+        const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!raw) {
+            return false;
+        }
+
+        let draft;
+        try {
+            draft = JSON.parse(raw);
+        } catch (error) {
+            clearFormDraft();
+            return false;
+        }
+
+        const form = getStructureForm();
+        if (!form || !Array.isArray(draft.entries)) {
+            clearFormDraft();
+            return false;
+        }
+
+        const formsetEntries = draft.entries.filter((entry) => /^fields-\d+-/.test(entry.name));
+        const mainEntries = draft.entries.filter((entry) => !/^fields-\d+-/.test(entry.name));
+
+        mainEntries.forEach(({ name, value }) => {
+            applyEntryToForm(form, name, value);
+        });
+
+        const list = getFieldList();
+        if (list) {
+            list.querySelectorAll('[data-structure-field-row]').forEach((row) => row.remove());
+        }
+        if (getTotalFormsInput()) {
+            getTotalFormsInput().value = '0';
+        }
+
+        const indices = new Set();
+        formsetEntries.forEach(({ name }) => {
+            const match = name.match(/^fields-(\d+)-/);
+            if (match) {
+                indices.add(parseInt(match[1], 10));
+            }
+        });
+
+        Array.from(indices).sort((a, b) => a - b).forEach((origIdx) => {
+            const rowEntries = formsetEntries.filter((entry) => {
+                const match = entry.name.match(/^fields-(\d+)-/);
+                return match && parseInt(match[1], 10) === origIdx;
+            });
+
+            const labelEntry = rowEntries.find((entry) => entry.name.endsWith('-label'));
+            const nameEntry = rowEntries.find((entry) => entry.name.endsWith('-name'));
+            const idEntry = rowEntries.find((entry) => entry.name.endsWith('-id'));
+            const isDeleted = rowEntries.some(
+                (entry) => entry.name.endsWith('-DELETE')
+                    && (entry.value === 'on' || entry.value === 'true'),
+            );
+
+            if (!labelEntry?.value && !nameEntry?.value && !idEntry?.value) {
                 return;
             }
 
-            row.remove();
-            reindexForms();
-        });
-    }
-
-    function bindDuplicateButton(row) {
-        const dupBtn = row.querySelector('.duplicate-row-btn');
-        if (!dupBtn || dupBtn.dataset.bound === 'true') {
-            return;
-        }
-        dupBtn.dataset.bound = 'true';
-
-        dupBtn.addEventListener('click', () => {
-            const newRow = appendRowFromTemplate();
-            if (newRow) {
-                copyRowValues(row, newRow);
+            const row = appendRowFromTemplate();
+            if (!row) {
+                return;
             }
+
+            rowEntries.forEach(({ name, value }) => {
+                const suffix = name.replace(/^fields-\d+-/, '');
+                const element = row.querySelector(`[name$="-${suffix}"]`);
+                if (!element) {
+                    return;
+                }
+                if (element.type === 'checkbox') {
+                    element.checked = value === 'on' || value === 'true' || value === '1';
+                } else {
+                    element.value = value;
+                }
+            });
+
+            const refId = draft.referenceIds?.[String(origIdx)];
+            if (refId) {
+                row.dataset.referencePropertyId = refId;
+            } else {
+                delete row.dataset.referencePropertyId;
+            }
+
+            if (isDeleted) {
+                row.classList.add('d-none');
+            }
+
+            bindDeleteButtons(row);
+            syncRowSummary(row);
+        });
+
+        reindexForms();
+        updateEmptyState();
+        clearFormDraft();
+        return true;
+    }
+
+    function shouldOpenPropertiesModal() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('open_properties') === '1';
+    }
+
+    function cleanupOpenPropertiesParam() {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has('open_properties')) {
+            return;
+        }
+        url.searchParams.delete('open_properties');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    }
+
+    function bindPropertiesModal() {
+        const openBtn = document.getElementById('add-from-properties-btn');
+        const modalEl = document.getElementById('reference-properties-modal');
+        const searchInput = document.getElementById('reference-properties-search');
+        const addBtn = document.getElementById('reference-properties-add-btn');
+        if (!openBtn || !modalEl || !searchInput || !addBtn || openBtn.dataset.bound === 'true') {
+            return null;
+        }
+        openBtn.dataset.bound = 'true';
+
+        const modal = window.bootstrap?.Modal
+            ? window.bootstrap.Modal.getOrCreateInstance(modalEl)
+            : null;
+
+        openBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            renderReferencePropertiesList();
+            modal?.show();
+        });
+
+        searchInput.addEventListener('input', () => {
+            renderReferencePropertiesList(searchInput.value);
+        });
+
+        addBtn.addEventListener('click', () => {
+            const selected = modalEl.querySelectorAll('.reference-property-checkbox:checked:not(:disabled)');
+            selected.forEach((checkbox) => {
+                let payload;
+                try {
+                    payload = JSON.parse(checkbox.dataset.propertyPayload || '{}');
+                } catch (error) {
+                    return;
+                }
+                const row = appendRowFromTemplate();
+                if (row) {
+                    fillRowFromPropertyData(row, payload);
+                }
+            });
+            updateEmptyState();
+            modal?.hide();
+        });
+
+        return modal;
+    }
+
+    function bindCreatePropertyLink() {
+        const link = document.getElementById('create-reference-property-btn');
+        if (!link || link.dataset.bound === 'true') {
+            return;
+        }
+        link.dataset.bound = 'true';
+
+        link.addEventListener('click', () => {
+            saveFormDraft();
+            const createUrl = new URL(link.href, window.location.origin);
+            const returnUrl = new URL(window.location.href);
+            returnUrl.searchParams.delete('open_properties');
+            createUrl.searchParams.set('next', returnUrl.pathname + returnUrl.search);
+            link.href = createUrl.toString();
         });
     }
 
-    function bindAddFieldButton() {
-        const addBtn = document.getElementById('add-field-btn');
-        if (!addBtn || addBtn.dataset.bound === 'true') {
+    function bindFormSubmitClearDraft() {
+        const form = getStructureForm();
+        if (!form || form.dataset.boundDraftClear === 'true') {
             return;
         }
-        addBtn.dataset.bound = 'true';
-        addBtn.addEventListener('click', () => {
-            appendRowFromTemplate();
+        form.dataset.boundDraftClear = 'true';
+        form.addEventListener('submit', clearFormDraft);
+    }
+
+    function bindMaterialLinkButton() {
+        const button = document.getElementById('add-material-link-btn');
+        if (!button || button.dataset.bound === 'true') {
+            return;
+        }
+        button.dataset.bound = 'true';
+        button.addEventListener('click', () => {
+            appendMaterialLinkRow();
         });
     }
 
     function bindFieldRows() {
         document.querySelectorAll('[data-structure-field-row]').forEach((row) => {
-            bindFieldNameAutofill(row);
             bindDeleteButtons(row);
-            bindDuplicateButton(row);
+            syncRowSummary(row);
         });
+        updateEmptyState();
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        bindTypePreview();
-        bindFieldRows();
-        bindAddFieldButton();
+        const restored = restoreFormDraft();
+        if (!restored) {
+            bindFieldRows();
+        } else {
+            document.querySelectorAll('[data-structure-field-row]').forEach((row) => {
+                bindDeleteButtons(row);
+            });
+        }
+
+        const modal = bindPropertiesModal();
+        bindCreatePropertyLink();
+        bindFormSubmitClearDraft();
+        bindMaterialLinkButton();
+
+        if (shouldOpenPropertiesModal()) {
+            cleanupOpenPropertiesParam();
+            renderReferencePropertiesList();
+            modal?.show();
+        }
     });
 })();

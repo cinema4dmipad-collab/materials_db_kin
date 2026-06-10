@@ -2,6 +2,7 @@ from django import forms
 from django.forms import inlineformset_factory
 
 from apps.core.tag_forms import TagNamesFormMixin
+from apps.materials.form_widgets import material_select_widget_attrs
 from apps.samples.models import Sample, SampleAttachment, SampleProperty
 from apps.samples.validators import validate_attachment_file
 
@@ -56,7 +57,9 @@ class SampleForm(TagNamesFormMixin, forms.ModelForm):
         widgets = {
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
-            'material': forms.Select(attrs={**_BOOTSTRAP_SELECT, 'data-sample-material-select': 'true'}),
+            'material': forms.Select(attrs=material_select_widget_attrs(
+                **{'data-sample-material-select': 'true'},
+            )),
             'object_type': forms.Select(attrs=_BOOTSTRAP_SELECT),
             'created_by': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
         }
@@ -73,6 +76,9 @@ class SampleAttachmentForm(forms.ModelForm):
         }
 
     def __init__(self, *args, optional=False, **kwargs):
+        sample = kwargs.pop('sample', None)
+        if sample and 'data' not in kwargs:
+            kwargs.setdefault('initial', {})['title'] = sample.name
         self.optional = optional
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():

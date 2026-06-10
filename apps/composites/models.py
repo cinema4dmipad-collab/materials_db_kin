@@ -20,8 +20,8 @@ class CompositeLayer(models.Model):
         related_name='used_in_composite_layers',
     )
     layer_number = models.PositiveIntegerField(verbose_name='Номер слоя')
-    angle = models.FloatField()
-    thickness = models.FloatField()
+    angle = models.FloatField(verbose_name='Угол армирования, °')
+    thickness = models.FloatField(verbose_name='Толщина, мм')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

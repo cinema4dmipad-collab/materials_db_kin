@@ -33,7 +33,7 @@
                         <td>{{ material.name }}</td>
                         <td>
                             {% if material.struct_type %}
-                            {% include 'includes/type_badge.html' with label=material.struct_type.name tone=material.struct_type.display_color %}
+                            {% include 'includes/type_badge.html' with label=material.struct_type.name tone=material.struct_type.display_color use_struct_type_filter=True %}
                             {% else %}
                             <span class="text-muted">—</span>
                             {% endif %}

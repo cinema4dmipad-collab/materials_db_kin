@@ -55,7 +55,13 @@
                     {% for item in display_values %}
                     <tr>
                         <td>{{ item.field.label }}</td>
-                        <td>{{ item.get_value|default:"—" }}</td>
+                        <td>
+                            {% if item.material_pk %}
+                            <a href="{% url 'materials:detail' item.material_pk %}">{{ item.get_value|default:"—" }}</a>
+                            {% else %}
+                            {{ item.get_value|default:"—" }}
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -30,7 +30,7 @@
                         <td>
                             <a href="{% url 'scans:detail' sample.pk scan.pk %}">{{ scan.title }}</a>
                         </td>
-                        <td>{% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method %}</td>
+                        <td>{% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method use_scan_method_filter=True %}</td>
                         <td>{% url 'scans:list' sample.pk as sample_scans_url %}{% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}</td>
                         <td>
                             <span class="file-badge file-badge--hdf5">HDF5</span>

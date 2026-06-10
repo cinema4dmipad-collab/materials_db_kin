@@ -349,6 +349,8 @@ class ScanViewsTests(TestCase):
         list_response = self.client.get(reverse('scans:list', kwargs={'sample_pk': self.sample.pk}))
 
         self.assertContains(list_response, 'Surface scan')
+        self.assertContains(list_response, 'type-pill-link')
+        self.assertContains(list_response, 'Теневой')
 
         file_name = scan.file.name
 
@@ -363,6 +365,53 @@ class ScanViewsTests(TestCase):
         self.assertFalse(ScanRecord.objects.filter(pk=scan.pk).exists())
 
         self.assertFalse(scan.file.storage.exists(file_name))
+
+    def test_all_scans_list_filters_by_method_search(self):
+        ScanRecord.objects.create(
+            sample=self.sample,
+            title='Echo scan',
+            method='echo',
+            file=make_hdf5_upload('echo.h5'),
+        )
+        ScanRecord.objects.create(
+            sample=self.sample,
+            title='Shadow scan',
+            method='shadow',
+            file=make_hdf5_upload('shadow.h5'),
+        )
+
+        response = self.client.get(
+            reverse('scans_all'),
+            {'q': 'Эхо', 'q_in': 'method'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Echo scan')
+        self.assertNotContains(response, 'Shadow scan')
+        self.assertContains(response, 'type-pill-link')
+
+    def test_sample_scans_list_filters_by_method_search(self):
+        ScanRecord.objects.create(
+            sample=self.sample,
+            title='Echo scan',
+            method='echo',
+            file=make_hdf5_upload('echo-list.h5'),
+        )
+        ScanRecord.objects.create(
+            sample=self.sample,
+            title='Shadow scan',
+            method='shadow',
+            file=make_hdf5_upload('shadow-list.h5'),
+        )
+
+        response = self.client.get(
+            reverse('scans:list', kwargs={'sample_pk': self.sample.pk}),
+            {'q': 'Эхо', 'q_in': 'method'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Echo scan')
+        self.assertNotContains(response, 'Shadow scan')
 
     def test_upload_rejects_invalid_extension(self):
 
@@ -387,3 +436,27 @@ class ScanViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
         self.assertFalse(ScanRecord.objects.filter(title='Bad file').exists())
+
+    def test_create_form_prefills_title_with_sample_name(self):
+        create_url = reverse('scans:create', kwargs={'sample_pk': self.sample.pk})
+
+        response = self.client.get(create_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<input type="text" name="title" value="{self.sample.name}"',
+            html=False,
+        )
+
+    def test_scans_tab_attach_form_prefills_title_with_sample_name(self):
+        scans_url = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
+
+        response = self.client.get(scans_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<input type="text" name="scan-title" value="{self.sample.name}"',
+            html=False,
+        )

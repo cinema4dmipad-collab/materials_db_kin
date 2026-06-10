@@ -5,3 +5,5 @@ media/
 staticfiles/
 db.sqlite3
 .venv/
+logs/
+test_out*.txt

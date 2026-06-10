@@ -6,7 +6,13 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from apps.core.list_filters import QuerySetFilterMixin
+from apps.core.list_filters import (
+    ALL_SEARCH_SCOPE,
+    OBJECT_TYPE_SEARCH_SCOPE,
+    TAG_SEARCH_SCOPE,
+    QuerySetFilterMixin,
+    build_choice_label_filter,
+)
 from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyFormSet
 from apps.samples.models import Sample, SampleAttachment
 
@@ -99,9 +105,17 @@ class SampleListView(QuerySetFilterMixin, ListView):
     paginate_by = 10
     enable_tag_filter = True
     search_fields = ('code', 'name', 'material__code', 'material__name')
-    search_placeholder = 'Код, название, материал или тег...'
+    search_scopes = (
+        (ALL_SEARCH_SCOPE, 'Везде', ('code', 'name', 'material__code', 'material__name')),
+        ('code', 'Код', ('code',)),
+        ('name', 'Название', ('name',)),
+        ('material', 'Материал', ('material__code', 'material__name')),
+        (OBJECT_TYPE_SEARCH_SCOPE, 'Тип объекта', ()),
+        (TAG_SEARCH_SCOPE, 'Тег', ()),
+    )
+    search_placeholder = 'Введите текст для поиска...'
     choice_filters = (('object_type', 'object_type'),)
-    choice_filter_labels = {'object_type': 'Тип объекта', 'tag': 'Тег'}
+    choice_filter_labels = {'object_type': 'Тип объекта'}
 
     def get_queryset(self):
         return self.filter_queryset(
@@ -110,6 +124,14 @@ class SampleListView(QuerySetFilterMixin, ListView):
 
     def get_choice_filter_options(self):
         return {'object_type': Sample.OBJECT_TYPES}
+
+    def get_custom_search_scope_filters(self):
+        return {
+            OBJECT_TYPE_SEARCH_SCOPE: build_choice_label_filter(
+                Sample.OBJECT_TYPES,
+                'object_type',
+            ),
+        }
 
 
 class SampleDetailView(DetailView):
@@ -128,12 +150,21 @@ class SampleDetailView(DetailView):
         context['attachment_count'] = self.object.attachments.count()
         context['scans'] = self.object.scans.all()[:5]
         context['attachments'] = self.object.attachments.all()[:5]
-        context['properties'] = (
+        material_property_ids = set(
+            self.object.material.properties.values_list('property_id', flat=True)
+        )
+        sample_properties = list(
             self.object.properties.select_related('property', 'property__group').order_by(
                 'property__group__sort_order',
                 'property__name',
             )
         )
+        context['material_properties'] = [
+            item for item in sample_properties if item.property_id in material_property_ids
+        ]
+        context['extra_properties'] = [
+            item for item in sample_properties if item.property_id not in material_property_ids
+        ]
         return context
 
 
@@ -203,12 +234,18 @@ class AttachmentListView(QuerySetFilterMixin, SampleAttachmentMixin, ListView):
     template_name = 'samples/attachments/list.html'
     context_object_name = 'attachments'
     search_fields = ('title', 'description', 'file')
-    search_placeholder = 'Название, описание или имя файла...'
+    search_scopes = (
+        (ALL_SEARCH_SCOPE, 'Везде', ('title', 'description', 'file')),
+        ('title', 'Название', ('title',)),
+        ('description', 'Описание', ('description',)),
+        ('file', 'Файл', ('file',)),
+    )
+    search_placeholder = 'Введите текст для поиска...'
 
     def get_attachment_form(self):
         if hasattr(self, '_attachment_form'):
             return self._attachment_form
-        kwargs = {'prefix': 'attachment'}
+        kwargs = {'prefix': 'attachment', 'sample': self.sample}
         if self.request.method == 'POST':
             kwargs['data'] = self.request.POST
             kwargs['files'] = self.request.FILES
@@ -216,7 +253,12 @@ class AttachmentListView(QuerySetFilterMixin, SampleAttachmentMixin, ListView):
 
     def post(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
-        form = SampleAttachmentForm(request.POST, request.FILES, prefix='attachment')
+        form = SampleAttachmentForm(
+            request.POST,
+            request.FILES,
+            prefix='attachment',
+            sample=self.sample,
+        )
         if form.is_valid():
             attachment = form.save(commit=False)
             attachment.sample = self.sample

@@ -49,12 +49,12 @@
     function filterSuggestions(allTags, token) {
         var query = token.toLowerCase();
         if (!query) {
-            return allTags.slice(0, 8);
+            return allTags;
         }
         return allTags.filter(function (tag) {
             return tag.name.toLowerCase().indexOf(query) !== -1
                 || tag.slug.toLowerCase().indexOf(query) !== -1;
-        }).slice(0, 8);
+        });
     }
 
     function renderDropdown(widget, input, dropdown, suggestions) {
@@ -116,6 +116,10 @@
                 applyTagName(input, button.dataset.tagName || '');
                 markUsedSuggestions(widget, input);
             });
+        });
+
+        dropdown.addEventListener('mousedown', function (event) {
+            event.preventDefault();
         });
 
         input.addEventListener('focus', function () {

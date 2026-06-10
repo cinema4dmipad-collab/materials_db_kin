@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView, View
 
-from apps.core.list_filters import QuerySetFilterMixin
+from apps.core.list_filters import ALL_SEARCH_SCOPE, STRUCT_TYPE_SEARCH_SCOPE, TAG_SEARCH_SCOPE, QuerySetFilterMixin
 from apps.materials.forms import (
     MaterialForm,
     MaterialPropertyFormSet,
@@ -48,6 +48,13 @@ class MaterialFormsetMixin:
         structure_type = self.get_selected_structure_type()
         return bool(structure_type and structure_type.allow_layers)
 
+    def _has_formset_management_data(self, prefix: str) -> bool:
+        return (
+            self.request.method == 'POST'
+            and f'{prefix}-TOTAL_FORMS' in self.request.POST
+            and f'{prefix}-INITIAL_FORMS' in self.request.POST
+        )
+
     def get_formset(self):
         kwargs = {'prefix': 'properties'}
         if self.request.method == 'POST':
@@ -62,7 +69,7 @@ class MaterialFormsetMixin:
 
         formset_class = get_composite_layer_formset()
         kwargs = {'prefix': 'layers'}
-        if self.request.method == 'POST':
+        if self._has_formset_management_data('layers'):
             kwargs['data'] = self.request.POST
         if getattr(self, 'object', None):
             kwargs['instance'] = self.object
@@ -76,6 +83,40 @@ class MaterialFormsetMixin:
             context['layer_formset'] = self.get_layer_formset()
             context['layers_allowed'] = self.layers_allowed()
         return context
+
+    def post(self, request, *args, **kwargs):
+        if request.POST.get('_apply_struct_type'):
+            if isinstance(self, UpdateView):
+                self.object = self.get_object()
+            return self.render_apply_struct_type()
+        return super().post(request, *args, **kwargs)
+
+    def render_apply_struct_type(self):
+        instance = getattr(self, 'object', None)
+        if not isinstance(self, UpdateView):
+            self.object = None
+        form = MaterialForm(self.request.POST, instance=instance)
+        formset = MaterialPropertyFormSet(
+            self.request.POST,
+            instance=instance,
+            prefix='properties',
+        )
+        layer_formset = None
+        if self.layers_allowed():
+            layer_kwargs = {
+                'instance': instance,
+                'prefix': 'layers',
+            }
+            if self._has_formset_management_data('layers'):
+                layer_kwargs['data'] = self.request.POST
+            layer_formset = get_composite_layer_formset()(**layer_kwargs)
+        return self.render_to_response(
+            self.get_context_data(
+                form=form,
+                formset=formset,
+                layer_formset=layer_formset,
+            )
+        )
 
     def form_valid(self, form):
         is_update = isinstance(self, UpdateView)
@@ -93,11 +134,13 @@ class MaterialFormsetMixin:
                     prefix='properties',
                 )
                 if self.layers_allowed():
-                    layer_formset = get_composite_layer_formset()(
-                        self.request.POST,
-                        instance=self.object,
-                        prefix='layers',
-                    )
+                    layer_kwargs = {
+                        'instance': self.object,
+                        'prefix': 'layers',
+                    }
+                    if self._has_formset_management_data('layers'):
+                        layer_kwargs['data'] = self.request.POST
+                    layer_formset = get_composite_layer_formset()(**layer_kwargs)
                 properties_valid = formset.is_valid()
                 layers_valid = layer_formset is None or layer_formset.is_valid()
                 if not properties_valid or not layers_valid:
@@ -142,10 +185,18 @@ class MaterialListView(QuerySetFilterMixin, ListView):
     context_object_name = 'materials'
     paginate_by = 10
     enable_tag_filter = True
-    search_fields = ('code', 'name', 'description')
-    search_placeholder = 'Код, название, описание или тег...'
+    search_fields = ('code', 'name', 'description', 'struct_type__name')
+    search_scopes = (
+        (ALL_SEARCH_SCOPE, 'Везде', ('code', 'name', 'description', 'struct_type__name')),
+        ('code', 'Код', ('code',)),
+        ('name', 'Название', ('name',)),
+        ('description', 'Описание', ('description',)),
+        (STRUCT_TYPE_SEARCH_SCOPE, 'Тип структуры', ('struct_type__name',)),
+        (TAG_SEARCH_SCOPE, 'Тег', ()),
+    )
+    search_placeholder = 'Введите текст для поиска...'
     choice_filters = (('struct_type', 'struct_type_id'),)
-    choice_filter_labels = {'struct_type': 'Тип структуры', 'tag': 'Тег'}
+    choice_filter_labels = {'struct_type': 'Тип структуры'}
 
     def get_queryset(self):
         return self.filter_queryset(
@@ -245,15 +296,17 @@ class MaterialDetailView(DetailView):
         return structure_context
 
     def get_structure_display_value(self, field, value):
+        from apps.structures.display_format import format_structure_field_display
+        from apps.structures.forms import material_from_value
+
         if value is None or value == '':
             return '—'
         if field.field_type == MATERIAL_LINK_FIELD_TYPE:
-            try:
-                material = Material.objects.get(pk=value)
-            except (Material.DoesNotExist, ValueError, TypeError):
-                return value
-            return f'{material.code} - {material.name}'
-        return value
+            material = material_from_value(value)
+            if material is not None:
+                return f'{material.code} - {material.name}'
+            return value
+        return format_structure_field_display(field, value)
 
 
 class MaterialCreateView(MaterialFormsetMixin, CreateView):

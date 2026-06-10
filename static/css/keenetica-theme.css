@@ -266,7 +266,7 @@ a:hover {
     border-radius: 0.35rem;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     background: var(--kx-surface);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .card-header {
@@ -366,6 +366,23 @@ a:hover {
     --bs-btn-hover-color: var(--kx-brand-dark);
 }
 
+.material-select-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.material-select-field .material-select-link {
+    align-self: flex-start;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.material-select-field .material-select-link:hover {
+    text-decoration: underline;
+}
+
 /* ——— Tables ——— */
 
 .app-data-table {
@@ -433,6 +450,76 @@ a:hover {
     border-bottom: 2px solid var(--kx-brand);
 }
 
+/* ——— Material detail properties ——— */
+
+.material-properties-table-wrap {
+    border-top: 1px solid var(--kx-border);
+}
+
+.material-properties-table {
+    --bs-table-striped-bg: rgba(0, 118, 121, 0.04);
+    --bs-table-hover-bg: rgba(0, 118, 121, 0.08);
+}
+
+.material-properties-table__unit-col {
+    width: 8rem;
+}
+
+.material-properties-table .material-props-section__header th {
+    background: var(--kx-surface-muted);
+    border-top: 2px solid var(--kx-border-strong);
+    border-bottom: 1px solid var(--kx-border);
+    padding: 0.75rem 1rem 0.75rem 1.35rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    color: var(--kx-brand-dark);
+    position: relative;
+}
+
+.material-properties-table tbody.material-props-section:first-of-type .material-props-section__header th {
+    border-top: none;
+}
+
+.material-properties-table .material-props-section__header th::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 1.15em;
+    background: var(--kx-brand);
+    border-radius: 2px;
+}
+
+.material-properties-table .material-props-section__name {
+    width: 38%;
+    font-weight: 600;
+    color: var(--kx-text);
+    background: transparent;
+}
+
+.material-properties-table .material-props-section__value {
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.material-properties-table .material-props-section__unit {
+    color: var(--kx-text-muted);
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.material-properties-table .material-props-section__empty td {
+    color: var(--kx-text-muted);
+    font-style: italic;
+    background: var(--kx-surface-muted);
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
 /* ——— Tone pills & tags ——— */
 
 .type-pill,
@@ -465,6 +552,22 @@ a:hover {
 a.entity-tag {
     text-decoration: none;
     transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+a.type-pill-link {
+    text-decoration: none;
+    color: inherit;
+    transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+a.type-pill-link:hover .type-pill {
+    filter: brightness(0.96);
+    transform: translateY(-1px);
+}
+
+a.type-pill-link:focus-visible .type-pill {
+    outline: 2px solid rgba(0, 118, 121, 0.45);
+    outline-offset: 2px;
 }
 
 a.entity-tag:hover {

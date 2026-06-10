@@ -22,7 +22,13 @@ class StructureTypeFormsetMixin:
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.setdefault('field_formset', self.get_field_formset())
+        context['reference_properties'] = self.get_reference_properties()
         return context
+
+    def get_reference_properties(self):
+        from apps.structures.property_mapping import reference_properties_for_picker
+
+        return reference_properties_for_picker()
 
     def validate_and_save_formsets(self, form):
         field_formset = self.get_field_formset()
@@ -138,9 +144,7 @@ class StructureTypeManageView(TemplateView):
         context['structure_type'] = structure_type
         context['color_form'] = StructureTypeDisplayColorForm(instance=structure_type)
         context['fields'] = structure_type.fields.all()
-        context['can_create_table'] = (
-            not structure_type.is_created and structure_type.fields.exists()
-        )
+        context['can_create_table'] = not structure_type.is_created
         context['can_drop_table'] = structure_type.is_created
         context['linked_materials_count'] = Material.objects.filter(
             struct_type=structure_type,
@@ -161,10 +165,6 @@ class StructureTypeCreateTableView(View):
         if structure_type.is_created:
             messages.warning(request, 'SQL-таблица уже создана.')
             return redirect('structures:type_manage', type_code=type_code)
-
-        if not structure_type.fields.exists():
-            messages.error(request, 'Добавьте хотя бы одно поле перед созданием таблицы.')
-            return redirect('structures:type_edit', type_code=type_code)
 
         result = SQLExecutor.create_table(structure_type)
         if result['success']:

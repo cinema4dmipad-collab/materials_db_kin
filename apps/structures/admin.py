@@ -5,6 +5,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
+from apps.structures.default_values import validate_structure_field_default
 from apps.structures.models import (
     MATERIAL_LINK_FIELD_TYPE,
     STRUCTURE_FIELD_LOCK_ERROR,
@@ -26,6 +27,21 @@ class StructureFieldAdminForm(forms.ModelForm):
             cleaned_data['max_length'] = None
             cleaned_data['max_digits'] = None
             cleaned_data['decimal_places'] = None
+
+        default_value = (cleaned_data.get('default_value') or '').strip()
+        field_type = cleaned_data.get('field_type')
+        if default_value and field_type:
+            try:
+                validate_structure_field_default(
+                    field_type=field_type,
+                    default_value=default_value,
+                    label=(cleaned_data.get('label') or '').strip(),
+                    name=(cleaned_data.get('name') or '').strip(),
+                    max_digits=cleaned_data.get('max_digits'),
+                    decimal_places=cleaned_data.get('decimal_places'),
+                )
+            except ValueError as exc:
+                self.add_error('default_value', str(exc))
         return cleaned_data
 
     def save(self, commit=True):

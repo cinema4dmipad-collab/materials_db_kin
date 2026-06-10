@@ -19,8 +19,57 @@
 }
 
 .list-filter-panel__field--search {
-    flex: 1 1 12rem;
-    min-width: 10rem;
+    flex: 1 1 14rem;
+    min-width: 12rem;
+}
+
+.list-filter-panel__field--scopes {
+    flex: 1 1 100%;
+    order: 10;
+}
+
+.search-scope-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    padding: 0.35rem 0.45rem;
+    border: 1px solid var(--kx-border-strong);
+    border-radius: 0.35rem;
+    background: #fff;
+    min-height: 2.15rem;
+    align-items: center;
+}
+
+.search-scope-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--kx-brand-dark);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.search-scope-checkbox input {
+    width: 0.9rem;
+    height: 0.9rem;
+    margin: 0;
+    accent-color: var(--kx-brand);
+    cursor: pointer;
+}
+
+.search-scope-hint {
+    margin: 0.25rem 0 0;
+    font-size: 0.6875rem;
+    color: var(--kx-text-muted);
+}
+
+.search-input-wrap--grow {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .list-filter-panel__field--filter {
@@ -100,6 +149,40 @@
     font-weight: 500;
 }
 
+.list-filter-chip--removable {
+    text-decoration: none;
+    color: var(--kx-brand-dark);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.list-filter-chip--removable:hover {
+    background: #fff;
+    border-color: rgba(0, 118, 121, 0.45);
+    color: var(--kx-brand-dark);
+}
+
+.list-filter-chip__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 0;
+    height: 1rem;
+    margin-left: 0;
+    opacity: 0;
+    overflow: hidden;
+    font-size: 1.05rem;
+    line-height: 1;
+    font-weight: 700;
+    color: rgba(0, 90, 92, 0.75);
+    transition: opacity 0.15s ease, width 0.15s ease, margin-left 0.15s ease;
+}
+
+.list-filter-chip--removable:hover .list-filter-chip__remove {
+    width: 1rem;
+    margin-left: 0.15rem;
+    opacity: 1;
+}
+
 /* Поле поиска с иконкой */
 
 .search-input-wrap {
@@ -154,45 +237,14 @@
     box-shadow: 0 0 0 0.2rem rgba(0, 118, 121, 0.14);
 }
 
-/* Быстрый поиск в таблице (клиентский) */
+/* Клиентский фильтр использует те же классы list-filter-panel */
 
-.inline-search-panel {
-    padding: 0.85rem 1rem;
-    background: linear-gradient(90deg, var(--tone-blue-bg) 0%, rgba(255, 255, 255, 0) 100%);
+.list-filter-panel--client .list-filter-panel__toolbar {
+    align-items: flex-end;
+}
+
+.list-filter-panel--client {
     border-bottom: 1px solid var(--kx-border);
-}
-
-.inline-search-panel__label {
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--tone-blue-text);
-    margin-bottom: 0.45rem;
-}
-
-.inline-search-panel .search-input-field {
-    min-height: 2.45rem;
-}
-
-/* Поиск по карточкам */
-
-.card-search-panel {
-    margin-bottom: 1rem;
-    padding: 1rem 1.1rem;
-    border: 1px solid rgba(106, 143, 192, 0.18);
-    border-radius: 0.35rem;
-    background: linear-gradient(180deg, var(--tone-blue-bg) 0%, #fff 100%);
-}
-
-.card-search-panel__title {
-    font-size: 0.8125rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--tone-blue-text);
-    margin-bottom: 0.55rem;
 }
 
 .entity-tags {
@@ -224,11 +276,15 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    max-height: min(240px, 40vh);
     padding: 0.35rem;
     border: 1px solid rgba(0, 118, 121, 0.22);
     border-radius: 0.35rem;
     background: #fff;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 .tag-input-dropdown__item {
@@ -281,9 +337,14 @@
 .tag-input-existing__list {
     display: flex;
     flex-wrap: wrap;
+    align-content: flex-start;
     gap: 0.4rem;
+    min-height: 0;
     max-height: 148px;
+    padding-right: 0.15rem;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 button.tag-input-pick {
@@ -306,6 +367,7 @@ button.tag-input-pick--selected::before {
     }
 
     .list-filter-panel__field--search,
+    .list-filter-panel__field--scopes,
     .list-filter-panel__field--filter {
         flex: 1 1 100%;
     }

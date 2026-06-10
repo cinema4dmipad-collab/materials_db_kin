@@ -1,0 +1,37 @@
+<li class="structure-field-item" data-structure-field-row{% if field_form.instance.pk %} data-existing-field="true"{% endif %}>
+    <div class="structure-field-item__body">
+        <div class="structure-field-item__main">
+            <div class="structure-field-item__label" data-field-summary="label">{{ field_form.label.value|default:"—" }}</div>
+            <div class="structure-field-item__meta">
+                <code data-field-summary="name">{{ field_form.name.value|default:"—" }}</code>
+                <span class="badge rounded-pill structure-field-item__type" data-field-summary="type" data-field-type-value="{{ field_form.field_type.value|default:'' }}">
+                    {% if field_form.instance.pk %}{{ field_form.instance.get_field_type_display }}{% else %}—{% endif %}
+                </span>
+            </div>
+            {% if field_form.label.errors or field_form.name.errors or field_form.field_type.errors or field_form.default_value.errors %}
+            <div class="structure-field-item__errors">
+                {% for error in field_form.label.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                {% for error in field_form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                {% for error in field_form.field_type.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                {% for error in field_form.default_value.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% if show_actions %}
+        <button type="button" class="btn btn-sm btn-outline-danger delete-row-btn">Удалить</button>
+        {% endif %}
+    </div>
+    <div class="structure-field-item__inputs visually-hidden" aria-hidden="true">
+        {{ field_form.label }}
+        {{ field_form.name }}
+        {{ field_form.field_type }}
+        {{ field_form.is_required }}
+        {{ field_form.sort_order }}
+        {{ field_form.max_length }}
+        {{ field_form.max_digits }}
+        {{ field_form.decimal_places }}
+        {{ field_form.default_value }}
+        {% if field_form.id %}{{ field_form.id }}{% endif %}
+        {% if field_form.DELETE %}{{ field_form.DELETE }}{% endif %}
+    </div>
+</li>

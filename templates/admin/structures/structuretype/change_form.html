@@ -2,7 +2,7 @@
 
 {% block object-tools-items %}
     {{ block.super }}
-    {% if original and not original.is_created and original.fields.exists %}
+    {% if original and not original.is_created %}
         <li>
             <a href="{% url 'admin:structures_structuretype_create_table' original.pk %}"
                class="button" style="background-color: #28a745; color: white;">

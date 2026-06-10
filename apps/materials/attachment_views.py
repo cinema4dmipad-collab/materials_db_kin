@@ -3,7 +3,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import DeleteView, ListView
 
-from apps.core.list_filters import QuerySetFilterMixin
+from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
 from apps.materials.forms_attachments import MaterialAttachmentForm
 from apps.materials.models import MaterialAttachment
 from apps.materials.tab_mixins import MaterialTabMixin
@@ -18,7 +18,13 @@ class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, L
     template_name = 'materials/attachments/list.html'
     context_object_name = 'attachments'
     search_fields = ('title', 'description', 'file')
-    search_placeholder = 'Название, описание или имя файла...'
+    search_scopes = (
+        (ALL_SEARCH_SCOPE, 'Везде', ('title', 'description', 'file')),
+        ('title', 'Название', ('title',)),
+        ('description', 'Описание', ('description',)),
+        ('file', 'Файл', ('file',)),
+    )
+    search_placeholder = 'Введите текст для поиска...'
 
     def get_attachment_form(self):
         if hasattr(self, '_attachment_form'):

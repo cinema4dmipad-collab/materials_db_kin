@@ -1,8 +1,10 @@
+import uuid
 from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import ValidationError
 
+from apps.materials.form_widgets import material_select_widget_attrs
 from apps.materials.models import Material
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField
 from apps.structures.sql_executor import SQLExecutor
@@ -27,10 +29,30 @@ def material_from_value(value):
         return None
     if isinstance(value, Material):
         return value
+
+    candidates = [value]
+    text = str(value)
     try:
-        return Material.objects.get(pk=value)
-    except (Material.DoesNotExist, ValueError, TypeError):
-        return None
+        candidates.append(uuid.UUID(text))
+    except (ValueError, TypeError, AttributeError):
+        pass
+    if len(text) == 32:
+        try:
+            candidates.append(uuid.UUID(hex=text))
+        except ValueError:
+            pass
+
+    seen = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            return Material.objects.get(pk=candidate)
+        except (Material.DoesNotExist, ValueError, TypeError):
+            continue
+    return None
 
 
 def _parse_default(field: StructureField):
@@ -60,7 +82,7 @@ def _build_dynamic_field(structure_field: StructureField) -> forms.Field:
             help_text=help_text,
             initial=initial,
             queryset=Material.objects.order_by('code'),
-            widget=forms.Select(attrs=_BOOTSTRAP_SELECT),
+            widget=forms.Select(attrs=material_select_widget_attrs()),
         )
     if structure_field.field_type == 'CharField':
         return forms.CharField(

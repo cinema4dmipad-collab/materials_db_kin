@@ -77,6 +77,8 @@ class SampleViewsTests(TestCase):
         list_response = self.client.get(reverse('samples:list'))
 
         self.assertContains(list_response, 'SMP-UI-001')
+        self.assertContains(list_response, 'type-pill-link')
+        self.assertContains(list_response, 'Испытательный')
 
         create_response = self.client.post(
             reverse('samples:create'),
@@ -93,6 +95,25 @@ class SampleViewsTests(TestCase):
         self.assertEqual(create_response.status_code, 302)
 
         self.assertTrue(Sample.objects.filter(code='SMP-UI-002').exists())
+
+    def test_sample_list_filters_by_object_type_search(self):
+        Sample.objects.create(
+            code='SMP-UI-CTRL',
+            name='Control sample',
+            material=self.material,
+            object_type='control',
+        )
+
+        response = self.client.get(
+            reverse('samples:list'),
+            {'q': 'Испытательный', 'q_in': 'object_type'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'SMP-UI-001')
+        self.assertNotContains(response, 'SMP-UI-CTRL')
+        self.assertContains(response, 'type-pill-link')
+        self.assertContains(response, 'Испытательный')
 
     def test_sample_property_formset_save_directly(self):
         density = Property.objects.create(
@@ -223,6 +244,11 @@ class SampleViewsTests(TestCase):
             unit='g/cm3',
             data_type='number',
         )
+        MaterialProperty.objects.create(
+            material=self.material,
+            property=density,
+            value='1.60',
+        )
         SampleProperty.objects.create(
             sample=self.sample,
             property=density,
@@ -232,8 +258,10 @@ class SampleViewsTests(TestCase):
         response = self.client.get(reverse('samples:detail', kwargs={'pk': self.sample.pk}))
 
         self.assertContains(response, 'Свойства')
+        self.assertContains(response, 'Из свойств материала')
         self.assertContains(response, 'Density')
         self.assertContains(response, '2.10')
+        self.assertNotContains(response, 'client_filter_bar')
 
     def test_attach_scan_on_sample_scans_tab(self):
 
@@ -348,6 +376,18 @@ class SampleViewsTests(TestCase):
         self.assertRedirects(post_response, attachments_url)
 
         self.assertTrue(SampleAttachment.objects.filter(title='Photo').exists())
+
+    def test_attachments_tab_prefills_title_with_sample_name(self):
+        attachments_url = reverse('attachments:list', kwargs={'sample_pk': self.sample.pk})
+
+        response = self.client.get(attachments_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<input type="text" name="attachment-title" value="{self.sample.name}"',
+            html=False,
+        )
 
     def test_sample_detail_shows_tabs(self):
 

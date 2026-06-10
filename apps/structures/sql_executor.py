@@ -6,6 +6,8 @@ from decimal import Decimal
 from django.db import connection
 from django.utils import timezone
 
+from apps.structures.default_values import validate_structure_field_model
+from apps.structures.display_format import normalize_structure_field_value
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 
 IDENTIFIER_RE = re.compile(r'^[a-z][a-z0-9_]*$')
@@ -27,11 +29,12 @@ class SQLExecutor:
                 raise ValueError(f'Таблица «{structure_type.table_name}» уже создана.')
 
             fields = list(structure_type.fields.all())
-            if not fields:
-                raise ValueError(f'У типа «{structure_type.name}» нет полей.')
             cls._raise_for_unsupported_fields(fields)
             if cls.table_exists(structure_type):
                 raise ValueError(f'Таблица «{structure_type.table_name}» уже существует.')
+
+            for field in cls._sql_fields(fields):
+                validate_structure_field_model(field)
 
             table_name = cls.quote_identifier(structure_type.table_name)
             columns = [cls._id_column_sql()]
@@ -190,9 +193,10 @@ class SQLExecutor:
 
             if row is None:
                 return {'success': False, 'record': None, 'error': 'Record not found'}
+            record = dict(zip(columns, row, strict=True))
             return {
                 'success': True,
-                'record': dict(zip(columns, row, strict=True)),
+                'record': cls._normalize_record(structure_type, record),
                 'error': None,
             }
         except Exception as exc:
@@ -254,6 +258,8 @@ class SQLExecutor:
             cls._raise_for_unsupported_fields([field])
             if not cls._is_sql_backed_field(field):
                 return {'success': True, 'error': None}
+
+            validate_structure_field_model(field)
 
             table_name = cls.quote_identifier(structure_type.table_name)
             column_name = cls.quote_identifier(field.name)
@@ -400,14 +406,36 @@ class SQLExecutor:
             return 'UUID' if connection.vendor == 'postgresql' else 'TEXT'
         return 'TEXT'
 
+    @classmethod
+    def _material_link_pk(cls, value) -> str:
+        if hasattr(value, 'pk'):
+            raw = value.pk
+        else:
+            raw = uuid.UUID(str(value))
+        pk = str(raw)
+        if connection.vendor == 'sqlite':
+            return pk.replace('-', '')
+        return pk
+
+    @classmethod
+    def _normalize_record(cls, structure_type: StructureType, record: dict) -> dict:
+        fields_by_name = {
+            field.name: field for field in structure_type.fields.all()
+        }
+        normalized = dict(record)
+        for name, value in record.items():
+            field = fields_by_name.get(name)
+            if field is None:
+                continue
+            normalized[name] = normalize_structure_field_value(field, value)
+        return normalized
+
     @staticmethod
     def _coerce_for_db(field: StructureField, value):
         if value is None or value == '':
             return None
         if field.field_type == MATERIAL_LINK_FIELD_TYPE:
-            if hasattr(value, 'pk'):
-                return str(value.pk)
-            return str(uuid.UUID(str(value)))
+            return SQLExecutor._material_link_pk(value)
         if field.field_type == 'BooleanField':
             if isinstance(value, str):
                 value = value.strip().lower() in {'1', 'true', 'yes', 'on'}

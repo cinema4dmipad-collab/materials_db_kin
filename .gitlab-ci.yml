@@ -22,23 +22,11 @@ stages:
   - deploy
 
 variables:
-  POSTGRES_DB: materials_db_test
-  POSTGRES_USER: materials
-  POSTGRES_PASSWORD: ci-test-db-password
-  POSTGRES_HOST_AUTH_METHOD: trust
-  DB_ENGINE: postgresql
-  DB_HOST: postgres
-  DB_NAME: materials_db_test
-  DB_USER: materials
-  DB_PASSWORD: ci-test-db-password
-  DB_PORT: '5432'
-  DB_WAIT_TIMEOUT: '30'
   SECRET_KEY: ci-test-secret-key-not-for-production
   DEBUG: 'True'
   USE_S3: 'false'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
   POETRY_NO_INTERACTION: '1'
-  POETRY_VIRTUALENVS_CREATE: 'false'
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: '/certs'
   PYTHON_IMAGE: python:3.13-slim-bookworm
@@ -48,27 +36,56 @@ variables:
 default:
   interruptible: true
 
-.poetry_setup: &poetry_setup
+# Instance runner (gr3) uses Shell (pwsh) on Windows — Docker image/services are ignored.
+.poetry_setup_linux: &poetry_setup_linux
   - apt-get update -qq
   - apt-get install -y -qq --no-install-recommends libpq-dev gcc curl
   - rm -rf /var/lib/apt/lists/*
   - chmod +x deploy/ci/poetry_install.sh
   - ./deploy/ci/poetry_install.sh
 
+.poetry_setup_windows: &poetry_setup_windows
+  - poetry --version
+  - pwsh -File deploy/ci/poetry_install.ps1
+
 # --- Test ---
 
 test:
+  stage: test
+  variables:
+    GIT_CLEAN_FLAGS: "-ffdx -e .venv/ -e .venv/**"
+    POETRY_VIRTUALENVS_IN_PROJECT: 'true'
+    POETRY_VIRTUALENVS_CREATE: 'true'
+    DB_ENGINE: ''
+  before_script:
+    - *poetry_setup_windows
+  script:
+    - poetry run python manage.py test --verbosity 1
+
+test:linux:
   stage: test
   image: python:3.13-slim-bookworm
   services:
     - name: postgres:16-alpine
       alias: postgres
   variables:
+    POSTGRES_DB: materials_db_test
+    POSTGRES_USER: materials
+    POSTGRES_PASSWORD: ci-test-db-password
     POSTGRES_HOST_AUTH_METHOD: trust
+    DB_ENGINE: postgresql
+    DB_HOST: postgres
+    DB_NAME: materials_db_test
+    DB_USER: materials
+    DB_PASSWORD: ci-test-db-password
+    DB_PORT: '5432'
+    DB_WAIT_TIMEOUT: '30'
   before_script:
-    *poetry_setup
+    *poetry_setup_linux
   script:
     - python manage.py test --verbosity 1
+  rules:
+    - when: never
 
 # --- Build & push Docker image ---
 
