@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django import forms
@@ -28,10 +29,30 @@ def material_from_value(value):
         return None
     if isinstance(value, Material):
         return value
+
+    candidates = [value]
+    text = str(value)
     try:
-        return Material.objects.get(pk=value)
-    except (Material.DoesNotExist, ValueError, TypeError):
-        return None
+        candidates.append(uuid.UUID(text))
+    except (ValueError, TypeError, AttributeError):
+        pass
+    if len(text) == 32:
+        try:
+            candidates.append(uuid.UUID(hex=text))
+        except ValueError:
+            pass
+
+    seen = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            return Material.objects.get(pk=candidate)
+        except (Material.DoesNotExist, ValueError, TypeError):
+            continue
+    return None
 
 
 def _parse_default(field: StructureField):

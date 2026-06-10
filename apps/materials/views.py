@@ -296,15 +296,17 @@ class MaterialDetailView(DetailView):
         return structure_context
 
     def get_structure_display_value(self, field, value):
+        from apps.structures.display_format import format_structure_field_display
+        from apps.structures.forms import material_from_value
+
         if value is None or value == '':
             return '—'
         if field.field_type == MATERIAL_LINK_FIELD_TYPE:
-            try:
-                material = Material.objects.get(pk=value)
-            except (Material.DoesNotExist, ValueError, TypeError):
-                return value
-            return f'{material.code} - {material.name}'
-        return value
+            material = material_from_value(value)
+            if material is not None:
+                return f'{material.code} - {material.name}'
+            return value
+        return format_structure_field_display(field, value)
 
 
 class MaterialCreateView(MaterialFormsetMixin, CreateView):

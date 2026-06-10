@@ -2,6 +2,7 @@ import uuid
 from decimal import Decimal
 
 from apps.materials.models import Material
+from apps.structures.display_format import format_structure_field_display
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 
@@ -15,11 +16,14 @@ class DisplayValue:
 
     def get_value(self):
         if self.field.field_type == MATERIAL_LINK_FIELD_TYPE and self._value not in (None, ''):
-            try:
-                material = Material.objects.get(pk=self._value)
-            except (Material.DoesNotExist, ValueError, TypeError):
-                return self._value
-            return f'{material.code} - {material.name}'
+            from apps.structures.forms import material_from_value
+
+            material = material_from_value(self._value)
+            if material is not None:
+                return f'{material.code} - {material.name}'
+            return self._value
+        if self.field.field_type == 'DecimalField':
+            return format_structure_field_display(self.field, self._value)
         return self._value
 
     @property
