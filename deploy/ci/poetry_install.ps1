@@ -4,43 +4,52 @@ $ErrorActionPreference = 'Stop'
 $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
 $env:POETRY_NO_INTERACTION = '1'
 
+function Invoke-Uv {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
+    & python -m uv @Args
+    if ($LASTEXITCODE -ne 0) {
+        throw "uv failed: uv $($Args -join ' ') (exit $LASTEXITCODE)"
+    }
+}
+
 function Ensure-Uv {
-    if (Get-Command uv -ErrorAction SilentlyContinue) {
+    if (python -m uv --version 2>$null) {
         return
     }
 
     Write-Host 'Installing uv to provision Python 3.13...'
     python -m pip install --user uv
-    $scriptsDir = Join-Path $env:APPDATA 'Python' "Python$((python -c 'import sys; print(sys.version_info.major * 10 + sys.version_info.minor)'))\Scripts"
-    if (Test-Path $scriptsDir) {
-        $env:Path = "$scriptsDir;$env:Path"
-    }
 }
 
 function Get-Python313Executable {
     Ensure-Uv
 
-    if (Get-Command uv -ErrorAction SilentlyContinue) {
-        $found = uv python find 3.13 2>$null
-        if (-not $found) {
-            Write-Host 'Python 3.13 not found — installing via uv...'
-            uv python install 3.13
-            $found = uv python find 3.13
-        }
-        if ($found) {
-            return $found.Trim()
-        }
+    $found = $null
+    try {
+        $found = (& python -m uv python find 3.13 2>$null | Select-Object -Last 1).Trim()
+    } catch {
+        $found = $null
+    }
+
+    if (-not $found -or -not (Test-Path -LiteralPath $found)) {
+        Write-Host 'Python 3.13 not found — installing via uv...'
+        Invoke-Uv python install 3.13
+        $found = (& python -m uv python find 3.13 | Select-Object -Last 1).Trim()
+    }
+
+    if ($found -and (Test-Path -LiteralPath $found)) {
+        return $found
     }
 
     foreach ($command in @('py -3.13', 'python3.13')) {
         try {
-            $executable = Invoke-Expression "$command -c `"import sys; print(sys.executable)`"" 2>$null
+            $executable = (Invoke-Expression "$command -c `"import sys; print(sys.executable)`"" 2>$null).Trim()
             if (-not $executable) {
                 continue
             }
-            $version = Invoke-Expression "$command -c `"import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')`"" 2>$null
-            if ($version -ge '3.13') {
-                return $executable.Trim()
+            $version = (Invoke-Expression "$command -c `"import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')`"" 2>$null).Trim()
+            if ($version -ge '3.13' -and (Test-Path -LiteralPath $executable)) {
+                return $executable
             }
         } catch {
             continue
