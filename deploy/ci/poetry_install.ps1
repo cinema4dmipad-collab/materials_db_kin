@@ -4,8 +4,35 @@ $ErrorActionPreference = 'Stop'
 $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
 $env:POETRY_NO_INTERACTION = '1'
 
+function Ensure-Uv {
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        return
+    }
+
+    Write-Host 'Installing uv to provision Python 3.13...'
+    python -m pip install --user uv
+    $scriptsDir = Join-Path $env:APPDATA 'Python' "Python$((python -c 'import sys; print(sys.version_info.major * 10 + sys.version_info.minor)'))\Scripts"
+    if (Test-Path $scriptsDir) {
+        $env:Path = "$scriptsDir;$env:Path"
+    }
+}
+
 function Get-Python313Executable {
-    foreach ($command in @('py -3.13', 'python3.13', 'python')) {
+    Ensure-Uv
+
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        $found = uv python find 3.13 2>$null
+        if (-not $found) {
+            Write-Host 'Python 3.13 not found — installing via uv...'
+            uv python install 3.13
+            $found = uv python find 3.13
+        }
+        if ($found) {
+            return $found.Trim()
+        }
+    }
+
+    foreach ($command in @('py -3.13', 'python3.13')) {
         try {
             $executable = Invoke-Expression "$command -c `"import sys; print(sys.executable)`"" 2>$null
             if (-not $executable) {
@@ -20,7 +47,7 @@ function Get-Python313Executable {
         }
     }
 
-    throw 'Python 3.13 is required but was not found (tried py -3.13, python3.13, python).'
+    throw 'Python 3.13 is required but could not be installed or found on the runner.'
 }
 
 function Install-FromPyproject {

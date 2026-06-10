@@ -58,7 +58,6 @@ test:
     POETRY_VIRTUALENVS_CREATE: 'true'
     DB_ENGINE: ''
   before_script:
-    - py -3.13 --version
     - *poetry_setup_windows
   script:
     - poetry run python manage.py test --verbosity 1
