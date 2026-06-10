@@ -136,6 +136,53 @@ TIME_ZONE = 'Europe/Moscow'
 USE_I18N = True
 USE_TZ = True
 
+LOG_DIR = BASE_DIR / 'logs'
+DEBUG_LOG_FILE = LOG_DIR / 'debug.log'
+LOG_HANDLERS = {
+    'console': {
+        'class': 'logging.StreamHandler',
+        'formatter': 'verbose',
+    },
+}
+LOG_HANDLER_NAMES = ['console']
+
+try:
+    LOG_DIR.mkdir(exist_ok=True)
+except OSError:
+    pass
+else:
+    LOG_HANDLERS['debug_file'] = {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': str(DEBUG_LOG_FILE),
+        'maxBytes': 5 * 1024 * 1024,
+        'backupCount': 3,
+        'formatter': 'verbose',
+        'encoding': 'utf-8',
+    }
+    LOG_HANDLER_NAMES.append('debug_file')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '%(asctime)s %(levelname)s [%(name)s] %(message)s',
+        },
+    },
+    'handlers': LOG_HANDLERS,
+    'root': {
+        'handlers': LOG_HANDLER_NAMES,
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': LOG_HANDLER_NAMES,
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'

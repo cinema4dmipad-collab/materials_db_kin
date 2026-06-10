@@ -29,7 +29,7 @@
                         <td>
                             <a href="{% url 'scans:detail' scan.sample.pk scan.pk %}">{{ scan.title }}</a>
                         </td>
-                        <td>{% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method %}</td>
+                        <td>{% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method use_scan_method_filter=True %}</td>
                         <td>
                             {% url 'samples:detail' scan.sample.pk as scan_sample_url %}
                             {% include 'includes/entity_code.html' with code=scan.sample.code url=scan_sample_url tone=scan.sample.material.struct_type.display_color %}

@@ -17,6 +17,9 @@ class ScanRecordForm(TagNamesFormMixin, forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        sample = kwargs.pop('sample', None)
+        if sample and 'data' not in kwargs:
+            kwargs.setdefault('initial', {})['title'] = sample.name
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():
             css_class = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'

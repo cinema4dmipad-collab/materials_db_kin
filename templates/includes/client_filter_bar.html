@@ -1,0 +1,28 @@
+<div class="list-filter-panel list-filter-panel--client"
+     data-client-filter-mode="{{ filter_mode|default:'table' }}"
+     {% if filter_table_id %}data-client-filter-table="{{ filter_table_id }}"{% endif %}
+     {% if filter_target %}data-client-filter-target="{{ filter_target }}"{% endif %}
+     {% if filter_scopes %}data-client-filter-scopes="{{ filter_scopes }}"{% endif %}>
+    <div class="list-filter-panel__toolbar">
+        <div class="list-filter-panel__field list-filter-panel__field--search">
+            <label class="list-filter-panel__field-label" for="client-filter-{{ filter_uid }}">Поиск</label>
+            <div class="search-input-group">
+                {% if filter_scopes %}
+                <select class="form-select search-scope-select"
+                        data-client-filter-scope
+                        aria-label="Где искать"></select>
+                {% endif %}
+                <div class="search-input-wrap search-input-wrap--grow">
+                    {% include 'includes/search_input_icon.html' %}
+                    <input type="search"
+                           id="client-filter-{{ filter_uid }}"
+                           class="form-control search-input-field"
+                           placeholder="{{ search_placeholder|default:'Начните вводить для поиска...' }}"
+                           data-client-filter-input
+                           autocomplete="off"
+                           aria-label="{{ search_placeholder|default:'Поиск' }}">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

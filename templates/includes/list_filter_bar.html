@@ -1,4 +1,7 @@
 <form method="get" class="list-filter-panel">
+    {% for tag in active_tags %}
+    <input type="hidden" name="tag" value="{{ tag.slug }}">
+    {% endfor %}
     <div class="list-filter-panel__toolbar">
         <div class="list-filter-panel__field list-filter-panel__field--search">
             <label class="list-filter-panel__field-label" for="list-filter-search">Поиск</label>
@@ -13,6 +16,23 @@
                        autocomplete="off">
             </div>
         </div>
+        {% if search_scope_options %}
+        <div class="list-filter-panel__field list-filter-panel__field--scopes">
+            <span class="list-filter-panel__field-label">Где искать</span>
+            <div class="search-scope-checkboxes" role="group" aria-label="Где искать">
+                {% for scope in search_scope_options %}
+                <label class="search-scope-checkbox">
+                    <input type="checkbox"
+                           name="{{ search_scope_param|default:'q_in' }}"
+                           value="{{ scope.value }}"
+                           {% if scope.checked %}checked{% endif %}>
+                    <span>{{ scope.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <p class="search-scope-hint">Если ничего не отмечено — поиск по всем полям</p>
+        </div>
+        {% endif %}
         {% for filter in list_filters %}
         <div class="list-filter-panel__field list-filter-panel__field--filter">
             <label class="list-filter-panel__field-label" for="list-filter-{{ filter.param }}">{{ filter.label }}</label>
@@ -35,10 +55,14 @@
     {% if has_active_filters %}
     <div class="list-filter-panel__chips">
         {% if search_query %}
-        <span class="list-filter-chip">
-            <span class="list-filter-chip__key">Поиск</span>
+        <a href="{{ remove_search_url }}"
+           class="list-filter-chip list-filter-chip--removable"
+           title="Убрать из поиска"
+           aria-label="Убрать «{{ search_query }}» из поиска">
+            <span class="list-filter-chip__key">Где: {{ search_scope_label }}</span>
             «{{ search_query }}»
-        </span>
+            <span class="list-filter-chip__remove" aria-hidden="true">&times;</span>
+        </a>
         {% endif %}
         {% for filter in list_filters %}
             {% if filter.value %}
@@ -51,6 +75,16 @@
                     {% endif %}
                 {% endfor %}
             {% endif %}
+        {% endfor %}
+        {% for tag in active_tags %}
+        <a href="{{ tag.remove_url }}"
+           class="list-filter-chip list-filter-chip--removable"
+           title="Убрать тег из фильтра"
+           aria-label="Убрать тег «{{ tag.label }}» из фильтра">
+            <span class="list-filter-chip__key">Тег</span>
+            {{ tag.label }}
+            <span class="list-filter-chip__remove" aria-hidden="true">&times;</span>
+        </a>
         {% endfor %}
     </div>
     {% endif %}

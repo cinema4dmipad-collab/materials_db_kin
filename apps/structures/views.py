@@ -1,7 +1,9 @@
 from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
-from django.views.generic import DetailView, FormView, TemplateView, View
+from django.views.generic import DetailView, FormView, ListView, TemplateView, View
+
+from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
 
 from apps.structures.forms import StructureRecordForm
 from apps.structures.models import StructureType
@@ -44,21 +46,34 @@ class CreatedTableRequiredMixin(StructureTypeMixin):
         return response
 
 
-class StructureTypeSelectView(TemplateView):
+class StructureTypeSelectView(QuerySetFilterMixin, ListView):
     template_name = 'structures/select_type.html'
+    context_object_name = 'types'
+    search_fields = ('name', 'code', 'description', 'table_name')
+    search_scopes = (
+        (ALL_SEARCH_SCOPE, 'Везде', ('name', 'code', 'description', 'table_name')),
+        ('name', 'Название', ('name',)),
+        ('code', 'Код', ('code',)),
+        ('description', 'Описание', ('description',)),
+    )
+    search_placeholder = 'Введите текст для поиска...'
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['types'] = (
+    def get_queryset(self):
+        return self.filter_queryset(
             StructureType.objects.filter(is_active=True)
             .prefetch_related('fields')
             .order_by('name')
         )
-        return context
 
 
-class StructureRecordListView(CreatedTableRequiredMixin, TemplateView):
+class StructureRecordListView(CreatedTableRequiredMixin, QuerySetFilterMixin, TemplateView):
     template_name = 'structures/list.html'
+    search_fields = ('label',)
+    search_scopes = (
+        (ALL_SEARCH_SCOPE, 'Везде', ('label',)),
+        ('label', 'Название', ('label',)),
+    )
+    search_placeholder = 'Введите текст для поиска...'
 
     def _build_records(self, raw_records):
         return [
@@ -70,9 +85,21 @@ class StructureRecordListView(CreatedTableRequiredMixin, TemplateView):
             for record in raw_records
         ]
 
+    def _filter_records(self, records, query, active_scopes):
+        if not query:
+            return records
+        if active_scopes and 'label' not in active_scopes:
+            return records
+        query_lower = query.lower()
+        return [
+            record for record in records
+            if query_lower in record['label'].lower()
+        ]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        search_query = self.request.GET.get('q', '').strip()
+        search_query = self.request.GET.get(self.search_param, '').strip()
+        active_scopes = self._get_active_search_scope_values()
         page_number = self.request.GET.get('page', 1)
         try:
             page_number = max(int(page_number), 1)
@@ -83,10 +110,7 @@ class StructureRecordListView(CreatedTableRequiredMixin, TemplateView):
             result = SQLExecutor.get_all(self.structure_type, limit=None, offset=0)
             raw_records = result.get('records', []) if result.get('success') else []
             records = self._build_records(raw_records)
-            records = [
-                record for record in records
-                if search_query.lower() in record['label'].lower()
-            ]
+            records = self._filter_records(records, search_query, active_scopes)
             total = len(records)
             offset = (page_number - 1) * self.paginate_by
             records = records[offset:offset + self.paginate_by]
@@ -102,22 +126,13 @@ class StructureRecordListView(CreatedTableRequiredMixin, TemplateView):
 
         num_pages = max((total + self.paginate_by - 1) // self.paginate_by, 1)
 
-        pagination_query = self.request.GET.copy()
-        pagination_query.pop('page', None)
-
         context['records'] = records
         context['page_number'] = page_number
         context['num_pages'] = num_pages
         context['total'] = total
         context['has_previous'] = page_number > 1
         context['has_next'] = page_number < num_pages
-        context['search_query'] = search_query
-        context['search_param'] = 'q'
-        context['search_placeholder'] = 'Название или параметры записи...'
-        context['list_filters'] = []
-        context['has_active_filters'] = bool(search_query)
-        context['filter_reset_url'] = self.request.path
-        context['pagination_query'] = pagination_query.urlencode()
+        context.update(self.get_filter_context())
         return context
 
 

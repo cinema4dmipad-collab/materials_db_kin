@@ -50,6 +50,9 @@
         container.appendChild(row);
         totalFormsInput.value = String(formIndex + 1);
         bindRowActions(container, row, template, totalFormsInput);
+        if (window.initMaterialSelectLinks) {
+            window.initMaterialSelectLinks(row);
+        }
         renumberLayers(container);
         return row;
     }
@@ -105,6 +108,9 @@
             var newRow = appendLayerFromTemplate(container, template, totalFormsInput);
             if (newRow) {
                 copyRowValues(row, newRow);
+                if (window.initMaterialSelectLinks) {
+                    window.initMaterialSelectLinks(newRow);
+                }
                 renumberLayers(container);
             }
         });

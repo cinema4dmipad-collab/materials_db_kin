@@ -1,9 +1,10 @@
 from django.contrib import messages
 from django.db.models import Count
 from django.urls import reverse_lazy
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
-from apps.core.list_filters import QuerySetFilterMixin
+from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
 from apps.references.forms import PropertyForm
 from apps.references.models import Property, PropertyGroup
 
@@ -14,7 +15,14 @@ class PropertyListView(QuerySetFilterMixin, ListView):
     context_object_name = 'properties'
     paginate_by = 20
     search_fields = ('name', 'display_name', 'unit', 'description')
-    search_placeholder = 'Имя, название, единица или описание...'
+    search_scopes = (
+        (ALL_SEARCH_SCOPE, 'Везде', ('name', 'display_name', 'unit', 'description')),
+        ('name', 'Имя', ('name',)),
+        ('display_name', 'Название', ('display_name',)),
+        ('unit', 'Единица', ('unit',)),
+        ('description', 'Описание', ('description',)),
+    )
+    search_placeholder = 'Введите текст для поиска...'
     choice_filters = (('group', 'group_id'), ('data_type', 'data_type'))
     choice_filter_labels = {'group': 'Группа', 'data_type': 'Тип данных'}
 
@@ -40,6 +48,29 @@ class PropertyCreateView(CreateView):
     template_name = 'references/property_form.html'
     success_url = reverse_lazy('references:list')
 
+    def _safe_next_url(self):
+        next_url = self.request.POST.get('next') or self.request.GET.get('next')
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+        ):
+            return next_url
+        return None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        next_url = self._safe_next_url()
+        context['next_url'] = next_url or ''
+        context['cancel_url'] = next_url or reverse_lazy('references:list')
+        return context
+
+    def get_success_url(self):
+        next_url = self._safe_next_url()
+        if next_url:
+            separator = '&' if '?' in next_url else '?'
+            return f'{next_url}{separator}open_properties=1'
+        return str(self.success_url)
+
     def form_valid(self, form):
         messages.success(self.request, f'Свойство «{form.instance.display_name}» создано.')
         return super().form_valid(form)
@@ -50,6 +81,11 @@ class PropertyUpdateView(UpdateView):
     form_class = PropertyForm
     template_name = 'references/property_form.html'
     context_object_name = 'property_obj'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['cancel_url'] = reverse_lazy('references:list')
+        return context
 
     def form_valid(self, form):
         messages.success(self.request, f'Свойство «{form.instance.display_name}» сохранено.')

@@ -2,6 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
 
+from apps.structures.default_values import validate_structure_field_default
 from apps.structures.identifiers import (
     normalize_identifier,
     preview_table_name_from_title,
@@ -20,13 +21,12 @@ _BOOTSTRAP_CHECK = {'class': 'form-check-input'}
 class StructureTypeForm(forms.ModelForm):
     class Meta:
         model = StructureType
-        fields = ['name', 'description', 'display_color', 'allow_layers', 'is_active']
+        fields = ['name', 'description', 'display_color', 'allow_layers']
         labels = {
             'name': 'Название типа',
             'description': 'Описание для операторов',
             'display_color': 'Цвет в списке материалов',
             'allow_layers': 'Разрешить слои композита',
-            'is_active': 'Активен',
         }
         widgets = {
             'name': forms.TextInput(
@@ -45,7 +45,6 @@ class StructureTypeForm(forms.ModelForm):
             ),
             'display_color': forms.RadioSelect(choices=StructureType._meta.get_field('display_color').choices),
             'allow_layers': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECK),
-            'is_active': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECK),
         }
         help_texts = {
             'name': (
@@ -192,7 +191,9 @@ class StructureFieldForm(forms.ModelForm):
                     'data-structure-field-label': 'true',
                 }
             ),
-            'field_type': forms.Select(attrs=_BOOTSTRAP_SELECT),
+            'field_type': forms.Select(
+                attrs={**_BOOTSTRAP_SELECT, 'data-structure-field-type': 'true'},
+            ),
             'is_required': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECK),
             'sort_order': forms.NumberInput(attrs={**_BOOTSTRAP_INPUT, 'min': 0}),
             'max_length': forms.NumberInput(attrs={**_BOOTSTRAP_INPUT, 'min': 1, 'max': 4000}),
@@ -212,6 +213,7 @@ class StructureFieldForm(forms.ModelForm):
             'max_length': 'Для строки: сколько символов хранить (обычно 255).',
             'max_digits': 'Для десятичного числа: всего цифр, включая дробную часть.',
             'decimal_places': 'Сколько знаков после запятой (например 2 для 12.34).',
+            'default_value': 'Необязательно. Для чисел используйте точку (12.5), для даты — ГГГГ-ММ-ДД.',
         }
 
     def __init__(self, *args, **kwargs):
@@ -249,11 +251,9 @@ class StructureFieldForm(forms.ModelForm):
                 self.add_error('name', str(exc))
 
         field_type = cleaned_data.get('field_type')
-        if field_type == MATERIAL_LINK_FIELD_TYPE:
-            cleaned_data['max_length'] = None
-            cleaned_data['max_digits'] = None
-            cleaned_data['decimal_places'] = None
-        elif field_type == 'CharField':
+        cleaned_data = _apply_field_type_constraints(cleaned_data)
+        field_type = cleaned_data.get('field_type')
+        if field_type == 'CharField':
             max_length = cleaned_data.get('max_length') or 255
             if max_length < 1 or max_length > 4000:
                 self.add_error('max_length', 'Длина строки — от 1 до 4000.')
@@ -269,11 +269,20 @@ class StructureFieldForm(forms.ModelForm):
                     'decimal_places',
                     'Знаков после запятой не может быть больше, чем всего цифр.',
                 )
-        elif field_type == 'IntegerField' and cleaned_data.get('default_value'):
+
+        default_value = (cleaned_data.get('default_value') or '').strip()
+        if default_value and field_type:
             try:
-                int(str(cleaned_data['default_value']).strip())
-            except ValueError:
-                self.add_error('default_value', 'Для целого числа укажите целое значение.')
+                validate_structure_field_default(
+                    field_type=field_type,
+                    default_value=default_value,
+                    label=(cleaned_data.get('label') or '').strip(),
+                    name=(cleaned_data.get('name') or '').strip(),
+                    max_digits=cleaned_data.get('max_digits'),
+                    decimal_places=cleaned_data.get('decimal_places'),
+                )
+            except ValueError as exc:
+                self.add_error('default_value', str(exc))
 
         return cleaned_data
 
@@ -284,10 +293,43 @@ class StructureFieldForm(forms.ModelForm):
             instance.max_length = None
             instance.max_digits = None
             instance.decimal_places = None
+            instance.default_value = ''
+        elif instance.field_type == 'CharField':
+            instance.max_digits = None
+            instance.decimal_places = None
+        elif instance.field_type == 'DecimalField':
+            instance.max_length = None
+        else:
+            instance.max_length = None
+            instance.max_digits = None
+            instance.decimal_places = None
         if commit:
             instance.save()
             self.save_m2m()
         return instance
+
+
+def _apply_field_type_constraints(cleaned_data: dict) -> dict:
+    field_type = cleaned_data.get('field_type')
+    if not field_type:
+        return cleaned_data
+
+    if field_type == MATERIAL_LINK_FIELD_TYPE:
+        cleaned_data['max_length'] = None
+        cleaned_data['max_digits'] = None
+        cleaned_data['decimal_places'] = None
+        cleaned_data['default_value'] = ''
+    elif field_type == 'CharField':
+        cleaned_data['max_digits'] = None
+        cleaned_data['decimal_places'] = None
+    elif field_type == 'DecimalField':
+        cleaned_data['max_length'] = None
+    else:
+        cleaned_data['max_length'] = None
+        cleaned_data['max_digits'] = None
+        cleaned_data['decimal_places'] = None
+
+    return cleaned_data
 
 
 class StructureFieldFormSet(forms.BaseInlineFormSet):
@@ -299,7 +341,6 @@ class StructureFieldFormSet(forms.BaseInlineFormSet):
         if self.instance and self.instance.is_created:
             return
 
-        active_fields = 0
         seen_names: set[str] = set()
         for form in self.forms:
             if not form.cleaned_data or form.cleaned_data.get('DELETE'):
@@ -307,15 +348,9 @@ class StructureFieldFormSet(forms.BaseInlineFormSet):
             name = (form.cleaned_data.get('name') or '').strip().lower()
             if not name:
                 continue
-            active_fields += 1
             if name in seen_names:
                 form.add_error('name', 'Имена колонок в одном типе должны быть разными.')
             seen_names.add(name)
-
-        if active_fields == 0:
-            raise ValidationError(
-                'Добавьте хотя бы одно поле. Без полей SQL-таблица не может быть создана.'
-            )
 
 
 StructureFieldInlineFormSet = inlineformset_factory(
@@ -323,7 +358,7 @@ StructureFieldInlineFormSet = inlineformset_factory(
     StructureField,
     form=StructureFieldForm,
     formset=StructureFieldFormSet,
-    extra=1,
+    extra=0,
     can_delete=True,
 )
 

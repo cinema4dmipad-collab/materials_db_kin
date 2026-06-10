@@ -23,6 +23,7 @@ from apps.structures.admin import (
 )
 from apps.structures.forms import get_dynamic_form
 from apps.structures.models import (
+    MATERIAL_LINK_FIELD_TYPE,
     StructureField,
     StructureType,
 )
@@ -33,7 +34,61 @@ from apps.structures.identifiers import (
     validate_structure_code,
 )
 from apps.structures.sql_executor import SQLExecutor
+from apps.structures.property_mapping import (
+    property_to_structure_field_data,
+    structure_column_name_from_property,
+    structure_field_label_from_property,
+)
 from apps.structures.type_forms import StructureFieldForm, StructureTypeForm
+
+
+from apps.references.models import Property, PropertyGroup
+
+
+class PropertyMappingTests(TestCase):
+    def setUp(self):
+        self.group = PropertyGroup.objects.create(name='Mechanical', sort_order=1)
+
+    def test_property_maps_to_decimal_field_with_unit_in_label(self):
+        prop = Property.objects.create(
+            name='tensile_strength',
+            display_name='Предел прочности',
+            unit='МПа',
+            data_type='number',
+            group=self.group,
+        )
+
+        data = property_to_structure_field_data(prop)
+
+        self.assertEqual(data['field_type'], 'DecimalField')
+        self.assertEqual(data['label'], 'Предел прочности, МПа')
+        self.assertEqual(data['name'], 'tensile_strength')
+
+    def test_property_string_maps_to_char_field(self):
+        prop = Property.objects.create(
+            name='surface_finish',
+            display_name='Отделка поверхности',
+            data_type='string',
+        )
+
+        self.assertEqual(property_to_structure_field_data(prop)['field_type'], 'CharField')
+
+    def test_reserved_sql_name_gets_safe_suffix(self):
+        prop = Property.objects.create(
+            name='select',
+            display_name='Select',
+            data_type='number',
+        )
+
+        self.assertEqual(structure_column_name_from_property(prop), 'select_value')
+
+    def test_structure_field_label_without_unit(self):
+        prop = Property.objects.create(
+            name='density',
+            display_name='Плотность',
+            data_type='number',
+        )
+        self.assertEqual(structure_field_label_from_property(prop), 'Плотность')
 
 
 class StructureIdentifierTests(TestCase):
@@ -58,7 +113,6 @@ class StructureIdentifierTests(TestCase):
                 'name': 'UI Sandwich',
                 'description': '',
                 'display_color': 'tone-teal',
-                'is_active': 'on',
             }
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -90,6 +144,53 @@ class StructureIdentifierTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn('name', form.errors)
+
+    def test_structure_field_form_rejects_integer_default_with_decimal(self):
+        form = StructureFieldForm(
+            data={
+                'label': 'Количество',
+                'name': 'count',
+                'field_type': 'IntegerField',
+                'default_value': '1.5',
+                'sort_order': '1',
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('default_value', form.errors)
+        self.assertIn('без точки', form.errors['default_value'][0])
+
+    def test_structure_field_form_accepts_decimal_default_with_dot(self):
+        form = StructureFieldForm(
+            data={
+                'label': 'Толщина',
+                'name': 'thickness',
+                'field_type': 'DecimalField',
+                'default_value': '12.34',
+                'sort_order': '1',
+                'max_digits': '10',
+                'decimal_places': '2',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_structure_field_form_clears_numeric_params_for_material_link(self):
+        form = StructureFieldForm(
+            data={
+                'label': 'Материал',
+                'name': 'material_ref',
+                'field_type': MATERIAL_LINK_FIELD_TYPE,
+                'default_value': 'ignored',
+                'max_length': '255',
+                'max_digits': '10',
+                'decimal_places': '2',
+                'sort_order': '1',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIsNone(form.cleaned_data['max_length'])
+        self.assertIsNone(form.cleaned_data['max_digits'])
+        self.assertIsNone(form.cleaned_data['decimal_places'])
+        self.assertEqual(form.cleaned_data['default_value'], '')
 
 
 class PermissiveAdminUser:
@@ -240,6 +341,21 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
                 SQLExecutor.drop_table(structure_type)
             structure_type.delete()
 
+    def test_type_create_form_includes_property_picker(self):
+        Property.objects.create(
+            name='density',
+            display_name='Плотность',
+            unit='г/см³',
+            data_type='number',
+        )
+        response = self.client.get(reverse('structures:type_create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'add-from-properties-btn')
+        self.assertContains(response, 'add-material-link-btn')
+        self.assertContains(response, 'structure-field-empty')
+        self.assertContains(response, 'reference-properties-data')
+
     def test_create_type_and_sql_table_from_public_ui(self):
         create_url = reverse('structures:type_create')
         response = self.client.post(
@@ -249,7 +365,6 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
                 'description': 'Created from public UI',
                 'display_color': 'tone-blue',
                 'allow_layers': 'on',
-                'is_active': 'on',
                 'fields-TOTAL_FORMS': '1',
                 'fields-INITIAL_FORMS': '0',
                 'fields-MIN_NUM_FORMS': '0',
@@ -285,6 +400,35 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         )
         self.assertEqual(records_response.status_code, 200)
 
+    def test_create_type_without_fields_and_sql_table(self):
+        create_url = reverse('structures:type_create')
+        response = self.client.post(
+            create_url,
+            {
+                'name': 'UI Empty',
+                'description': '',
+                'display_color': 'tone-blue',
+                'fields-TOTAL_FORMS': '0',
+                'fields-INITIAL_FORMS': '0',
+                'fields-MIN_NUM_FORMS': '0',
+                'fields-MAX_NUM_FORMS': '1000',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        structure_type = StructureType.objects.get(code='ui_empty')
+        self.assertEqual(structure_type.fields.count(), 0)
+
+        table_response = self.client.post(
+            reverse('structures:type_create_table', args=[structure_type.code])
+        )
+        self.assertRedirects(
+            table_response,
+            reverse('structures:type_manage', args=[structure_type.code]),
+        )
+        structure_type.refresh_from_db()
+        self.assertTrue(structure_type.is_created)
+        self.assertTrue(SQLExecutor.table_exists(structure_type))
+
     def test_drop_table_from_public_ui(self):
         structure_type = StructureType.objects.create(
             name='UI Drop',
@@ -313,6 +457,31 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         self.assertFalse(structure_type.is_created)
         self.assertFalse(SQLExecutor.table_exists(structure_type))
 
+    def test_create_table_shows_error_for_invalid_integer_default(self):
+        structure_type = StructureType.objects.create(
+            name='UI Bad Default',
+            code='ui_bad_default',
+            table_name='structures_ui_bad_default',
+        )
+        StructureField.objects.create(
+            structure_type=structure_type,
+            name='count',
+            label='Количество',
+            field_type='IntegerField',
+            default_value='2.5',
+            sort_order=1,
+        )
+
+        response = self.client.post(
+            reverse('structures:type_create_table', args=[structure_type.code]),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'без точки')
+        structure_type.refresh_from_db()
+        self.assertFalse(structure_type.is_created)
+
     def test_reject_duplicate_field_names_in_formset(self):
         create_url = reverse('structures:type_create')
         response = self.client.post(
@@ -321,7 +490,6 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
                 'name': 'UI Duplicate Fields',
                 'description': '',
                 'display_color': 'tone-teal',
-                'is_active': 'on',
                 'fields-TOTAL_FORMS': '2',
                 'fields-INITIAL_FORMS': '0',
                 'fields-MIN_NUM_FORMS': '0',
@@ -438,6 +606,42 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertFalse(self.structure_type.is_created)
         self.assertFalse(SQLExecutor.table_exists(self.structure_type))
 
+    def test_create_table_rejects_decimal_default_exceeding_precision(self):
+        StructureField.objects.filter(structure_type=self.structure_type, name='thickness').update(
+            default_value='123.456',
+            max_digits=5,
+            decimal_places=2,
+        )
+
+        result = SQLExecutor.create_table(self.structure_type)
+
+        self.assertFalse(result['success'])
+        self.assertIn('знаков после запятой', result['error'])
+
+    def test_create_table_rejects_integer_default_with_decimal_point(self):
+        StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='ratio',
+            label='Ratio',
+            field_type='IntegerField',
+            default_value='1.5',
+            sort_order=4,
+        )
+
+        result = SQLExecutor.create_table(self.structure_type)
+
+        self.assertFalse(result['success'])
+        self.assertIn('без точки', result['error'])
+
+    def test_create_table_accepts_decimal_default_with_dot(self):
+        StructureField.objects.filter(structure_type=self.structure_type, name='thickness').update(
+            default_value='12.34',
+        )
+
+        result = SQLExecutor.create_table(self.structure_type)
+
+        self.assertTrue(result['success'], result.get('error'))
+
     def test_create_table_rejects_already_created_type(self):
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
 
@@ -456,7 +660,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertIn('уже создана', result['error'])
         self.assertFalse(SQLExecutor.table_exists(stale_structure_type))
 
-    def test_create_table_rejects_type_without_fields(self):
+    def test_create_table_allows_type_without_fields(self):
         empty_type = StructureType.objects.create(
             name='Empty Structure',
             code='empty_structure',
@@ -466,9 +670,10 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         result = SQLExecutor.create_table(empty_type)
         empty_type.refresh_from_db()
 
-        self.assertFalse(result['success'])
-        self.assertIn('нет полей', result['error'])
-        self.assertFalse(empty_type.is_created)
+        self.assertTrue(result['success'])
+        self.assertTrue(empty_type.is_created)
+        self.assertTrue(SQLExecutor.table_exists(empty_type))
+        SQLExecutor.drop_table(empty_type)
 
     def test_structure_field_validation_rejects_create_change_and_delete_when_created(self):
         field = self.structure_type.fields.get(name='title')

@@ -17,6 +17,9 @@
             <div class="card-body">
                 <form method="post" novalidate data-property-form-mode="{% if property_obj %}edit{% else %}create{% endif %}">
                     {% csrf_token %}
+                    {% if next_url %}
+                    <input type="hidden" name="next" value="{{ next_url }}">
+                    {% endif %}
                     {% if form.non_field_errors %}
                     <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                     {% endif %}
@@ -36,7 +39,7 @@
 
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary">Сохранить</button>
-                        <a href="{% url 'references:list' %}" class="btn btn-outline-secondary">Отмена</a>
+                        <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Отмена</a>
                     </div>
                 </form>
             </div>

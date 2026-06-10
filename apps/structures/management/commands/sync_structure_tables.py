@@ -12,11 +12,6 @@ class Command(BaseCommand):
         created = 0
 
         for structure_type in to_create:
-            if not structure_type.fields.exists():
-                self.stdout.write(
-                    self.style.WARNING(f'  Пропуск {structure_type.name}: нет полей')
-                )
-                continue
             self.stdout.write(f'Создаю таблицу для {structure_type.name}...')
             result = SQLExecutor.create_table(structure_type)
             if result['success']:

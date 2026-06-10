@@ -13,6 +13,7 @@
     <div class="card-body">
         <form method="post" novalidate>
             {% csrf_token %}
+            <input type="hidden" name="_apply_struct_type" value="" id="apply-struct-type-flag">
 
             <div class="card mb-4">
                 <div class="card-header">Материал</div>
@@ -159,12 +160,12 @@
                                 {% if layer_form.material.errors %}<div class="text-danger small">{{ layer_form.material.errors }}</div>{% endif %}
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label">Угол</label>
+                                <label class="form-label">{{ layer_form.angle.label }}</label>
                                 {{ layer_form.angle }}
                                 {% if layer_form.angle.errors %}<div class="text-danger small">{{ layer_form.angle.errors }}</div>{% endif %}
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label">Толщина</label>
+                                <label class="form-label">{{ layer_form.thickness.label }}</label>
                                 {{ layer_form.thickness }}
                                 {% if layer_form.thickness.errors %}<div class="text-danger small">{{ layer_form.thickness.errors }}</div>{% endif %}
                             </div>
@@ -194,11 +195,11 @@
                                 {{ layer_form.material }}
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label">Угол</label>
+                                <label class="form-label">{{ layer_form.angle.label }}</label>
                                 {{ layer_form.angle }}
                             </div>
                             <div class="col-md-2">
-                                <label class="form-label">Толщина</label>
+                                <label class="form-label">{{ layer_form.thickness.label }}</label>
                                 {{ layer_form.thickness }}
                             </div>
                             <div class="col-md-2">
@@ -240,9 +241,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     structureSelect.addEventListener('change', function () {
-        var url = new URL(window.location.href);
-        url.searchParams.set('struct_type', structureSelect.value);
-        window.location.href = url.toString();
+        var form = structureSelect.closest('form');
+        var flag = document.getElementById('apply-struct-type-flag');
+        if (!form || !flag) {
+            return;
+        }
+        flag.value = '1';
+        form.requestSubmit();
     });
 });
 </script>

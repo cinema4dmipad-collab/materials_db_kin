@@ -49,30 +49,66 @@
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h2 class="h5 mb-0">Свойства</h2>
+        {% if structure_type %}
+        <div class="text-muted small">
+            Тип структуры:
+            {% include 'includes/type_badge.html' with label=structure_type.name tone=structure_type.display_color %}
+        </div>
+        {% endif %}
     </div>
     <div class="card-body p-0">
-        {% if properties %}
-        {% include 'includes/table_search_bar.html' with table_id='material-properties-table' placeholder='Поиск по свойству или значению...' %}
-        <div class="table-responsive">
-            <table id="material-properties-table" class="table table-striped table-hover mb-0">
+        {% if structure_properties or properties or structure_message %}
+        <div class="table-responsive material-properties-table-wrap">
+            <table class="table table-striped table-hover align-middle mb-0 app-data-table material-properties-table">
                 <thead>
                     <tr>
-                        <th>Свойство</th>
-                        <th>Значение</th>
-                        <th>Единица</th>
+                        <th scope="col">Свойство</th>
+                        <th scope="col">Значение</th>
+                        <th scope="col" class="material-properties-table__unit-col">Единица</th>
                     </tr>
                 </thead>
-                <tbody>
+                {% if structure_properties or structure_message %}
+                <tbody class="material-props-section">
+                    <tr class="material-props-section__header">
+                        <th scope="colgroup" colspan="3">Из параметров структуры</th>
+                    </tr>
+                    {% if structure_properties %}
+                    {% for prop in structure_properties %}
+                    <tr>
+                        <th scope="row" class="material-props-section__name">{{ prop.label|default:prop.name }}</th>
+                        <td class="material-props-section__value">
+                            {% if prop.field_type == 'MaterialLink' and prop.value %}
+                            <a href="{% url 'materials:detail' prop.value %}">{{ prop.display_value }}</a>
+                            {% else %}
+                            {{ prop.display_value }}
+                            {% endif %}
+                        </td>
+                        <td class="material-props-section__unit">—</td>
+                    </tr>
+                    {% endfor %}
+                    {% else %}
+                    <tr class="material-props-section__empty">
+                        <td colspan="3">{{ structure_message }}</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+                {% endif %}
+                {% if properties %}
+                <tbody class="material-props-section">
+                    <tr class="material-props-section__header">
+                        <th scope="colgroup" colspan="3">Дополнительные свойства</th>
+                    </tr>
                     {% for mp in properties %}
                     <tr>
-                        <td>{{ mp.property.display_name }}</td>
-                        <td>{{ mp.value }}</td>
-                        <td>{{ mp.property.unit|default:"—" }}</td>
+                        <th scope="row" class="material-props-section__name">{{ mp.property.display_name }}</th>
+                        <td class="material-props-section__value">{{ mp.value }}</td>
+                        <td class="material-props-section__unit">{{ mp.property.unit|default:"—" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
+                {% endif %}
             </table>
         </div>
         {% else %}
@@ -81,7 +117,8 @@
     </div>
 </div>
 
-<div class="card mb-4">
+{% if show_composite_layers %}
+<div class="card">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
         <h2 class="h5 mb-0">Слои композита</h2>
         {% if layer_diagram %}
@@ -93,21 +130,19 @@
         {% endif %}
     </div>
     <div class="card-body p-0">
-        {% if show_composite_layers %}
         {% if composite_layers %}
         <div class="composite-layers-layout row g-0">
             <div class="col-lg-4 col-xl-3 border-end">
                 {% include 'materials/includes/composite_layer_diagram.html' %}
             </div>
             <div class="col-lg-8 col-xl-9">
-                {% include 'includes/table_search_bar.html' with table_id='composite-layers-table' placeholder='Поиск по материалу или номеру слоя...' %}
                 <div class="table-responsive">
-                    <table id="composite-layers-table" class="table table-striped table-hover mb-0 composite-layers-table">
+                    <table class="table table-striped table-hover mb-0 composite-layers-table">
                         <thead>
                             <tr>
                                 <th>Номер слоя</th>
                                 <th>Материал</th>
-                                <th>Угол, °</th>
+                                <th>Угол армирования, °</th>
                                 <th>Толщина, мм</th>
                                 <th>Доля, %</th>
                             </tr>
@@ -119,7 +154,7 @@
                                 <td>
                                     <span class="composite-layer-material">
                                         <span class="composite-layer-material__swatch" style="background-color: {{ item.color }};"></span>
-                                        {{ item.material_label }}
+                                        <a href="{% url 'materials:detail' item.material_id %}">{{ item.material_label }}</a>
                                     </span>
                                 </td>
                                 <td>{{ item.angle }}</td>
@@ -129,7 +164,7 @@
                             {% endfor %}
                         </tbody>
                         <tfoot>
-                            <tr class="composite-layers-table__total table-search-ignore">
+                            <tr class="composite-layers-table__total">
                                 <th colspan="3">Итого</th>
                                 <th>{{ layer_diagram.total_thickness }}</th>
                                 <th>100</th>
@@ -142,51 +177,7 @@
         {% else %}
         <p class="p-3 mb-0 text-muted">Слои композита не заданы.</p>
         {% endif %}
-        {% else %}
-        <p class="p-3 mb-0 text-muted">Для выбранного типа структуры слои не используются.</p>
-        {% endif %}
     </div>
 </div>
-
-<div class="card">
-    <div class="card-header">
-        <h2 class="h5 mb-0">Параметры структуры</h2>
-    </div>
-    <div class="card-body p-0">
-        {% if structure_type %}
-        <div class="px-3 pt-3">
-            <p class="text-muted mb-3">
-                Тип структуры:
-                {% include 'includes/type_badge.html' with label=structure_type.name tone=structure_type.display_color %}
-            </p>
-        </div>
-        {% endif %}
-
-        {% if structure_properties %}
-        {% include 'includes/table_search_bar.html' with table_id='structure-properties-table' placeholder='Поиск по параметру или значению...' %}
-        <div class="table-responsive">
-            <table id="structure-properties-table" class="table table-striped table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th>Параметр</th>
-                        <th>Значение</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for prop in structure_properties %}
-                    <tr>
-                        <td>{{ prop.label|default:prop.name }}</td>
-                        <td>{{ prop.display_value }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% elif structure_message %}
-        <p class="p-3 mb-0 text-muted">{{ structure_message }}</p>
-        {% else %}
-        <p class="p-3 mb-0 text-muted">Параметры структуры не заданы.</p>
-        {% endif %}
-    </div>
-</div>
+{% endif %}
 {% endblock %}

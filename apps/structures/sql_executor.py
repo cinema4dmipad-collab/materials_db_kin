@@ -6,6 +6,7 @@ from decimal import Decimal
 from django.db import connection
 from django.utils import timezone
 
+from apps.structures.default_values import validate_structure_field_model
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 
 IDENTIFIER_RE = re.compile(r'^[a-z][a-z0-9_]*$')
@@ -27,11 +28,12 @@ class SQLExecutor:
                 raise ValueError(f'Таблица «{structure_type.table_name}» уже создана.')
 
             fields = list(structure_type.fields.all())
-            if not fields:
-                raise ValueError(f'У типа «{structure_type.name}» нет полей.')
             cls._raise_for_unsupported_fields(fields)
             if cls.table_exists(structure_type):
                 raise ValueError(f'Таблица «{structure_type.table_name}» уже существует.')
+
+            for field in cls._sql_fields(fields):
+                validate_structure_field_model(field)
 
             table_name = cls.quote_identifier(structure_type.table_name)
             columns = [cls._id_column_sql()]
@@ -254,6 +256,8 @@ class SQLExecutor:
             cls._raise_for_unsupported_fields([field])
             if not cls._is_sql_backed_field(field):
                 return {'success': True, 'error': None}
+
+            validate_structure_field_model(field)
 
             table_name = cls.quote_identifier(structure_type.table_name)
             column_name = cls.quote_identifier(field.name)

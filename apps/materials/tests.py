@@ -11,6 +11,7 @@ from django.test import RequestFactory, TestCase, TransactionTestCase, override_
 from django.urls import reverse
 
 from apps.composites.models import CompositeLayer
+from apps.core.tag_utils import assign_tags
 from apps.materials.admin import CompositeLayerInline, MaterialAdmin, MaterialForm
 from apps.materials.forms import CompositeLayerFormSet, MaterialForm as PublicMaterialForm
 from apps.materials.models import Material, MaterialProperty
@@ -259,15 +260,18 @@ class MaterialStructureLinkTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Свойства')
+        self.assertContains(response, 'Из параметров структуры')
+        self.assertContains(response, 'Дополнительные свойства')
         self.assertContains(response, 'Density')
         self.assertContains(response, '1.55')
         self.assertContains(response, 'g/cm3')
-        self.assertContains(response, 'Параметры структуры')
         self.assertContains(response, 'Test Panel')
         self.assertContains(response, 'Title')
         self.assertContains(response, 'Laminate panel')
         self.assertContains(response, 'Thickness')
         self.assertContains(response, '18,75')
+        self.assertNotContains(response, 'client_filter_bar')
+        self.assertNotContains(response, 'Параметры структуры')
 
     def test_detail_page_ignores_service_columns_and_stale_foreign_key_fields(self):
         row_id = self.insert_structure_row(title='Visible panel')
@@ -318,7 +322,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Параметры структуры')
+        self.assertContains(response, 'Из параметров структуры')
         self.assertContains(response, 'Структура не выбрана.')
 
     def test_detail_page_missing_structure_row_shows_helpful_message(self):
@@ -346,7 +350,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<td>0,00</td>', html=True)
+        self.assertContains(response, '0,00')
 
     def test_material_list_displays_structure_type(self):
         Material.objects.create(code='MAT-LIST-001', name='Plain material')
@@ -363,6 +367,55 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Test Panel')
         self.assertContains(response, 'MAT-LIST-001')
         self.assertContains(response, 'MAT-LIST-002')
+
+    def test_material_list_filters_by_structure_type_search(self):
+        Material.objects.create(code='MAT-LIST-001', name='Plain material')
+        Material.objects.create(
+            code='MAT-LIST-002',
+            name='Structured material',
+            struct_type=self.structure_type,
+        )
+
+        response = self.client.get(
+            reverse('materials:list'),
+            {'q': 'Test Panel', 'q_in': 'struct_type'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'MAT-LIST-002')
+        self.assertNotContains(response, 'MAT-LIST-001')
+        self.assertContains(response, 'type-pill-link')
+        self.assertContains(response, 'Test Panel')
+
+    def test_material_list_combines_structure_type_search_with_multiple_tags(self):
+        tagged = Material.objects.create(
+            code='MAT-LIST-TAGGED',
+            name='Tagged structured material',
+            struct_type=self.structure_type,
+        )
+        assign_tags(tagged, ['prepreg', 'lab'])
+        Material.objects.create(code='MAT-LIST-001', name='Plain material')
+        Material.objects.create(
+            code='MAT-LIST-002',
+            name='Structured material without tags',
+            struct_type=self.structure_type,
+        )
+
+        response = self.client.get(
+            reverse('materials:list'),
+            [
+                ('q', 'Test Panel'),
+                ('q_in', 'struct_type'),
+                ('tag', 'prepreg'),
+                ('tag', 'lab'),
+            ],
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'MAT-LIST-TAGGED')
+        self.assertNotContains(response, 'MAT-LIST-001')
+        self.assertNotContains(response, 'MAT-LIST-002')
+        self.assertContains(response, 'list-filter-chip--removable', count=3)
 
 
 class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
@@ -542,7 +595,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             form.fields,
         )
         self.assertEqual(
-            form.fields['structure_field_{}'.format(self.structure_type.fields.get(name='title').pk)].label,
+            form['structure_field_{}'.format(self.structure_type.fields.get(name='title').pk)].label,
             'Title',
         )
         self.assertEqual(
@@ -555,6 +608,78 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertIsInstance(material_field, forms.ModelChoiceField)
         self.assertEqual(list(material_field.queryset), list(Material.objects.order_by('code')))
         self.assertFalse(material_field.required)
+        self.assertIn('data-material-detail-url', material_field.widget.attrs)
+
+    def test_create_view_renders_material_select_detail_links(self):
+        title_field = self.structure_type.fields.get(name='title')
+        thickness_field = self.structure_type.fields.get(name='thickness')
+        response = self.client.post(
+            reverse('materials:create'),
+            {
+                'struct_type': str(self.structure_type.pk),
+                '_apply_struct_type': '1',
+                **self._formset_management_data(),
+                f'structure_field_{title_field.pk}': 'Panel title',
+                f'structure_field_{thickness_field.pk}': '12.50',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-material-detail-url')
+        self.assertContains(response, 'material_select_link.js')
+        self.assertContains(response, 'js-material-select')
+
+    def test_create_view_preserves_fields_when_structure_type_changes(self):
+        title_field = self.structure_type.fields.get(name='title')
+        thickness_field = self.structure_type.fields.get(name='thickness')
+
+        response = self.client.post(
+            reverse('materials:create'),
+            {
+                'code': 'MAT-DRAFT-001',
+                'name': 'Draft material',
+                'description': 'Keep description',
+                'created_by': 'tester',
+                'struct_type': str(self.structure_type.pk),
+                '_apply_struct_type': '1',
+                **self._formset_management_data(),
+                **self._layer_formset_management_data(total='0'),
+                f'structure_field_{title_field.pk}': 'Panel title',
+                f'structure_field_{thickness_field.pk}': '12.50',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'MAT-DRAFT-001')
+        self.assertContains(response, 'Draft material')
+        self.assertContains(response, 'Keep description')
+        self.assertContains(response, 'Panel title')
+        self.assertContains(response, '12.50')
+        self.assertFalse(Material.objects.filter(code='MAT-DRAFT-001').exists())
+
+    def test_apply_struct_type_shows_empty_layers_without_management_form_errors(self):
+        title_field = self.structure_type.fields.get(name='title')
+        thickness_field = self.structure_type.fields.get(name='thickness')
+        response = self.client.post(
+            reverse('materials:create'),
+            {
+                'code': 'MAT-LAYERS-DRAFT',
+                'name': 'Layers draft',
+                'struct_type': str(self.structure_type.pk),
+                '_apply_struct_type': '1',
+                **self._formset_management_data(),
+                f'structure_field_{title_field.pk}': 'Panel title',
+                f'structure_field_{thickness_field.pk}': '12.50',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Слои композита')
+        self.assertContains(response, 'Добавить слой')
+        self.assertNotContains(response, 'ManagementForm')
+        self.assertNotContains(response, 'Скрытое поле TOTAL_FORMS')
+        self.assertNotContains(response, 'Скрытое поле INITIAL_FORMS')
+        self.assertNotContains(response, 'Отсутствующие поля: layers-TOTAL_FORMS')
 
     @override_settings(ROOT_URLCONF='apps.materials.tests')
     def test_public_material_form_renders_without_admin_url_namespace(self):
@@ -1054,7 +1179,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(str(params['thickness']), '0.00')
 
         detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
-        self.assertContains(detail_response, '<td>0,00</td>', html=True)
+        self.assertContains(detail_response, '0,00')
 
     def test_public_material_update_missing_existing_dynamic_row_returns_form_error(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')

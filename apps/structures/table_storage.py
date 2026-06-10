@@ -22,6 +22,14 @@ class DisplayValue:
             return f'{material.code} - {material.name}'
         return self._value
 
+    @property
+    def material_pk(self):
+        if self.field.field_type != MATERIAL_LINK_FIELD_TYPE:
+            return None
+        if self._value in (None, ''):
+            return None
+        return self._value
+
 
 def _coerce_for_db(field: StructureField, value):
     return SQLExecutor._coerce_for_db(field, value)

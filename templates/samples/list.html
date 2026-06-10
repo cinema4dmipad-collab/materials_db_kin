@@ -36,7 +36,7 @@
                             {% url 'materials:detail' sample.material.pk as sample_material_url %}
                             {% include 'includes/entity_code.html' with code=sample.material.code url=sample_material_url tone=sample.material.struct_type.display_color %}
                         </td>
-                        <td>{% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type %}</td>
+                        <td>{% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type use_object_type_filter=True %}</td>
                         <td>{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</td>
                         <td>{{ sample.created_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end">

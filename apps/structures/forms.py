@@ -3,6 +3,7 @@ from decimal import Decimal
 from django import forms
 from django.core.exceptions import ValidationError
 
+from apps.materials.form_widgets import material_select_widget_attrs
 from apps.materials.models import Material
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField
 from apps.structures.sql_executor import SQLExecutor
@@ -60,7 +61,7 @@ def _build_dynamic_field(structure_field: StructureField) -> forms.Field:
             help_text=help_text,
             initial=initial,
             queryset=Material.objects.order_by('code'),
-            widget=forms.Select(attrs=_BOOTSTRAP_SELECT),
+            widget=forms.Select(attrs=material_select_widget_attrs()),
         )
     if structure_field.field_type == 'CharField':
         return forms.CharField(
