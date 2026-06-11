@@ -1,4 +1,7 @@
 from django import template
+from django.utils.html import json_script
+
+from apps.core.number_utils import format_decimal_display
 
 register = template.Library()
 
@@ -57,3 +60,25 @@ def ui_tone(value):
 def ui_category_tone(value):
     """Тон категории: известные категории или стабильный цвет на код типа."""
     return category_tone(str(value))
+
+
+@register.filter
+def decimal_comma(value):
+    """Отображает число с запятой в качестве десятичного разделителя."""
+    if value in (None, ''):
+        return '—'
+    return format_decimal_display(value)
+
+
+@register.simple_tag
+def reference_properties_json_script(properties=None):
+    if not isinstance(properties, list):
+        properties = []
+    return json_script(properties, 'reference-properties-data')
+
+
+@register.simple_tag
+def reference_materials_json_script(materials=None):
+    if not isinstance(materials, list):
+        materials = []
+    return json_script(materials, 'reference-materials-data')

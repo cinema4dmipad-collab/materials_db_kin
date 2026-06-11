@@ -10,17 +10,10 @@
         ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
     };
 
-    const FIELD_TYPE_LABELS = {
-        CharField: 'Строка',
-        TextField: 'Текст',
-        IntegerField: 'Целое число',
-        DecimalField: 'Число',
-        FloatField: 'Число',
-        BooleanField: 'Да/Нет',
-        DateField: 'Дата',
-        DateTimeField: 'Дата и время',
-        MaterialLink: 'Материал',
-    };
+    function fieldTypeLabel(fieldType) {
+        const labels = window.ReferencePropertiesPicker?.FIELD_TYPE_LABELS || {};
+        return labels[fieldType] || fieldType || '—';
+    }
 
     const FIELD_TYPE_DEFAULTS = {
         CharField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
@@ -52,18 +45,6 @@
             slug = slug.slice(0, maxLength).replace(/_+$/, '');
         }
         return slug;
-    }
-
-    function escapeHtml(text) {
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
-
-    function fieldTypeLabel(fieldType) {
-        return FIELD_TYPE_LABELS[fieldType] || fieldType || '—';
     }
 
     function getStructureForm() {
@@ -284,102 +265,19 @@
         return row;
     }
 
-    function getReferenceProperties() {
-        const node = document.getElementById('reference-properties-data');
-        if (!node) {
-            return [];
-        }
-        try {
-            return JSON.parse(node.textContent);
-        } catch (error) {
-            return [];
-        }
-    }
-
     function renderReferencePropertiesList(filterText = '') {
-        const listNode = document.getElementById('reference-properties-list');
-        const emptyNode = document.getElementById('reference-properties-empty');
-        const addBtn = document.getElementById('reference-properties-add-btn');
-        if (!listNode || !emptyNode || !addBtn) {
+        const picker = window.ReferencePropertiesPicker;
+        if (!picker) {
             return;
         }
-
-        const query = filterText.trim().toLowerCase();
-        const usedPropertyIds = getUsedPropertyIds();
-        const usedColumnNames = getUsedColumnNames();
-        const allProperties = getReferenceProperties();
-        const properties = allProperties.filter((item) => {
-            if (!query) {
-                return true;
-            }
-            const haystack = [
-                item.label,
-                item.name,
-                item.group_name,
-                item.unit,
-                item.data_type,
-            ].join(' ').toLowerCase();
-            return haystack.includes(query);
-        });
-
-        listNode.innerHTML = '';
-        if (!allProperties.length) {
-            emptyNode.classList.remove('d-none');
-            addBtn.disabled = true;
-            return;
-        }
-        emptyNode.classList.add('d-none');
-
-        if (!properties.length) {
-            listNode.innerHTML = '<p class="text-muted small mb-0">Ничего не найдено.</p>';
-            addBtn.disabled = true;
-            return;
-        }
-
-        const groups = new Map();
-        properties.forEach((item) => {
-            const groupName = item.group_name || 'Без группы';
-            if (!groups.has(groupName)) {
-                groups.set(groupName, []);
-            }
-            groups.get(groupName).push(item);
-        });
-
-        groups.forEach((items, groupName) => {
-            const groupEl = document.createElement('div');
-            groupEl.className = 'reference-properties-group';
-            groupEl.innerHTML = `<div class="reference-properties-group__title">${escapeHtml(groupName)}</div>`;
-
-            items.forEach((item) => {
-                const isUsed = usedPropertyIds.has(item.property_id)
-                    || usedColumnNames.has((item.name || '').toLowerCase());
-                const itemEl = document.createElement('label');
-                itemEl.className = `reference-property-item${isUsed ? ' is-used' : ''}`;
-                itemEl.innerHTML = `
-                    <input type="checkbox" class="form-check-input mt-1 reference-property-checkbox"
-                           value="${escapeHtml(item.property_id)}" ${isUsed ? 'disabled' : ''}>
-                    <span class="flex-grow-1">
-                        <span class="fw-semibold">${escapeHtml(item.label)}</span>
-                        <div class="reference-property-item__meta">
-                            <code>${escapeHtml(item.name)}</code>
-                            · ${escapeHtml(fieldTypeLabel(item.field_type))}
-                            ${isUsed ? ' · уже добавлено' : ''}
-                        </div>
-                    </span>
-                `;
-                itemEl.querySelector('input').dataset.propertyPayload = JSON.stringify(item);
-                groupEl.appendChild(itemEl);
-            });
-
-            listNode.appendChild(groupEl);
-        });
-
-        addBtn.disabled = true;
-        listNode.querySelectorAll('.reference-property-checkbox').forEach((checkbox) => {
-            checkbox.addEventListener('change', () => {
-                const selected = listNode.querySelectorAll('.reference-property-checkbox:checked:not(:disabled)');
-                addBtn.disabled = selected.length === 0;
-            });
+        picker.renderList({
+            filterText,
+            getUsedPropertyIds,
+            getUsedColumnNames,
+            metaLine(item) {
+                const escapeHtml = picker.escapeHtml;
+                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(fieldTypeLabel(item.field_type))}`;
+            },
         });
     }
 
@@ -557,48 +455,28 @@
     }
 
     function bindPropertiesModal() {
-        const openBtn = document.getElementById('add-from-properties-btn');
-        const modalEl = document.getElementById('reference-properties-modal');
-        const searchInput = document.getElementById('reference-properties-search');
-        const addBtn = document.getElementById('reference-properties-add-btn');
-        if (!openBtn || !modalEl || !searchInput || !addBtn || openBtn.dataset.bound === 'true') {
+        const picker = window.ReferencePropertiesPicker;
+        if (!picker) {
             return null;
         }
-        openBtn.dataset.bound = 'true';
-
-        const modal = window.bootstrap?.Modal
-            ? window.bootstrap.Modal.getOrCreateInstance(modalEl)
-            : null;
-
-        openBtn.addEventListener('click', () => {
-            searchInput.value = '';
-            renderReferencePropertiesList();
-            modal?.show();
+        return picker.bind({
+            openButtonId: 'add-from-properties-btn',
+            getUsedPropertyIds,
+            getUsedColumnNames,
+            metaLine(item) {
+                const escapeHtml = picker.escapeHtml;
+                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(fieldTypeLabel(item.field_type))}`;
+            },
+            onConfirm(payloads) {
+                payloads.forEach((payload) => {
+                    const row = appendRowFromTemplate();
+                    if (row) {
+                        fillRowFromPropertyData(row, payload);
+                    }
+                });
+                updateEmptyState();
+            },
         });
-
-        searchInput.addEventListener('input', () => {
-            renderReferencePropertiesList(searchInput.value);
-        });
-
-        addBtn.addEventListener('click', () => {
-            const selected = modalEl.querySelectorAll('.reference-property-checkbox:checked:not(:disabled)');
-            selected.forEach((checkbox) => {
-                let payload;
-                try {
-                    payload = JSON.parse(checkbox.dataset.propertyPayload || '{}');
-                } catch (error) {
-                    return;
-                }
-                const row = appendRowFromTemplate();
-                if (row) {
-                    fillRowFromPropertyData(row, payload);
-                }
-            });
-            updateEmptyState();
-            modal?.hide();
-        });
-
-        return modal;
     }
 
     function bindCreatePropertyLink() {

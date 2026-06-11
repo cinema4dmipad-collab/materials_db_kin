@@ -1,8 +1,10 @@
 from django import forms
 from django.forms import inlineformset_factory
 
+from apps.core.fields import LocalizedPropertyValueField, clean_localized_number_value
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.materials.form_widgets import material_select_widget_attrs
+from apps.samples.attachment_title import default_attachment_title
 from apps.samples.models import Sample, SampleAttachment, SampleProperty
 from apps.samples.validators import validate_attachment_file
 
@@ -29,17 +31,31 @@ class SamplePropertyInlineFormSet(forms.BaseInlineFormSet):
                 seen[prop.pk] = True
 
 
+class SamplePropertyForm(forms.ModelForm):
+    value = LocalizedPropertyValueField(required=False)
+
+    class Meta:
+        model = SampleProperty
+        fields = ['property', 'value']
+        widgets = {
+            'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        clean_localized_number_value(self)
+        return cleaned_data
+
+
 SamplePropertyFormSet = inlineformset_factory(
     Sample,
     SampleProperty,
+    form=SamplePropertyForm,
     fields=['property', 'value'],
     extra=0,
     can_delete=True,
     formset=SamplePropertyInlineFormSet,
-    widgets={
-        'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
-        'value': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
-    },
+    widgets={},
 )
 
 
@@ -78,7 +94,7 @@ class SampleAttachmentForm(forms.ModelForm):
     def __init__(self, *args, optional=False, **kwargs):
         sample = kwargs.pop('sample', None)
         if sample and 'data' not in kwargs:
-            kwargs.setdefault('initial', {})['title'] = sample.name
+            kwargs.setdefault('initial', {})['title'] = default_attachment_title(sample)
         self.optional = optional
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():

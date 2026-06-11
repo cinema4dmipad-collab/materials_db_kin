@@ -13,8 +13,12 @@ from apps.materials.forms import (
     MaterialPropertyFormSet,
     get_composite_layer_formset,
 )
+from apps.core.property_form_display import enrich_property_form_display
+from apps.core.number_utils import format_decimal_display
 from apps.materials.models import Material
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureType
+from apps.materials.picker_data import materials_for_picker
+from apps.structures.property_mapping import reference_properties_for_picker
 
 
 class MaterialFormsetMixin:
@@ -79,9 +83,15 @@ class MaterialFormsetMixin:
         context = super().get_context_data(**kwargs)
         if 'formset' not in context:
             context['formset'] = self.get_formset()
+        formset = context.get('formset')
+        if formset is not None:
+            for property_form in formset:
+                enrich_property_form_display(property_form)
         if 'layer_formset' not in context:
             context['layer_formset'] = self.get_layer_formset()
             context['layers_allowed'] = self.layers_allowed()
+        context['reference_properties'] = reference_properties_for_picker()
+        context['reference_materials'] = materials_for_picker()
         return context
 
     def post(self, request, *args, **kwargs):
@@ -368,7 +378,11 @@ class MaterialPropertiesJSONView(View):
                         'property_id': str(item.property_id),
                         'display_name': item.property.display_name,
                         'unit': item.property.unit,
-                        'value': item.value,
+                        'value': (
+                            format_decimal_display(item.value)
+                            if item.property.data_type == 'number'
+                            else item.value
+                        ),
                     }
                     for item in properties
                 ],

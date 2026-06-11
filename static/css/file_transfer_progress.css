@@ -1,0 +1,45 @@
+.file-transfer-progress {
+    inset: 0;
+    position: fixed;
+    z-index: 2000;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 1.25rem;
+    pointer-events: none;
+}
+
+.file-transfer-progress__panel {
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+    max-width: 28rem;
+    padding: 1rem 1.15rem;
+    pointer-events: auto;
+    width: 100%;
+}
+
+.file-transfer-progress__title {
+    color: #0f172a;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 0.65rem;
+}
+
+.file-transfer-progress__meta {
+    color: #64748b;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    margin-top: 0.45rem;
+}
+
+.file-transfer-progress .progress {
+    background: #eef2f7;
+    height: 0.65rem;
+}
+
+.file-transfer-progress .progress-bar {
+    background: var(--kx-brand, #007679);
+    transition: width 0.15s ease;
+}

@@ -15,7 +15,7 @@
             </p>
         </div>
         <div class="text-nowrap">
-            <a href="{{ scan.file.url }}" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener">Скачать</a>
+            <a href="{{ scan.file.url }}" class="btn btn-outline-secondary btn-sm file-download-link" data-download-name="{{ scan.filename }}">Скачать</a>
             <a href="{% url 'scans:edit' sample.pk scan.pk %}" class="btn btn-primary btn-sm">Изменить</a>
             <a href="{% url 'scans:delete' sample.pk scan.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
             <a href="{% url 'scans:list' sample.pk %}" class="btn btn-outline-secondary btn-sm">К списку</a>

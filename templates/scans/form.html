@@ -41,7 +41,7 @@
                     {% endfor %}
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">{% if is_edit %}Сохранить{% else %}Загрузить{% endif %}</button>
+                        <button type="submit" class="btn btn-primary">{% if is_edit %}Сохранить{% else %}Создать{% endif %}</button>
                         {% if is_edit %}
                         <a href="{% url 'scans:detail' sample.pk scan.pk %}" class="btn btn-outline-secondary">Отмена</a>
                         {% else %}

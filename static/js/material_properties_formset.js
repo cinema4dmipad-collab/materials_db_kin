@@ -34,15 +34,54 @@
         totalFormsInput.value = String(rows.length);
     }
 
+    function updateEmptyState(container) {
+        var emptyRow = document.getElementById('material-form-properties-empty-row');
+        if (!emptyRow) {
+            return;
+        }
+        var hasRows = container.querySelectorAll('.property-form-row:not(.d-none)').length > 0;
+        emptyRow.classList.toggle('d-none', hasRows);
+    }
+
+    function getUsedPropertyIds(container) {
+        var ids = new Set();
+        container.querySelectorAll('.property-form-row:not(.d-none) [name$="-property"]').forEach(function (select) {
+            if (select.value) {
+                ids.add(select.value);
+            }
+        });
+        return ids;
+    }
+
+    function setRowPropertyMeta(row, label, unit) {
+        var labelCell = row.querySelector('.material-props-section__name');
+        var unitCell = row.querySelector('.material-props-section__unit');
+        if (labelCell) {
+            labelCell.textContent = label || '—';
+        }
+        if (unitCell) {
+            unitCell.textContent = unit || '—';
+        }
+    }
+
+    function fillPropertyRow(row, payload) {
+        var propertySelect = row.querySelector('[name$="-property"]');
+        if (propertySelect) {
+            propertySelect.value = payload.property_id;
+        }
+        setRowPropertyMeta(row, payload.label, payload.unit);
+    }
+
     function appendPropertyFromTemplate(container, template, totalFormsInput) {
         var formIndex = parseInt(totalFormsInput.value, 10);
         var html = template.innerHTML.replace(/__prefix__/g, formIndex);
-        var wrapper = document.createElement('div');
+        var wrapper = document.createElement('tbody');
         wrapper.innerHTML = html.trim();
         var row = wrapper.firstElementChild;
         container.appendChild(row);
         totalFormsInput.value = String(formIndex + 1);
         bindDeleteButton(container, row, totalFormsInput);
+        updateEmptyState(container);
         return row;
     }
 
@@ -64,16 +103,17 @@
                 row.remove();
                 reindexForms(container, totalFormsInput);
             }
+            updateEmptyState(container);
         });
     }
 
     document.addEventListener('DOMContentLoaded', function () {
         var container = document.getElementById('property-forms-container');
         var template = document.getElementById('empty-property-form-template');
-        var addButton = document.getElementById('add-property-btn');
         var totalFormsInput = document.getElementById('id_properties-TOTAL_FORMS');
+        var picker = window.ReferencePropertiesPicker;
 
-        if (!container || !template || !addButton || !totalFormsInput) {
+        if (!container || !template || !totalFormsInput || !picker) {
             return;
         }
 
@@ -81,8 +121,17 @@
             bindDeleteButton(container, row, totalFormsInput);
         });
 
-        addButton.addEventListener('click', function () {
-            appendPropertyFromTemplate(container, template, totalFormsInput);
+        picker.bind({
+            openButtonId: 'add-property-btn',
+            getUsedPropertyIds: function () {
+                return getUsedPropertyIds(container);
+            },
+            onConfirm: function (payloads) {
+                payloads.forEach(function (payload) {
+                    var row = appendPropertyFromTemplate(container, template, totalFormsInput);
+                    fillPropertyRow(row, payload);
+                });
+            },
         });
 
         var form = container.closest('form');
@@ -92,5 +141,7 @@
                 totalFormsInput.value = String(rows.length);
             });
         }
+
+        updateEmptyState(container);
     });
 })();

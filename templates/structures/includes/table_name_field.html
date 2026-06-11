@@ -1,0 +1,16 @@
+<div class="mb-3">
+    <label class="form-label" for="{{ input_id }}">Имя SQL-таблицы</label>
+    <input type="text"
+           name="table_name"
+           id="{{ input_id }}"
+           class="form-control font-monospace"
+           value="{{ table_name_value }}"
+           autocomplete="off"
+           spellcheck="false"
+           pattern="structures_[a-z][a-z0-9_]*"
+           maxlength="100"
+           placeholder="structures_my_type">
+    <div class="form-text">
+        Только латиница, цифры и _. Обязательный префикс <code>structures_</code>.
+    </div>
+</div>

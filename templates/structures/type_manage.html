@@ -111,9 +111,10 @@
         </p>
 
         {% if can_create_table %}
-        <form method="post" action="{% url 'structures:type_create_table' structure_type.code %}" class="d-inline">
+        <form method="post" action="{% url 'structures:type_create_table' structure_type.code %}">
             {% csrf_token %}
-            <button type="submit" class="btn btn-success">Создать таблицу в БД</button>
+            {% include 'structures/includes/table_name_field.html' with input_id='create-table-name-card' table_name_value=structure_type.table_name %}
+            <button type="submit" class="btn btn-success">Создать</button>
         </form>
         {% elif structure_type.is_created %}
         <p class="mb-3">Таблица <code>{{ structure_type.table_name }}</code> создана. Поля заблокированы для редактирования.</p>
@@ -121,4 +122,64 @@
         {% endif %}
     </div>
 </div>
+
+{% if prompt_create_table and can_create_table %}
+<div class="modal fade" id="create-table-prompt-modal" tabindex="-1" aria-labelledby="create-table-prompt-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="create-table-prompt-title">Создать таблицу в базе данных?</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">
+                    {% if request.GET.prompt_create_table == '1' %}
+                    Тип структуры <strong>{{ structure_type.name }}</strong> сохранён.
+                    {% else %}
+                    Для типа структуры <strong>{{ structure_type.name }}</strong> SQL-таблица ещё не создана.
+                    {% endif %}
+                    Создать таблицу в базе данных сейчас?
+                </p>
+                <p class="text-muted small mb-3">
+                    {% if fields %}
+                    Будут созданы колонки для {{ fields|length }} свойств и служебные поля
+                    <code>id</code>, <code>created_at</code>, <code>updated_at</code>, <code>created_by</code>.
+                    {% else %}
+                    Таблица будет создана только со служебными колонками — свойства можно добавить позже, но после создания таблицы их состав изменить нельзя.
+                    {% endif %}
+                    После создания таблицы редактирование полей будет недоступно.
+                </p>
+                <form method="post" action="{% url 'structures:type_create_table' structure_type.code %}" id="create-table-modal-form">
+                    {% csrf_token %}
+                    {% include 'structures/includes/table_name_field.html' with input_id='create-table-name-modal' table_name_value=structure_type.table_name %}
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Позже</button>
+                <button type="submit" form="create-table-modal-form" class="btn btn-success">Создать таблицу</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if prompt_create_table and can_create_table %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var modalEl = document.getElementById('create-table-prompt-modal');
+    if (!modalEl || !window.bootstrap || !window.bootstrap.Modal) {
+        return;
+    }
+    var modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        var url = new URL(window.location.href);
+        url.searchParams.delete('prompt_create_table');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    });
+});
+</script>
+{% endif %}
 {% endblock %}

@@ -13,8 +13,12 @@ from apps.core.list_filters import (
     QuerySetFilterMixin,
     build_choice_label_filter,
 )
+from apps.materials.models import Material
+from apps.core.property_form_display import enrich_property_form_display
 from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyFormSet
 from apps.samples.models import Sample, SampleAttachment
+from apps.materials.picker_data import materials_for_picker
+from apps.structures.property_mapping import reference_properties_for_picker
 
 
 def warn_extra_sample_properties(request, sample):
@@ -37,6 +41,49 @@ def warn_extra_sample_properties(request, sample):
     )
 
 
+def _resolve_sample_material(form=None, sample=None, request=None):
+    if sample is not None and getattr(sample, 'material_id', None):
+        return sample.material
+    if form is not None:
+        material_id = None
+        if form.is_bound:
+            material_id = form.data.get('material') or form['material'].value()
+        else:
+            material_id = form.initial.get('material') or form['material'].value()
+        if material_id:
+            return Material.objects.filter(pk=material_id).first()
+    if request is not None:
+        material_id = request.GET.get('material')
+        if material_id:
+            return Material.objects.filter(pk=material_id).first()
+    return None
+
+
+def _material_property_ids(material):
+    if material is None:
+        return set()
+    return set(material.properties.values_list('property_id', flat=True))
+
+
+def _form_property_id(form):
+    from apps.core.property_form_display import form_property_id
+
+    return form_property_id(form)
+
+
+def _split_sample_property_formset(formset, material_property_ids):
+    material_id_strs = {str(item) for item in material_property_ids}
+    material_forms = []
+    extra_forms = []
+    for form in formset:
+        prop_id = _form_property_id(form)
+        if prop_id and prop_id in material_id_strs:
+            material_forms.append(form)
+        else:
+            extra_forms.append(form)
+    return material_forms, extra_forms
+
+
 class SampleFormsetMixin:
     def get_formset(self):
         kwargs = {'prefix': 'properties'}
@@ -48,8 +95,27 @@ class SampleFormsetMixin:
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if 'formset' not in context:
-            context['formset'] = self.get_formset()
+        formset = context.get('formset')
+        if formset is None:
+            formset = self.get_formset()
+            context['formset'] = formset
+
+        form = context.get('form')
+        sample = context.get('sample') or getattr(self, 'object', None)
+        material = _resolve_sample_material(form=form, sample=sample, request=self.request)
+        material_property_ids = _material_property_ids(material)
+        material_forms, extra_forms = _split_sample_property_formset(
+            formset,
+            material_property_ids,
+        )
+        for property_form in material_forms + extra_forms:
+            enrich_property_form_display(property_form)
+
+        context['material_property_forms'] = material_forms
+        context['extra_property_forms'] = extra_forms
+        context['material_property_ids'] = [str(item) for item in material_property_ids]
+        context['reference_materials'] = materials_for_picker()
+        context['reference_properties'] = reference_properties_for_picker()
         return context
 
     def form_valid(self, form):

@@ -1,65 +1,65 @@
-{% extends 'base.html' %}
-
-{% block title %}Файлы — {{ sample.code }}{% endblock %}
-
-{% block content %}
-{% include 'samples/includes/sample_tabs.html' %}
-
-<div class="card mb-4">
-    <div class="card-header">
-        <h1 class="h5 mb-0">Прикреплённые файлы — {{ sample.code }}</h1>
-    </div>
-    <div class="card-body p-0">
-        {% include 'includes/list_filter_bar.html' %}
-        {% if attachments %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover mb-0 align-middle">
-                <thead>
-                    <tr>
-                        <th>Название</th>
-                        <th>Файл</th>
-                        <th>Описание</th>
-                        <th>Загружен</th>
-                        <th class="text-end">Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for attachment in attachments %}
-                    <tr>
-                        <td>{{ attachment.title }}</td>
-                        <td>
-                            <a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{{ attachment.filename }}</a>
-                        </td>
-                        <td>{{ attachment.description|default:"—"|truncatewords:12 }}</td>
-                        <td>{{ attachment.uploaded_at|date:"d.m.Y H:i" }}</td>
-                        <td class="text-end text-nowrap">
-                            <a href="{{ attachment.file.url }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">Скачать</a>
-                            <a href="{% url 'attachments:delete' sample.pk attachment.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="p-3 mb-0 text-muted">
-            {% if has_active_filters %}
-            По вашему запросу файлы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
-            {% else %}
-            Файлы ещё не прикреплены.
-            {% endif %}
-        </p>
-        {% endif %}
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header">
-        <h2 class="h5 mb-0">Прикрепить файл</h2>
-    </div>
-    <div class="card-body">
-        {% include 'samples/includes/attachment_form.html' %}
-    </div>
-</div>
-{% endblock %}
-
+{% extends 'base.html' %}
+
+{% block title %}Файлы — {{ sample.code }}{% endblock %}
+
+{% block content %}
+{% include 'samples/includes/sample_tabs.html' %}
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h1 class="h5 mb-0">Прикреплённые файлы — {{ sample.code }}</h1>
+    </div>
+    <div class="card-body p-0">
+        {% include 'includes/list_filter_bar.html' %}
+        {% if attachments %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Файл</th>
+                        <th>Описание</th>
+                        <th>Загружен</th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for attachment in attachments %}
+                    <tr>
+                        <td>{{ attachment.title }}</td>
+                        <td>
+                            <a href="{{ attachment.file.url }}" class="file-download-link" data-download-name="{{ attachment.filename }}">{{ attachment.filename }}</a>
+                        </td>
+                        <td>{{ attachment.description|default:"—"|truncatewords:12 }}</td>
+                        <td>{{ attachment.uploaded_at|date:"d.m.Y H:i" }}</td>
+                        <td class="text-end text-nowrap">
+                            <a href="{{ attachment.file.url }}" class="btn btn-sm btn-outline-secondary file-download-link" data-download-name="{{ attachment.filename }}">Скачать</a>
+                            <a href="{% url 'attachments:delete' sample.pk attachment.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-3 mb-0 text-muted">
+            {% if has_active_filters %}
+            По вашему запросу файлы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
+            {% else %}
+            Файлы ещё не прикреплены.
+            {% endif %}
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Прикрепить файл</h2>
+    </div>
+    <div class="card-body">
+        {% include 'samples/includes/attachment_form.html' %}
+    </div>
+</div>
+{% endblock %}
+

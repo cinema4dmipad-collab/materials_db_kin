@@ -8,8 +8,7 @@ _BOOLEAN_DEFAULTS = {
 }
 
 
-def normalize_default_value_text(value: str) -> str:
-    return str(value).strip().replace(',', '.')
+from apps.core.number_utils import normalize_decimal_input
 
 
 def validate_structure_field_default(
@@ -26,13 +25,13 @@ def validate_structure_field_default(
         return
 
     field_label = label or name or 'поле'
-    text = normalize_default_value_text(raw)
+    text = normalize_decimal_input(raw)
 
     if field_type == 'IntegerField':
-        if '.' in text:
+        if '.' in text or ',' in raw:
             raise ValueError(
                 f'Поле «{field_label}» ({name}): для типа «Целое число» '
-                f'значение по умолчанию «{raw}» должно быть целым, без точки.'
+                f'значение по умолчанию «{raw}» должно быть целым, без дробной части.'
             )
         try:
             int(text)

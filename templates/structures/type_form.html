@@ -6,7 +6,9 @@
 {% endblock %}
 
 {% block extra_head %}
+<link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 <link href="{% static 'css/structure_type_form.css' %}" rel="stylesheet">
+<script src="{% static 'js/reference_properties_picker.js' %}" defer></script>
 <script src="{% static 'js/structure_type_form.js' %}" defer></script>
 {% endblock %}
 
@@ -33,7 +35,7 @@
 
                     <div class="row g-3">
                         {% for field in form %}
-                        <div class="col-md-6{% if field.name == 'display_color' or field.name == 'description' %} col-12{% endif %}">
+                        <div class="col-md-6{% if field.name == 'display_color' or field.name == 'description' or field.name == 'table_name' %} col-12{% endif %}">
                             {% if field.name == 'display_color' %}
                             <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                             {% include 'includes/structure_color_picker.html' with field=field %}
@@ -44,7 +46,11 @@
                             </div>
                             {% else %}
                             <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {% if field.name == 'table_name' %}
+                            <div class="font-monospace">{{ field }}</div>
+                            {% else %}
                             {{ field }}
+                            {% endif %}
                             {% endif %}
                             {% if field.help_text %}
                             <div class="form-text">{{ field.help_text }}</div>
@@ -61,8 +67,8 @@
                             <h2 class="h6 mb-0">Свойства структуры</h2>
                             {% if not fields_locked %}
                             <div class="d-flex flex-wrap gap-2">
-                                <button type="button" class="btn btn-outline-primary btn-sm" id="add-from-properties-btn">+ Из свойств</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="add-material-link-btn">+ Ссылка на материал</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="add-from-properties-btn">Добавить</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="add-material-link-btn">Создать</button>
                             </div>
                             {% endif %}
                         </div>
@@ -92,33 +98,7 @@
                             </div>
 
                             {% if not fields_locked %}
-                            {{ reference_properties|json_script:"reference-properties-data" }}
-                            {% url 'references:create' as property_create_url %}
-
-                            <div class="modal fade" id="reference-properties-modal" tabindex="-1" aria-labelledby="reference-properties-modal-label" aria-hidden="true">
-                                <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h2 class="modal-title h5" id="reference-properties-modal-label">Выбор свойств</h2>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-                                                <input type="search" class="form-control form-control-sm flex-grow-1" id="reference-properties-search" placeholder="Поиск по названию, коду или группе..." autocomplete="off">
-                                                <a href="{{ property_create_url }}?next={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary btn-sm text-nowrap" id="create-reference-property-btn">+ Новое свойство</a>
-                                            </div>
-                                            <div id="reference-properties-empty" class="alert alert-info mb-0">
-                                                В справочнике пока нет свойств. Создайте первое свойство кнопкой выше.
-                                            </div>
-                                            <div id="reference-properties-list"></div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
-                                            <button type="button" class="btn btn-primary btn-sm" id="reference-properties-add-btn" disabled>Добавить выбранные</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            {% include 'includes/reference_properties_modal.html' %}
 
                             <template id="field-row-template">
                                 <li class="structure-field-item" data-structure-field-row>
@@ -162,7 +142,7 @@
 
                     <div class="d-flex gap-2 mt-4">
                         {% if not fields_locked %}
-                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                        <button type="submit" class="btn btn-primary">{% if is_edit %}Сохранить{% else %}Создать{% endif %}</button>
                         {% endif %}
                         {% if is_edit %}
                         <a href="{% url 'structures:type_manage' structure_type.code %}" class="btn btn-outline-secondary">К управлению</a>

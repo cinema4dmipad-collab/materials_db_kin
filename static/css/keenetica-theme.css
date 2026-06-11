@@ -88,8 +88,14 @@ a:hover {
     padding-bottom: 0.5rem;
 }
 
+.navbar-keenetica > .container {
+    gap: 0.5rem;
+}
+
 .navbar-keenetica .navbar-brand {
     padding: 0;
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 .navbar-keenetica .brand-logo {
@@ -107,10 +113,15 @@ a:hover {
     padding-left: 1rem;
     border-left: 1px solid rgba(255, 255, 255, 0.18);
     line-height: 1.2;
+    white-space: nowrap;
 }
 
 .navbar-keenetica .navbar-toggler {
     border-color: rgba(255, 255, 255, 0.35);
+}
+
+.navbar-keenetica .navbar-nav--main {
+    flex-wrap: nowrap;
 }
 
 .navbar-keenetica .nav-link {
@@ -122,6 +133,7 @@ a:hover {
     border-radius: 0;
     border-bottom: 2px solid transparent;
     transition: color 0.15s ease, border-color 0.15s ease;
+    white-space: nowrap;
 }
 
 .navbar-keenetica .nav-link:hover,
@@ -143,10 +155,55 @@ a:hover {
     color: #ffffff !important;
 }
 
+.navbar-keenetica .dropdown-menu {
+    background: #0f3031;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.375rem;
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.28);
+    margin-top: 0.35rem;
+    min-width: 11rem;
+    padding: 0.35rem;
+}
+
+.navbar-keenetica .dropdown-item {
+    border-radius: 0.25rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.45rem 0.75rem;
+}
+
+.navbar-keenetica .dropdown-item:hover,
+.navbar-keenetica .dropdown-item:focus {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.navbar-keenetica .dropdown-item.active,
+.navbar-keenetica .dropdown-item:active {
+    background: var(--kx-brand-soft-strong);
+    color: #ffffff;
+}
+
+@media (min-width: 992px) and (max-width: 1399.98px) {
+    .navbar-keenetica .brand-logo {
+        max-height: 2.5rem;
+    }
+
+    .navbar-keenetica .nav-link {
+        font-size: 0.8125rem;
+        padding: 0.5rem 0.55rem !important;
+    }
+}
+
 @media (max-width: 991.98px) {
     .navbar-keenetica .navbar-collapse {
         padding-top: 0.75rem;
         padding-bottom: 0.5rem;
+    }
+
+    .navbar-keenetica .navbar-nav--main {
+        flex-wrap: wrap;
     }
 
     .navbar-keenetica .nav-link {
@@ -159,6 +216,18 @@ a:hover {
     .navbar-keenetica .nav-link.active {
         border-left-color: var(--kx-brand);
         background: rgba(255, 255, 255, 0.05);
+    }
+
+    .navbar-keenetica .dropdown-menu {
+        background: rgba(0, 0, 0, 0.18);
+        border: none;
+        box-shadow: none;
+        margin-top: 0;
+        padding-left: 0.75rem;
+    }
+
+    .navbar-keenetica .dropdown-item {
+        padding-left: 1rem;
     }
 
     .navbar-keenetica .brand-subtitle {
@@ -225,6 +294,13 @@ a:hover {
 .app-footer__tagline {
     color: rgba(255, 255, 255, 0.62);
     font-size: 0.8125rem;
+}
+
+.app-footer__version {
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.75rem;
+    margin-top: 0.35rem;
+    font-variant-numeric: tabular-nums;
 }
 
 .app-footer__contacts {

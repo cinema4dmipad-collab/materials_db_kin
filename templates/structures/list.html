@@ -10,7 +10,7 @@
             <p class="text-muted small mb-0">Записи параметров · всего {{ total }}</p>
         </div>
         <div class="text-nowrap">
-            <a href="{% url 'structures:create' structure_type.code %}" class="btn btn-primary btn-sm">+ Новая запись</a>
+            <a href="{% url 'structures:create' structure_type.code %}" class="btn btn-primary btn-sm">Создать</a>
             <a href="{% url 'structures:select_type' %}" class="btn btn-outline-secondary btn-sm">К типам</a>
         </div>
     </div>
@@ -75,7 +75,7 @@
             По вашему запросу записи не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
             {% else %}
             Записей пока нет.
-            <a href="{% url 'structures:create' structure_type.code %}">Создайте первую запись</a>.
+            <a href="{% url 'structures:create' structure_type.code %}">Создать</a>.
             {% endif %}
         </div>
         {% endif %}

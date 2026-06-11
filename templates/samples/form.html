@@ -6,6 +6,7 @@
 {% endblock %}
 
 {% block content %}
+<link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 {% if sample %}{% include 'samples/includes/sample_tabs.html' %}{% endif %}
 
 <div class="card mb-4">
@@ -17,7 +18,6 @@
             method="post"
             novalidate
             data-material-properties-url="{% url 'materials:properties_json' pk='00000000-0000-0000-0000-000000000000' %}"
-            data-properties-prefilled="{% if formset.total_form_count %}true{% else %}false{% endif %}"
         >
             {% csrf_token %}
             {% if form.non_field_errors %}
@@ -38,7 +38,7 @@
                 <label for="{{ form.material.id_for_label }}" class="form-label">{{ form.material.label }}</label>
                 {{ form.material }}
                 {% if form.material.errors %}<div class="invalid-feedback d-block">{{ form.material.errors }}</div>{% endif %}
-                <div class="form-text">При смене материала свойства подставятся из его карточки (можно изменить для образца).</div>
+                <div class="form-text">При смене материала его свойства подставятся автоматически; значения можно изменить для образца.</div>
             </div>
             <div class="mb-3">
                 <label for="{{ form.object_type.id_for_label }}" class="form-label">{{ form.object_type.label }}</label>
@@ -57,81 +57,8 @@
                 {% if form.tag_names.errors %}<div class="invalid-feedback d-block">{{ form.tag_names.errors }}</div>{% endif %}
             </div>
 
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span>Свойства</span>
-                    <button type="button" id="add-property-btn" class="btn btn-sm btn-outline-primary">+ Добавить свойство</button>
-                </div>
-                <div class="card-body">
-                    {{ formset.management_form }}
-                    {% if formset.non_form_errors %}
-                    <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
-                    {% endif %}
-                    {% if formset.errors and not formset.non_form_errors %}
-                    <div class="alert alert-danger">Исправьте ошибки в свойствах образца ниже.</div>
-                    {% endif %}
-                    <div id="sample-extra-properties-warning" class="alert alert-warning d-none" role="alert"></div>
-                    <div id="property-forms-container">
-                        {% for property_form in formset %}
-                        <div class="row g-2 align-items-end mb-3 border-bottom pb-3 property-form-row">
-                            {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
-                            <div class="col-md-5">
-                                <label class="form-label">Свойство</label>
-                                {{ property_form.property }}
-                                {% if property_form.property.errors %}<div class="text-danger small">{{ property_form.property.errors }}</div>{% endif %}
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label">Значение</label>
-                                {{ property_form.value }}
-                                {% if property_form.value.errors %}<div class="text-danger small">{{ property_form.value.errors }}</div>{% endif %}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Действия</label>
-                                <div class="text-nowrap">
-                                    {% if formset.can_delete %}
-                                    <span class="visually-hidden">{{ property_form.DELETE }}</span>
-                                    {% endif %}
-                                    <button type="button" class="btn btn-sm btn-danger delete-property-btn" title="Удалить свойство">✖</button>
-                                </div>
-                            </div>
-                            {% if property_form.non_field_errors %}
-                            <div class="col-12"><div class="text-danger small">{{ property_form.non_field_errors }}</div></div>
-                            {% endif %}
-                            <div class="col-12 property-extra-warning d-none">
-                                <div class="text-warning small">Это свойство отсутствует у выбранного материала.</div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <template id="empty-property-form-template">
-                        {% with property_form=formset.empty_form %}
-                        <div class="row g-2 align-items-end mb-3 border-bottom pb-3 property-form-row">
-                            {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
-                            <div class="col-md-5">
-                                <label class="form-label">Свойство</label>
-                                {{ property_form.property }}
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label">Значение</label>
-                                {{ property_form.value }}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Действия</label>
-                                <div class="text-nowrap">
-                                    {% if formset.can_delete %}
-                                    <span class="visually-hidden">{{ property_form.DELETE }}</span>
-                                    {% endif %}
-                                    <button type="button" class="btn btn-sm btn-danger delete-property-btn" title="Удалить свойство">✖</button>
-                                </div>
-                            </div>
-                            <div class="col-12 property-extra-warning d-none">
-                                <div class="text-warning small">Это свойство отсутствует у выбранного материала.</div>
-                            </div>
-                        </div>
-                        {% endwith %}
-                    </template>
-                </div>
-            </div>
+            {% include 'samples/includes/sample_properties_sections.html' %}
+            {% include 'includes/reference_materials_modal.html' %}
 
             {% if sample %}
             <p class="text-muted small mb-0">
@@ -146,7 +73,7 @@
             {% endif %}
 
             <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-primary">Сохранить образец</button>
+                <button type="submit" class="btn btn-primary">{% if sample %}Сохранить{% else %}Создать{% endif %}</button>
                 {% if sample %}
                 <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-outline-secondary">Отмена</a>
                 {% else %}
@@ -156,6 +83,11 @@
         </form>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
+<script src="{% static 'js/reference_properties_picker.js' %}"></script>
+<script src="{% static 'js/reference_materials_picker.js' %}"></script>
+<script src="{% static 'js/material_picker_fields.js' %}"></script>
 <script src="{% static 'js/sample_properties_formset.js' %}"></script>
 {% endblock %}

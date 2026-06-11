@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление «{{ tag_obj.name }}» — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Удаление тега</h1>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            Вы уверены, что хотите удалить тег
+            <strong>{{ tag_obj.name }}</strong> (<code>{{ tag_obj.slug }}</code>)?
+            {% if usage_count %}
+            Тег будет снят с {{ usage_count }} запис{{ usage_count|pluralize:"и,ей,ей" }}:
+            {% if material_count %}{{ material_count }} материал{{ material_count|pluralize:"а,ов" }}{% endif %}
+            {% if sample_count %}{% if material_count %}, {% endif %}{{ sample_count }} образц{{ sample_count|pluralize:"а,ов" }}{% endif %}
+            {% if scan_count %}{% if material_count or sample_count %}, {% endif %}{{ scan_count }} скан{{ scan_count|pluralize:"а,ов" }}{% endif %}.
+            {% else %}
+            Тег ни к чему не привязан.
+            {% endif %}
+        </div>
+        <form method="post" class="d-flex gap-2">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Удалить</button>
+            <a href="{% url 'core:tag_list' %}" class="btn btn-outline-secondary">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

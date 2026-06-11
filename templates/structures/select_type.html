@@ -20,7 +20,7 @@
 
         </div>
 
-        <a href="{% url 'structures:type_create' %}" class="btn btn-primary btn-sm">+ Новый тип</a>
+        <a href="{% url 'structures:type_create' %}" class="btn btn-primary btn-sm">Создать</a>
 
     </div>
 
@@ -108,7 +108,7 @@
 
             {% else %}
 
-            Нет активных типов. <a href="{% url 'structures:type_create' %}">Создайте первый тип структуры</a>.
+            Нет активных типов. <a href="{% url 'structures:type_create' %}">Создать</a>.
 
             {% endif %}
 

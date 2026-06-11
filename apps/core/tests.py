@@ -16,6 +16,13 @@ from apps.core.list_filters import (
 )
 from apps.core.templatetags.ui_tags import category_tone, semantic_tone, ui_category_tone, ui_tone
 from apps.core.models import Tag
+from apps.core.forms import TagForm
+from apps.core.number_utils import (
+    canonical_number_string,
+    format_decimal_display,
+    normalize_decimal_input,
+    parse_decimal,
+)
 from apps.core.tag_utils import assign_tags, get_or_create_tags, parse_tag_input, tag_slug_from_name
 from apps.materials.models import Material
 from apps.samples.models import Sample
@@ -41,6 +48,51 @@ class _SampleFilterView(QuerySetFilterMixin):
         return {'object_type': Sample.OBJECT_TYPES}
 
 
+class TagFormTests(TestCase):
+    def test_generates_slug_from_name(self):
+        form = TagForm(data={'name': 'T700 test'})
+        self.assertTrue(form.is_valid(), form.errors)
+        tag = form.save()
+        self.assertEqual(tag.slug, 't700-test')
+
+    def test_rejects_duplicate_slug(self):
+        Tag.objects.create(name='Prepreg', slug='prepreg')
+        form = TagForm(data={'name': 'PREPREG'})
+        self.assertFalse(form.is_valid())
+        self.assertIn('name', form.errors)
+
+
+class TagViewsTests(TestCase):
+    def setUp(self):
+        self.tag = Tag.objects.create(name='Prepreg', slug='prepreg')
+
+    def test_tag_list_renders(self):
+        response = self.client.get(reverse('core:tag_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Prepreg')
+        self.assertContains(response, 'prepreg')
+
+    def test_tag_create_view(self):
+        response = self.client.post(reverse('core:tag_create'), {'name': 'T700'})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Tag.objects.filter(slug='t700').exists())
+
+    def test_tag_update_view(self):
+        response = self.client.post(
+            reverse('core:tag_edit', kwargs={'pk': self.tag.pk}),
+            {'name': 'Pre-preg'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.tag.refresh_from_db()
+        self.assertEqual(self.tag.name, 'Pre-preg')
+        self.assertEqual(self.tag.slug, 'pre-preg')
+
+    def test_tag_delete_view(self):
+        response = self.client.post(reverse('core:tag_delete', kwargs={'pk': self.tag.pk}))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Tag.objects.filter(pk=self.tag.pk).exists())
+
+
 class TagUtilsTests(TestCase):
     def test_parse_tag_input_splits_and_deduplicates(self):
         names = parse_tag_input(' prepreg, T700; prepreg , lab ')
@@ -55,6 +107,20 @@ class TagUtilsTests(TestCase):
         tags = get_or_create_tags(['prepreg', 'PREPREG'])
         self.assertEqual(len(tags), 1)
         self.assertEqual(tags[0].slug, 'prepreg')
+
+
+class NumberUtilsTests(TestCase):
+    def test_normalize_decimal_input_accepts_comma(self):
+        self.assertEqual(normalize_decimal_input('12,34'), '12.34')
+
+    def test_parse_decimal_from_comma_string(self):
+        self.assertEqual(parse_decimal('1,55'), parse_decimal('1.55'))
+
+    def test_format_decimal_display_uses_comma(self):
+        self.assertEqual(format_decimal_display('12.50', 2), '12,50')
+
+    def test_canonical_number_string_stores_with_dot(self):
+        self.assertEqual(canonical_number_string('12,50'), '12.5')
 
 
 class TagAssignmentTests(TestCase):
@@ -238,6 +304,20 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Образцы')
 
 
+class AppVersionTests(TestCase):
+    def test_get_app_version_reads_pyproject(self):
+        from apps.core.version import get_app_version
+
+        self.assertEqual(get_app_version(), '0.1.0')
+
+    def test_footer_shows_app_version(self):
+        from django.conf import settings
+
+        response = self.client.get(reverse('core:dashboard'))
+
+        self.assertContains(response, f'База композитов v{settings.APP_VERSION}')
+
+
 class DebugPageTests(TestCase):
     def setUp(self):
         user_model = get_user_model()
@@ -272,6 +352,13 @@ class DebugPageTests(TestCase):
         self.assertNotContains(response, 'href="/debug/"')
         self.assertNotContains(response, '>Debug</a>')
 
+    def test_base_layout_includes_file_transfer_progress_assets(self):
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'file-transfer-progress')
+        self.assertContains(response, 'file_transfer_progress.js')
+        self.assertContains(response, 'file_transfer_progress.css')
+
     def test_debug_page_renders_database_and_runtime_info_without_log_file(self):
         with TemporaryDirectory() as temp_dir:
             missing_log = Path(temp_dir) / 'debug.log'
@@ -282,6 +369,7 @@ class DebugPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Подключение к БД')
         self.assertContains(response, 'DB engine')
+        self.assertContains(response, 'App version')
         self.assertContains(response, 'Storage backend')
         self.assertContains(response, 'Локальный файл логов пока не найден.')
 

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static ui_tags %}
 
 {% block title %}{{ material.code }} — База композитов{% endblock %}
 
@@ -103,7 +103,7 @@
                     {% for mp in properties %}
                     <tr>
                         <th scope="row" class="material-props-section__name">{{ mp.property.display_name }}</th>
-                        <td class="material-props-section__value">{{ mp.value }}</td>
+                        <td class="material-props-section__value">{% if mp.property.data_type == 'number' %}{{ mp.value|decimal_comma }}{% else %}{{ mp.value }}{% endif %}</td>
                         <td class="material-props-section__unit">{{ mp.property.unit|default:"—" }}</td>
                     </tr>
                     {% endfor %}
@@ -124,7 +124,7 @@
         {% if layer_diagram %}
         <div class="composite-thickness-summary" aria-label="Сводка по толщине композита">
             <span class="composite-thickness-summary__label">Общая толщина</span>
-            <span class="composite-thickness-summary__value">Σt = {{ layer_diagram.total_thickness }} мм</span>
+            <span class="composite-thickness-summary__value">Σt = {{ layer_diagram.total_thickness|decimal_comma }} мм</span>
             <span class="composite-thickness-summary__meta">{{ layer_diagram.layer_count }} сл.</span>
         </div>
         {% endif %}
@@ -132,10 +132,7 @@
     <div class="card-body p-0">
         {% if composite_layers %}
         <div class="composite-layers-layout row g-0">
-            <div class="col-lg-4 col-xl-3 border-end">
-                {% include 'materials/includes/composite_layer_diagram.html' %}
-            </div>
-            <div class="col-lg-8 col-xl-9">
+            <div class="col-lg-8 col-xl-9 border-end">
                 <div class="table-responsive">
                     <table class="table table-striped table-hover mb-0 composite-layers-table">
                         <thead>
@@ -154,24 +151,27 @@
                                 <td>
                                     <span class="composite-layer-material">
                                         <span class="composite-layer-material__swatch" style="background-color: {{ item.color }};"></span>
-                                        <a href="{% url 'materials:detail' item.material_id %}">{{ item.material_label }}</a>
+                                        <span class="composite-layer-material__label">{{ item.material_label }}</span>
                                     </span>
                                 </td>
                                 <td>{{ item.angle }}</td>
-                                <td>{{ item.thickness }}</td>
-                                <td>{{ item.thickness_percent }}</td>
+                                <td>{{ item.thickness|decimal_comma }}</td>
+                                <td>{{ item.thickness_percent|decimal_comma }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                         <tfoot>
                             <tr class="composite-layers-table__total">
                                 <th colspan="3">Итого</th>
-                                <th>{{ layer_diagram.total_thickness }}</th>
+                                <th>{{ layer_diagram.total_thickness|decimal_comma }}</th>
                                 <th>100</th>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
+            </div>
+            <div class="col-lg-4 col-xl-3">
+                {% include 'materials/includes/composite_layer_diagram.html' %}
             </div>
         </div>
         {% else %}

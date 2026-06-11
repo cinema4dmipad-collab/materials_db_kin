@@ -6,6 +6,7 @@ from decimal import Decimal
 from django.db import connection
 from django.utils import timezone
 
+from apps.core.number_utils import normalize_decimal_input
 from apps.structures.default_values import validate_structure_field_model
 from apps.structures.display_format import normalize_structure_field_value
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
@@ -445,9 +446,9 @@ class SQLExecutor:
         if field.field_type == 'IntegerField':
             return int(value)
         if field.field_type == 'DecimalField':
-            return Decimal(str(value))
+            return Decimal(normalize_decimal_input(str(value)))
         if field.field_type == 'FloatField':
-            return float(value)
+            return float(normalize_decimal_input(str(value)))
         if field.field_type == 'DateField' and isinstance(value, str):
             return date.fromisoformat(value)
         if field.field_type == 'DateTimeField':

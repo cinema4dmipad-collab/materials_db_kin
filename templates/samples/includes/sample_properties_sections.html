@@ -1,0 +1,102 @@
+            <div class="card mb-4">
+                <div class="card-header">
+                    <span>Свойства из материала</span>
+                </div>
+                <div class="card-body p-0">
+                    {{ formset.management_form }}
+                    {% if formset.non_form_errors %}
+                    <div class="alert alert-danger m-3 mb-0">{{ formset.non_form_errors }}</div>
+                    {% endif %}
+                    {% if formset.errors and not formset.non_form_errors %}
+                    <div class="alert alert-danger m-3 mb-0">Исправьте ошибки в свойствах образца ниже.</div>
+                    {% endif %}
+                    <div class="table-responsive material-properties-table-wrap">
+                        <table class="table table-striped align-middle mb-0 app-data-table material-properties-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Свойство</th>
+                                    <th scope="col">Значение</th>
+                                    <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                                </tr>
+                            </thead>
+                            <tbody id="material-property-forms-container">
+                                {% for property_form in material_property_forms %}
+                                {% include 'samples/includes/sample_property_material_row.html' with property_form=property_form formset=formset %}
+                                {% endfor %}
+                            </tbody>
+                            <tbody>
+                                <tr id="material-properties-empty-row" class="material-props-section__empty{% if material_property_forms %} d-none{% endif %}">
+                                    <td colspan="3" class="text-muted">{% if form.material.value %}У выбранного материала нет свойств.{% else %}Выберите материал — свойства подставятся автоматически.{% endif %}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <template id="empty-material-property-form-template">
+                        {% with property_form=formset.empty_form %}
+                        <tr class="property-form-row property-form-row--material">
+                            {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
+                            <th scope="row" class="material-props-section__name">—</th>
+                            <td class="material-props-section__value">{{ property_form.value }}</td>
+                            <td class="material-props-section__unit">—</td>
+                            <td class="visually-hidden">
+                                {{ property_form.property }}
+                                {% if formset.can_delete %}
+                                {{ property_form.DELETE }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endwith %}
+                    </template>
+                    <div id="deleted-property-forms-container" class="visually-hidden" aria-hidden="true"></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Дополнительные свойства</span>
+                    <button type="button" id="add-extra-property-btn" class="btn btn-sm btn-outline-primary">Добавить</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive material-properties-table-wrap">
+                        <table class="table table-striped align-middle mb-0 app-data-table material-properties-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Свойство</th>
+                                    <th scope="col">Значение</th>
+                                    <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                                    <th scope="col" class="text-end">Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="extra-property-forms-container">
+                                {% for property_form in extra_property_forms %}
+                                {% include 'samples/includes/sample_property_extra_row.html' with property_form=property_form formset=formset %}
+                                {% endfor %}
+                            </tbody>
+                            <tbody>
+                                <tr id="extra-properties-empty-row" class="material-props-section__empty{% if extra_property_forms %} d-none{% endif %}">
+                                    <td colspan="4" class="text-muted">Дополнительных свойств пока нет.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <template id="empty-extra-property-form-template">
+                        {% with property_form=formset.empty_form %}
+                        <tr class="property-form-row property-form-row--extra">
+                            {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
+                            <th scope="row" class="material-props-section__name">—</th>
+                            <td class="material-props-section__value">{{ property_form.value }}</td>
+                            <td class="material-props-section__unit">—</td>
+                            <td class="text-end text-nowrap">
+                                {% if formset.can_delete %}
+                                <span class="visually-hidden">{{ property_form.DELETE }}</span>
+                                {% endif %}
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-property-btn" title="Удалить свойство">✖</button>
+                            </td>
+                            <td class="visually-hidden">{{ property_form.property }}</td>
+                        </tr>
+                        {% endwith %}
+                    </template>
+                    {% include 'includes/reference_properties_modal.html' %}
+                    <p class="text-muted small px-3 py-2 mb-0">Свойства, которых нет у материала, можно добавить вручную.</p>
+                </div>
+            </div>

@@ -74,6 +74,7 @@ def _database_info() -> list[dict]:
 def _runtime_info() -> list[dict]:
     storage_backend = settings.STORAGES.get('default', {}).get('BACKEND', '—')
     return [
+        {'label': 'App version', 'value': settings.APP_VERSION},
         {'label': 'Django', 'value': get_version()},
         {'label': 'DEBUG', 'value': 'on' if settings.DEBUG else 'off'},
         {'label': 'Storage backend', 'value': storage_backend},

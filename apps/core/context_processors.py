@@ -17,3 +17,9 @@ def tag_suggestions(request):
         cache.set(TAG_SUGGESTIONS_CACHE_KEY, tag_ids, TAG_SUGGESTIONS_CACHE_TIMEOUT)
     tags = Tag.objects.filter(pk__in=tag_ids).order_by('name')
     return {'tag_suggestions': tags}
+
+
+def app_version(request):
+    from django.conf import settings
+
+    return {'app_version': settings.APP_VERSION}

@@ -49,6 +49,180 @@
     min-height: 320px;
 }
 
+.composite-layers-layout--edit .composite-layers-edit-table .form-control,
+.composite-layers-layout--edit .composite-layers-edit-table .form-select {
+    min-width: 0;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    font-size: 0.875rem;
+}
+
+.composite-layers-card__header {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+}
+
+.composite-layers-table-toolbar {
+    align-items: center;
+    background: #fafbfc;
+    border-bottom: 1px solid #edf2f7;
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.65rem 0.85rem;
+}
+
+.composite-layers-actions .btn {
+    font-size: 1.125rem;
+    line-height: 1;
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+    padding: 0.45rem 0.7rem;
+}
+
+.composite-layers-edit-table {
+    --bs-table-bg: transparent;
+    margin-bottom: 0;
+}
+
+.composite-layers-edit-table thead th {
+    background: #f8fafc;
+    border-bottom-width: 1px;
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.composite-layers-edit-table tbody td {
+    border-bottom: 1px solid #edf2f7;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+    vertical-align: middle;
+}
+
+.composite-layers-edit-table__drag {
+    width: 2.75rem;
+    padding-left: 0.5rem;
+    padding-right: 0.25rem;
+    text-align: center;
+}
+
+.composite-layers-edit-table__select {
+    width: 2.25rem;
+    text-align: center;
+}
+
+.composite-layers-edit-table__select .form-check-input {
+    float: none;
+    margin: 0;
+}
+
+.composite-layers-edit-table__number {
+    width: 2.5rem;
+    text-align: center;
+}
+
+.composite-layers-edit-table__number .layer-number-field {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.layer-index-display {
+    color: var(--kx-brand);
+    display: inline-flex;
+    font-size: 0.875rem;
+    font-weight: 700;
+    justify-content: center;
+    min-width: 1.5rem;
+}
+
+.composite-layers-edit-table__angle {
+    width: 5.5rem;
+}
+
+.composite-layers-edit-table__thickness {
+    width: 6.5rem;
+}
+
+.layer-drag-handle {
+    align-items: center;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.375rem;
+    color: #64748b;
+    cursor: grab;
+    display: inline-flex;
+    font-size: 1.05rem;
+    justify-content: center;
+    letter-spacing: -0.12em;
+    line-height: 1;
+    min-height: 2.25rem;
+    min-width: 2.25rem;
+    padding: 0.35rem 0.4rem;
+    touch-action: none;
+    user-select: none;
+}
+
+.layer-drag-handle:hover {
+    background: #e8f0f0;
+    border-color: rgba(0, 118, 121, 0.25);
+    color: var(--kx-brand);
+}
+
+.layer-drag-handle:active {
+    background: #dfecec;
+    cursor: grabbing;
+}
+
+.composite-layers-edit-table .layer-form-row {
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.composite-layers-edit-table .layer-form-row:hover {
+    background: rgba(0, 118, 121, 0.04);
+}
+
+.composite-layers-edit-table .layer-form-row.layer-form-row--selected {
+    background: rgba(0, 118, 121, 0.08);
+}
+
+.composite-layers-edit-table .layer-form-row.layer-form-row--selected > td:first-child {
+    box-shadow: inset 3px 0 0 var(--kx-brand);
+}
+
+.composite-layers-hint {
+    background: #fafbfc;
+}
+
+.composite-layers-edit-table__material .material-picker-field__label {
+    min-height: calc(1.5em + 0.7rem);
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+}
+
+.composite-layers-edit-table__number .form-control {
+    width: 4rem;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+}
+
+.composite-layer-diagram--empty {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 320px;
+}
+
+.composite-layer-material__label {
+    color: inherit;
+}
+
 .layer-material-legend {
     display: flex;
     flex-wrap: wrap;
@@ -175,6 +349,10 @@
 @media (max-width: 991.98px) {
     .composite-layers-layout .border-end {
         border-right: none !important;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .composite-layers-layout--edit .border-end {
         border-bottom: 1px solid #dee2e6;
     }
 

@@ -1,0 +1,28 @@
+{% load ui_tags %}
+{% reference_materials_json_script reference_materials %}
+{% url 'materials:create' as material_create_url %}
+
+<div class="modal fade" id="reference-materials-modal" tabindex="-1" aria-labelledby="reference-materials-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="reference-materials-modal-label">Выбор материала</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+                    <input type="search" class="form-control form-control-sm flex-grow-1" id="reference-materials-search" placeholder="Поиск по коду, названию или типу структуры..." autocomplete="off">
+                    <a href="{{ material_create_url }}?next={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary btn-sm text-nowrap">Создать</a>
+                </div>
+                <div id="reference-materials-empty" class="alert alert-info mb-0">
+                    В базе пока нет материалов. Создайте первый материал кнопкой выше.
+                </div>
+                <div id="reference-materials-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary btn-sm" id="reference-materials-select-btn" disabled>Выбрать</button>
+            </div>
+        </div>
+    </div>
+</div>
