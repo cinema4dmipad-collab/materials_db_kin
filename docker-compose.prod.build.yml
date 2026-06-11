@@ -1,24 +1,5 @@
-# Опционально: первичная сборка образов (когда сервер видит Docker Hub / GitLab registry).
-# Dokploy Advanced → Command append:
-#   -f docker-compose.prod.yml -f docker-compose.prod.build.yml
+# Устарело: сборка перенесена в docker-compose.prod.yml (pull_policy: build).
+# Файл оставлен для совместимости — дополнительных секций не добавляет.
 #
-# Или вручную на сервере:
-#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.build.yml build
-
-services:
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim-bookworm}
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
-        PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
-    image: ${WEB_IMAGE:-materials-db-web:prod}
-
-  nginx:
-    build:
-      context: ./deploy/nginx
-      dockerfile: Dockerfile
-    image: ${NGINX_IMAGE:-materials-db-nginx:prod}
+# Раньше: -f docker-compose.prod.yml -f docker-compose.prod.build.yml
+# Сейчас достаточно: docker compose -f docker-compose.prod.yml up -d --build
