@@ -18,11 +18,13 @@ GitLab CI does **not** build or deploy this project — see [`.gitlab-ci.yml`](.
 
 [`docker-compose.prod.yml`](../../docker-compose.prod.yml):
 
-* `web` — Gunicorn, image from `WEB_IMAGE` or local build tag
-* `nginx` — reverse proxy, static files
+* `web` / `nginx` — **build** from Dockerfile on the server (`pull_policy: build`)
+* Image tags from `WEB_IMAGE` / `NGINX_IMAGE` (default `materials-db-web:prod`) — **local names**, not Docker Hub repos
 * No bundled Postgres/S3 — connect to external Dokploy services via internal hostnames
 
-Optional build overlay: [`docker-compose.prod.build.yml`](../../docker-compose.prod.build.yml).
+**Important:** Do not set `WEB_IMAGE=materials-db-web:abc1234` expecting a pull from Docker Hub — that repo does not exist. Either let Compose **build** the tag locally, or use a full GitLab registry path with `docker login`.
+
+Optional legacy overlay [`docker-compose.prod.build.yml`](../../docker-compose.prod.build.yml) is empty; build lives in prod compose.
 
 ## Environment on Server
 
