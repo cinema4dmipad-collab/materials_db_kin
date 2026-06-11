@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}
+{% if tag_obj %}Редактирование «{{ tag_obj.name }}»{% else %}Новый тег{% endif %} — База композитов
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h1 class="h5 mb-0">
+                    {% if tag_obj %}Редактирование тега «{{ tag_obj.name }}»{% else %}Новый тег{% endif %}
+                </h1>
+            </div>
+            <div class="card-body">
+                {% if tag_obj %}
+                <div class="alert alert-light border mb-3">
+                    <div class="small text-muted mb-1">Используется в записях</div>
+                    <div class="d-flex flex-wrap gap-3">
+                        <span>Материалов: <strong>{{ material_count }}</strong></span>
+                        <span>Образцов: <strong>{{ sample_count }}</strong></span>
+                        <span>Сканов: <strong>{{ scan_count }}</strong></span>
+                    </div>
+                    <div class="form-text mt-2 mb-0">Код тега: <code>{{ tag_obj.slug }}</code></div>
+                </div>
+                {% endif %}
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                        <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">{% if tag_obj %}Сохранить{% else %}Создать{% endif %}</button>
+                        <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

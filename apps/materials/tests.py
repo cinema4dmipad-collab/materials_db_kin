@@ -263,7 +263,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Из параметров структуры')
         self.assertContains(response, 'Дополнительные свойства')
         self.assertContains(response, 'Density')
-        self.assertContains(response, '1.55')
+        self.assertContains(response, '1,55')
         self.assertContains(response, 'g/cm3')
         self.assertContains(response, 'Test Panel')
         self.assertContains(response, 'Title')
@@ -608,9 +608,9 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertIsInstance(material_field, forms.ModelChoiceField)
         self.assertEqual(list(material_field.queryset), list(Material.objects.order_by('code')))
         self.assertFalse(material_field.required)
-        self.assertIn('data-material-detail-url', material_field.widget.attrs)
+        self.assertIn('data-material-picker', material_field.widget.attrs)
 
-    def test_create_view_renders_material_select_detail_links(self):
+    def test_create_view_renders_material_picker(self):
         title_field = self.structure_type.fields.get(name='title')
         thickness_field = self.structure_type.fields.get(name='thickness')
         response = self.client.post(
@@ -625,8 +625,9 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-material-detail-url')
-        self.assertContains(response, 'material_select_link.js')
+        self.assertContains(response, 'data-material-picker')
+        self.assertContains(response, 'reference-materials-modal')
+        self.assertContains(response, 'material_picker_fields.js')
         self.assertContains(response, 'js-material-select')
 
     def test_create_view_preserves_fields_when_structure_type_changes(self):
@@ -654,7 +655,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(response, 'Draft material')
         self.assertContains(response, 'Keep description')
         self.assertContains(response, 'Panel title')
-        self.assertContains(response, '12.50')
+        self.assertContains(response, '12,50')
         self.assertFalse(Material.objects.filter(code='MAT-DRAFT-001').exists())
 
     def test_apply_struct_type_shows_empty_layers_without_management_form_errors(self):
@@ -675,7 +676,14 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Слои композита')
-        self.assertContains(response, 'Добавить слой')
+        self.assertContains(response, 'id="add-layer-btn"')
+        self.assertContains(response, 'composite-layer-diagram-live')
+        self.assertContains(response, 'composite-layers-edit-table')
+        self.assertContains(response, 'composite-layers-actions')
+        self.assertContains(response, 'layer-select-all')
+        self.assertContains(response, 'duplicate-layers-btn')
+        self.assertContains(response, 'layer-drag-handle')
+        self.assertContains(response, 'data-material-picker')
         self.assertNotContains(response, 'ManagementForm')
         self.assertNotContains(response, 'Скрытое поле TOTAL_FORMS')
         self.assertNotContains(response, 'Скрытое поле INITIAL_FORMS')
@@ -738,6 +746,33 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         link = MaterialProperty.objects.get(material=material, property=density)
         self.assertEqual(link.value, '1.55')
 
+    def test_material_edit_form_shows_read_only_property_labels(self):
+        density = Property.objects.create(
+            name='density_readonly',
+            display_name='Readonly density',
+            unit='g/cm3',
+            data_type='number',
+        )
+        row_id = self.insert_structure_row(title='Panel', thickness='10.00')
+        material = Material.objects.create(
+            code='MAT-READONLY-PROP',
+            name='Material with property',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        MaterialProperty.objects.create(material=material, property=density, value='1.55')
+
+        response = self.client.get(reverse('materials:edit', kwargs={'pk': material.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'material-properties-table')
+        self.assertContains(response, 'material-props-section__name')
+        self.assertContains(response, 'Readonly density')
+        self.assertContains(response, 'g/cm3')
+        self.assertContains(response, 'id="add-property-btn"')
+        self.assertContains(response, 'reference-properties-modal')
+        self.assertNotContains(response, 'id="id_properties-0-property" class="form-select"')
+
     def test_public_material_update_view_saves_new_property(self):
         density = Property.objects.create(
             name='density_update',
@@ -767,6 +802,27 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         link = MaterialProperty.objects.get(material=material, property=density)
         self.assertEqual(link.value, '2.10')
 
+    def test_public_material_form_accepts_comma_in_number_property_value(self):
+        density = Property.objects.create(
+            name='density_comma',
+            display_name='Density comma',
+            data_type='number',
+            unit='g/cm3',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._property_formset_management_data(),
+                **self._property_formset_data(density, **{'properties-0-value': '1,62'}),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        self.assertEqual(
+            MaterialProperty.objects.get(material=material, property=density).value,
+            '1.62',
+        )
+
     def test_public_material_create_view_saves_layer_formset_and_detail_shows_layers(self):
         layer_material = Material.objects.create(
             code='MAT-LAYER-001',
@@ -792,6 +848,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
         self.assertContains(detail_response, 'Слои')
         self.assertContains(detail_response, 'composite-layer-diagram')
+        self.assertContains(detail_response, 'composite-layer-material__label')
         self.assertContains(detail_response, 'Схема укладки')
         self.assertContains(detail_response, 'composite-thickness-summary')
         self.assertContains(detail_response, 'Σt =')
@@ -802,7 +859,42 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(detail_response, 'composite_layer_diagram.css')
         self.assertContains(detail_response, 'MAT-LAYER-001 - Layer material')
         self.assertContains(detail_response, '45')
-        self.assertContains(detail_response, '0,25')
+
+    def test_public_material_create_accepts_comma_in_layer_thickness(self):
+        layer_material = Material.objects.create(
+            code='MAT-LAYER-COMMA',
+            name='Layer material comma',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._layer_formset_management_data(),
+                **self._layer_formset_data(layer_material, **{'layers-0-thickness': '0,25'}),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        layer = CompositeLayer.objects.get(parent_material=material)
+        self.assertEqual(layer.thickness, 0.25)
+
+    def test_public_material_create_accepts_comma_in_structure_decimal_field(self):
+        thickness_field = self.structure_type.fields.get(name='thickness')
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self.structure_field_data(
+                    self.structure_type,
+                    **{f'structure_field_{thickness_field.pk}': '12,50'},
+                ),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        params = material.get_structure_params()
+        self.assertEqual(str(params['thickness']), '12.50')
+
+        detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertContains(detail_response, '12,50')
 
     def test_public_material_create_view_auto_numbers_multiple_layers(self):
         first_layer_material = Material.objects.create(
@@ -858,7 +950,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             reverse('materials:create'),
             {'struct_type': str(self.structure_type.pk)},
         )
-        self.assertNotContains(create_response, 'Добавить слой')
+        self.assertNotContains(create_response, 'id="add-layer-btn"')
 
         post_response = self.client.post(
             reverse('materials:create'),
@@ -1345,7 +1437,12 @@ class MaterialAttachmentViewsTests(TestCase):
 
         attachments_url = reverse('material_attachments:list', kwargs={'material_pk': self.material.pk})
         get_response = self.client.get(attachments_url)
-        self.assertContains(get_response, 'Прикрепить файл')
+        self.assertContains(get_response, 'Создать')
+        self.assertContains(
+            get_response,
+            f'value="{self.material.name} #0001"',
+            html=False,
+        )
 
         post_response = self.client.post(
             attachments_url,

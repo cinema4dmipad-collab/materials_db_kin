@@ -1,8 +1,10 @@
 import uuid
-from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import ValidationError
+
+from apps.core.fields import LocalizedDecimalField, LocalizedFloatField
+from apps.core.number_utils import normalize_decimal_input, parse_decimal
 
 from apps.materials.form_widgets import material_select_widget_attrs
 from apps.materials.models import Material
@@ -63,7 +65,7 @@ def _parse_default(field: StructureField):
     if field.field_type == 'IntegerField':
         return int(field.default_value)
     if field.field_type in ('DecimalField', 'FloatField'):
-        return Decimal(field.default_value)
+        return parse_decimal(normalize_decimal_input(field.default_value))
     if field.field_type == MATERIAL_LINK_FIELD_TYPE:
         return material_from_value(field.default_value)
     return field.default_value
@@ -110,22 +112,20 @@ def _build_dynamic_field(structure_field: StructureField) -> forms.Field:
             widget=forms.NumberInput(attrs=_BOOTSTRAP_INPUT),
         )
     if structure_field.field_type == 'DecimalField':
-        return forms.DecimalField(
+        return LocalizedDecimalField(
             label=label,
             required=required,
             help_text=help_text,
             initial=initial,
             max_digits=structure_field.max_digits or 10,
             decimal_places=structure_field.decimal_places or 2,
-            widget=forms.NumberInput(attrs=_BOOTSTRAP_INPUT),
         )
     if structure_field.field_type == 'FloatField':
-        return forms.FloatField(
+        return LocalizedFloatField(
             label=label,
             required=required,
             help_text=help_text,
             initial=initial,
-            widget=forms.NumberInput(attrs=_BOOTSTRAP_INPUT),
         )
     if structure_field.field_type == 'BooleanField':
         return forms.BooleanField(

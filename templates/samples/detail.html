@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}{{ sample.code }} — Образец{% endblock %}
 
@@ -69,7 +70,7 @@
                     {% for sp in material_properties %}
                     <tr>
                         <th scope="row" class="material-props-section__name">{{ sp.property.display_name }}</th>
-                        <td class="material-props-section__value">{{ sp.value }}</td>
+                        <td class="material-props-section__value">{% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}</td>
                         <td class="material-props-section__unit">{{ sp.property.unit|default:"—" }}</td>
                     </tr>
                     {% endfor %}
@@ -83,7 +84,7 @@
                     {% for sp in extra_properties %}
                     <tr>
                         <th scope="row" class="material-props-section__name">{{ sp.property.display_name }}</th>
-                        <td class="material-props-section__value">{{ sp.value }}</td>
+                        <td class="material-props-section__value">{% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}</td>
                         <td class="material-props-section__unit">{{ sp.property.unit|default:"—" }}</td>
                     </tr>
                     {% endfor %}

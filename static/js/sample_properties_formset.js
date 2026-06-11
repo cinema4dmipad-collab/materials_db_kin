@@ -4,9 +4,37 @@
     var PREFIX = 'properties';
     var materialPropertyIds = new Set();
 
-    function reindexForms(container, totalFormsInput) {
-        var rows = Array.from(container.querySelectorAll('.property-form-row'));
-        rows.forEach(function (row, idx) {
+    function getMaterialContainer() {
+        return document.getElementById('material-property-forms-container');
+    }
+
+    function getExtraContainer() {
+        return document.getElementById('extra-property-forms-container');
+    }
+
+    function getDeletedContainer() {
+        return document.getElementById('deleted-property-forms-container');
+    }
+
+    function getAllRows() {
+        var rows = [];
+        var materialContainer = getMaterialContainer();
+        var extraContainer = getExtraContainer();
+        var deletedContainer = getDeletedContainer();
+        if (materialContainer) {
+            rows = rows.concat(Array.from(materialContainer.querySelectorAll('.property-form-row')));
+        }
+        if (extraContainer) {
+            rows = rows.concat(Array.from(extraContainer.querySelectorAll('.property-form-row')));
+        }
+        if (deletedContainer) {
+            rows = rows.concat(Array.from(deletedContainer.querySelectorAll('.property-form-row')));
+        }
+        return rows;
+    }
+
+    function reindexForms(totalFormsInput) {
+        getAllRows().forEach(function (row, idx) {
             row.querySelectorAll('[name]').forEach(function (input) {
                 input.name = input.name.replace(
                     new RegExp('^' + PREFIX + '-\\d+-'),
@@ -32,87 +60,62 @@
                 }
             });
         });
-        totalFormsInput.value = String(rows.length);
+        totalFormsInput.value = String(getAllRows().length);
     }
 
-    function propertyLabelFromSelect(select) {
-        if (!select || !select.value) {
-            return '';
-        }
-        var option = select.options[select.selectedIndex];
-        return option ? option.text.trim() : '';
-    }
-
-    function isExtraProperty(propertyId) {
-        return Boolean(propertyId) && !materialPropertyIds.has(propertyId);
-    }
-
-    function updateRowWarning(row) {
-        var warning = row.querySelector('.property-extra-warning');
-        var select = row.querySelector('[name$="-property"]');
-        if (!warning || !select) {
-            return;
-        }
-        if (row.classList.contains('d-none')) {
-            warning.classList.add('d-none');
-            return;
-        }
-        var extra = isExtraProperty(select.value);
-        warning.classList.toggle('d-none', !extra);
-        select.classList.toggle('border-warning', extra);
-    }
-
-    function updateGlobalWarning(container, globalWarning) {
-        if (!globalWarning) {
-            return;
-        }
-        var extraLabels = [];
-        container.querySelectorAll('.property-form-row').forEach(function (row) {
+    function getUsedPropertyIds() {
+        var ids = new Set();
+        getAllRows().forEach(function (row) {
             if (row.classList.contains('d-none')) {
                 return;
             }
             var select = row.querySelector('[name$="-property"]');
-            if (select && isExtraProperty(select.value)) {
-                var label = propertyLabelFromSelect(select);
-                if (label && extraLabels.indexOf(label) === -1) {
-                    extraLabels.push(label);
-                }
+            if (select && select.value) {
+                ids.add(select.value);
             }
         });
+        materialPropertyIds.forEach(function (propertyId) {
+            ids.add(propertyId);
+        });
+        return ids;
+    }
 
-        if (!extraLabels.length) {
-            globalWarning.classList.add('d-none');
-            globalWarning.textContent = '';
+    function collectExistingValues() {
+        var values = {};
+        getAllRows().forEach(function (row) {
+            if (row.classList.contains('d-none')) {
+                return;
+            }
+            var select = row.querySelector('[name$="-property"]');
+            var valueInput = row.querySelector('[name$="-value"]');
+            if (select && select.value && valueInput) {
+                values[select.value] = valueInput.value;
+            }
+        });
+        return values;
+    }
+
+    function updateMaterialEmptyState() {
+        var emptyRow = document.getElementById('material-properties-empty-row');
+        var materialContainer = getMaterialContainer();
+        if (!emptyRow || !materialContainer) {
             return;
         }
-
-        globalWarning.classList.remove('d-none');
-        globalWarning.textContent =
-            'Следующие свойства образца отсутствуют у выбранного материала: '
-            + extraLabels.join(', ')
-            + '.';
+        var hasRows = materialContainer.querySelectorAll('.property-form-row:not(.d-none)').length > 0;
+        emptyRow.classList.toggle('d-none', hasRows);
     }
 
-    function updateAllWarnings(container, globalWarning) {
-        container.querySelectorAll('.property-form-row').forEach(function (row) {
-            updateRowWarning(row);
-        });
-        updateGlobalWarning(container, globalWarning);
-    }
-
-    function bindPropertySelect(row, container, globalWarning) {
-        var select = row.querySelector('[name$="-property"]');
-        if (!select || select.dataset.boundExtraWarning === 'true') {
+    function updateExtraEmptyState() {
+        var emptyRow = document.getElementById('extra-properties-empty-row');
+        var extraContainer = getExtraContainer();
+        if (!emptyRow || !extraContainer) {
             return;
         }
-        select.dataset.boundExtraWarning = 'true';
-        select.addEventListener('change', function () {
-            updateRowWarning(row);
-            updateGlobalWarning(container, globalWarning);
-        });
+        var hasRows = extraContainer.querySelectorAll('.property-form-row:not(.d-none)').length > 0;
+        emptyRow.classList.toggle('d-none', hasRows);
     }
 
-    function bindDeleteButton(container, row, totalFormsInput, globalWarning) {
+    function bindDeleteButton(row, totalFormsInput) {
         var deleteBtn = row.querySelector('.delete-property-btn');
         if (!deleteBtn || deleteBtn.dataset.bound === 'true') {
             return;
@@ -120,51 +123,76 @@
         deleteBtn.dataset.bound = 'true';
 
         deleteBtn.addEventListener('click', function () {
-            var idInput = row.querySelector('input[name$="-id"]');
-            var deleteInput = row.querySelector('input[name$="-DELETE"]');
-
-            if (idInput && idInput.value && deleteInput) {
-                deleteInput.checked = true;
-                row.classList.add('d-none');
-            } else {
-                row.remove();
-                reindexForms(container, totalFormsInput);
-            }
-            updateAllWarnings(container, globalWarning);
+            removeRowOrMarkDeleted(row);
+            reindexForms(totalFormsInput);
+            updateExtraEmptyState();
         });
     }
 
-    function appendPropertyFromTemplate(container, template, totalFormsInput, globalWarning) {
-        var formIndex = parseInt(totalFormsInput.value, 10);
-        var html = template.innerHTML.replace(/__prefix__/g, formIndex);
-        var wrapper = document.createElement('div');
-        wrapper.innerHTML = html.trim();
-        var row = wrapper.firstElementChild;
-        container.appendChild(row);
-        totalFormsInput.value = String(formIndex + 1);
-        bindDeleteButton(container, row, totalFormsInput, globalWarning);
-        bindPropertySelect(row, container, globalWarning);
-        updateRowWarning(row);
-        updateGlobalWarning(container, globalWarning);
-        return row;
+    function setRowPropertyMeta(row, label, unit) {
+        var labelCell = row.querySelector('.material-props-section__name');
+        var unitCell = row.querySelector('.material-props-section__unit');
+        if (labelCell) {
+            labelCell.textContent = label || '—';
+        }
+        if (unitCell) {
+            unitCell.textContent = unit || '—';
+        }
     }
 
-    function clearPropertyRows(container, totalFormsInput) {
-        container.querySelectorAll('.property-form-row').forEach(function (row) {
-            row.remove();
-        });
-        totalFormsInput.value = '0';
-    }
-
-    function fillPropertyRow(row, propertyId, value) {
+    function fillPropertyRow(row, propertyId, value, label, unit) {
         var propertySelect = row.querySelector('[name$="-property"]');
         var valueInput = row.querySelector('[name$="-value"]');
         if (propertySelect) {
             propertySelect.value = propertyId;
         }
         if (valueInput) {
-            valueInput.value = value;
+            valueInput.value = value || '';
         }
+        setRowPropertyMeta(row, label, unit);
+    }
+
+    function appendRowFromTemplate(container, template, totalFormsInput) {
+        var formIndex = getAllRows().length;
+        var html = template.innerHTML.replace(/__prefix__/g, String(formIndex));
+        var wrapper = document.createElement('tbody');
+        wrapper.innerHTML = html.trim();
+        var row = wrapper.firstElementChild;
+        container.appendChild(row);
+        reindexForms(totalFormsInput);
+        return row;
+    }
+
+    function removeRowOrMarkDeleted(row) {
+        var deletedContainer = getDeletedContainer();
+        var idInput = row.querySelector('input[name$="-id"]');
+        var deleteInput = row.querySelector('input[name$="-DELETE"]');
+        if (idInput && idInput.value && deleteInput && deletedContainer) {
+            deleteInput.checked = true;
+            row.classList.add('d-none');
+            deletedContainer.appendChild(row);
+            return;
+        }
+        row.remove();
+    }
+
+    function clearContainer(container) {
+        container.querySelectorAll('.property-form-row').forEach(function (row) {
+            removeRowOrMarkDeleted(row);
+        });
+    }
+
+    function removeExtraDuplicates() {
+        var extraContainer = getExtraContainer();
+        if (!extraContainer) {
+            return;
+        }
+        extraContainer.querySelectorAll('.property-form-row').forEach(function (row) {
+            var select = row.querySelector('[name$="-property"]');
+            if (select && materialPropertyIds.has(select.value)) {
+                removeRowOrMarkDeleted(row);
+            }
+        });
     }
 
     function fetchMaterialProperties(materialId, propertiesUrlTemplate) {
@@ -198,87 +226,136 @@
             });
     }
 
-    function loadPropertiesFromMaterial(materialId, container, template, totalFormsInput, propertiesUrlTemplate, globalWarning) {
+    function loadMaterialProperties(materialId, materialTemplate, totalFormsInput, propertiesUrlTemplate) {
+        var materialContainer = getMaterialContainer();
+        if (!materialContainer || !materialTemplate) {
+            return Promise.resolve();
+        }
+
+        var existingValues = collectExistingValues();
+
         return fetchMaterialProperties(materialId, propertiesUrlTemplate).then(function (properties) {
+            clearContainer(materialContainer);
+
             if (!materialId) {
-                clearPropertyRows(container, totalFormsInput);
-                updateGlobalWarning(container, globalWarning);
+                reindexForms(totalFormsInput);
+                removeExtraDuplicates();
+                reindexForms(totalFormsInput);
+                updateMaterialEmptyState();
+                updateExtraEmptyState();
                 return;
             }
-            clearPropertyRows(container, totalFormsInput);
+
             properties.forEach(function (item) {
-                var row = appendPropertyFromTemplate(container, template, totalFormsInput, globalWarning);
-                fillPropertyRow(row, item.property_id, item.value);
-                updateRowWarning(row);
+                var row = appendRowFromTemplate(materialContainer, materialTemplate, totalFormsInput);
+                var sampleValue = existingValues[item.property_id];
+                fillPropertyRow(
+                    row,
+                    item.property_id,
+                    sampleValue !== undefined ? sampleValue : item.value,
+                    item.display_name,
+                    item.unit,
+                );
             });
-            updateGlobalWarning(container, globalWarning);
+
+            removeExtraDuplicates();
+            reindexForms(totalFormsInput);
+            updateMaterialEmptyState();
+            updateExtraEmptyState();
         });
     }
 
-    function refreshMaterialPropertyIds(materialId, propertiesUrlTemplate, container, globalWarning) {
-        return fetchMaterialProperties(materialId, propertiesUrlTemplate).then(function () {
-            updateAllWarnings(container, globalWarning);
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        var container = document.getElementById('property-forms-container');
-        var template = document.getElementById('empty-property-form-template');
-        var addButton = document.getElementById('add-property-btn');
+    function initSamplePropertiesFormset() {
+        var materialContainer = getMaterialContainer();
+        var extraContainer = getExtraContainer();
+        var materialTemplate = document.getElementById('empty-material-property-form-template');
+        var extraTemplate = document.getElementById('empty-extra-property-form-template');
         var totalFormsInput = document.getElementById('id_properties-TOTAL_FORMS');
-        var materialSelect = document.querySelector('[data-sample-material-select]');
-        var globalWarning = document.getElementById('sample-extra-properties-warning');
-        var form = container ? container.closest('form') : null;
+        var materialSelect = document.getElementById('id_material')
+            || document.querySelector('[data-sample-material-select]');
+        var form = materialContainer ? materialContainer.closest('form') : null;
+        var picker = window.ReferencePropertiesPicker;
 
-        if (!container || !template || !addButton || !totalFormsInput || !materialSelect || !form) {
+        if (!materialContainer || !extraContainer || !materialTemplate || !extraTemplate
+            || !totalFormsInput || !form || !picker) {
             return;
         }
 
         var propertiesUrlTemplate = form.getAttribute('data-material-properties-url');
-        var skipInitialAutoload = form.getAttribute('data-properties-prefilled') === 'true';
-        var initialMaterialId = materialSelect.value;
 
-        container.querySelectorAll('.property-form-row').forEach(function (row) {
-            bindDeleteButton(container, row, totalFormsInput, globalWarning);
-            bindPropertySelect(row, container, globalWarning);
+        getAllRows().forEach(function (row) {
+            if (row.classList.contains('property-form-row--extra')) {
+                bindDeleteButton(row, totalFormsInput);
+            }
         });
 
-        addButton.addEventListener('click', function () {
-            appendPropertyFromTemplate(container, template, totalFormsInput, globalWarning);
+        picker.bind({
+            openButtonId: 'add-extra-property-btn',
+            getUsedPropertyIds: getUsedPropertyIds,
+            onConfirm: function (payloads) {
+                payloads.forEach(function (payload) {
+                    if (materialPropertyIds.has(payload.property_id)) {
+                        return;
+                    }
+                    var row = appendRowFromTemplate(extraContainer, extraTemplate, totalFormsInput);
+                    fillPropertyRow(
+                        row,
+                        payload.property_id,
+                        '',
+                        payload.label,
+                        payload.unit,
+                    );
+                    bindDeleteButton(row, totalFormsInput);
+                });
+                reindexForms(totalFormsInput);
+                updateExtraEmptyState();
+            },
         });
 
         form.addEventListener('submit', function () {
-            var rows = container.querySelectorAll('.property-form-row');
-            totalFormsInput.value = String(rows.length);
+            reindexForms(totalFormsInput);
         });
+
+        updateMaterialEmptyState();
+        updateExtraEmptyState();
+        reindexForms(totalFormsInput);
+
+        if (!materialSelect) {
+            return;
+        }
+
+        var initialMaterialId = materialSelect.value;
+        var hasMaterialRows = materialContainer.querySelector('.property-form-row') !== null;
 
         materialSelect.addEventListener('change', function () {
-            loadPropertiesFromMaterial(
+            loadMaterialProperties(
                 materialSelect.value,
-                container,
-                template,
+                materialTemplate,
                 totalFormsInput,
                 propertiesUrlTemplate,
-                globalWarning,
             );
         });
 
-        if (skipInitialAutoload) {
-            refreshMaterialPropertyIds(
-                initialMaterialId,
-                propertiesUrlTemplate,
-                container,
-                globalWarning,
-            );
-        } else if (initialMaterialId) {
-            loadPropertiesFromMaterial(
-                initialMaterialId,
-                container,
-                template,
-                totalFormsInput,
-                propertiesUrlTemplate,
-                globalWarning,
-            );
-        }
-    });
+        fetchMaterialProperties(initialMaterialId, propertiesUrlTemplate).then(function () {
+            if (!hasMaterialRows && initialMaterialId) {
+                return loadMaterialProperties(
+                    initialMaterialId,
+                    materialTemplate,
+                    totalFormsInput,
+                    propertiesUrlTemplate,
+                );
+            }
+            removeExtraDuplicates();
+            reindexForms(totalFormsInput);
+            updateMaterialEmptyState();
+            updateExtraEmptyState();
+            return null;
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSamplePropertiesFormset);
+    } else {
+        initSamplePropertiesFormset();
+    }
 })();

@@ -164,7 +164,26 @@ def validate_field_column_name(name: str) -> str:
 
 
 def validate_table_name(table_name: str) -> str:
-    return validate_sql_identifier(table_name, label='Имя SQL-таблицы')
+    normalized = validate_sql_identifier(table_name, label='Имя SQL-таблицы')
+    if len(normalized) > 100:
+        raise ValueError('Имя SQL-таблицы не длиннее 100 символов.')
+    if not normalized.startswith(TABLE_PREFIX):
+        raise ValueError(
+            f'Имя SQL-таблицы должно начинаться с «{TABLE_PREFIX}».'
+        )
+    suffix = normalized[len(TABLE_PREFIX):]
+    if not suffix or not re.fullmatch(r'[a-z][a-z0-9_]*', suffix):
+        raise ValueError(
+            f'После префикса «{TABLE_PREFIX}» укажите имя в формате snake_case латиницей.'
+        )
+    return normalized
+
+
+def resolve_table_name(raw_table_name: str, *, fallback_code: str) -> str:
+    manual = (raw_table_name or '').strip()
+    if manual:
+        return validate_table_name(manual)
+    return validate_table_name(table_name_for_code(fallback_code))
 
 
 def preview_table_name_from_title(title: str) -> str:

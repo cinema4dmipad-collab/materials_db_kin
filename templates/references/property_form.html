@@ -38,7 +38,7 @@
                     {% endfor %}
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                        <button type="submit" class="btn btn-primary">{% if property_obj %}Сохранить{% else %}Создать{% endif %}</button>
                         <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Отмена</a>
                     </div>
                 </form>

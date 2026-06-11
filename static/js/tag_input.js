@@ -73,8 +73,7 @@
             button.className = 'tag-input-dropdown__item';
             button.setAttribute('role', 'option');
             button.dataset.tagName = tag.name;
-            button.innerHTML = '<span class="tag-input-dropdown__name">' + tag.name + '</span>'
-                + '<span class="tag-input-dropdown__hint">использовать это название</span>';
+            button.innerHTML = '<span class="tag-input-dropdown__name">' + tag.name + '</span>';
             button.addEventListener('mousedown', function (event) {
                 event.preventDefault();
             });

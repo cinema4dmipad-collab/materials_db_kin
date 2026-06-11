@@ -6,7 +6,7 @@
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h1 class="h4 mb-0">Материалы</h1>
-        <a href="{% url 'materials:create' %}" class="btn btn-primary btn-sm">Добавить материал</a>
+        <a href="{% url 'materials:create' %}" class="btn btn-primary btn-sm">Создать</a>
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
@@ -62,7 +62,7 @@
             {% if has_active_filters %}
             По вашему запросу материалов не найдено. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
             {% else %}
-            Материалов пока нет. <a href="{% url 'materials:create' %}">Создать первый</a>.
+            Материалов пока нет. <a href="{% url 'materials:create' %}">Создать</a>.
             {% endif %}
         </div>
         {% endif %}

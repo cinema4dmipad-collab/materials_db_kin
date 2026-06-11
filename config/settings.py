@@ -8,6 +8,10 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+from apps.core.version import get_app_version  # noqa: E402
+
+APP_VERSION = get_app_version()
+
 
 def env_str(name: str, default: str = '') -> str:
     value = os.getenv(name, default)
@@ -85,6 +89,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'apps.core.context_processors.tag_suggestions',
+                'apps.core.context_processors.app_version',
             ],
             'libraries': {
                 'ui_tags': 'apps.core.templatetags.ui_tags',

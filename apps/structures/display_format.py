@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 import uuid
 
+from apps.core.number_utils import format_decimal_display, parse_decimal
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
 
 
@@ -34,7 +35,9 @@ def format_structure_field_display(field, value):
         return '—'
     if field.field_type == 'DecimalField':
         normalized = _decimal_quantize(value, _decimal_places(field))
-        return format(normalized, 'f').replace('.', ',')
+        return format_decimal_display(normalized, _decimal_places(field))
+    if field.field_type == 'FloatField':
+        return format_decimal_display(value)
     if field.field_type == MATERIAL_LINK_FIELD_TYPE:
         return value
     return value

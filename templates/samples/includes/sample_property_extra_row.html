@@ -1,0 +1,22 @@
+<tr class="property-form-row property-form-row--extra">
+    {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
+    <th scope="row" class="material-props-section__name">
+        {{ property_form.property_label }}
+        {% if property_form.property.errors %}<div class="text-danger small">{{ property_form.property.errors }}</div>{% endif %}
+    </th>
+    <td class="material-props-section__value">
+        {{ property_form.value }}
+        {% if property_form.value.errors %}<div class="text-danger small">{{ property_form.value.errors }}</div>{% endif %}
+    </td>
+    <td class="material-props-section__unit">{{ property_form.property_unit|default:"—" }}</td>
+    <td class="text-end text-nowrap">
+        {% if formset.can_delete %}
+        <span class="visually-hidden">{{ property_form.DELETE }}</span>
+        {% endif %}
+        <button type="button" class="btn btn-sm btn-outline-danger delete-property-btn" title="Удалить свойство">✖</button>
+    </td>
+    <td class="visually-hidden">{{ property_form.property }}</td>
+    {% if property_form.non_field_errors %}
+    <td colspan="4"><div class="text-danger small">{{ property_form.non_field_errors }}</div></td>
+    {% endif %}
+</tr>

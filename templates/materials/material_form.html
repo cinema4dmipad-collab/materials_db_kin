@@ -6,6 +6,8 @@
 {% endblock %}
 
 {% block content %}
+<link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
+{% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}" rel="stylesheet">{% endif %}
 <div class="card mb-4">
     <div class="card-header">
         <h1 class="h4 mb-0">{% if material %}Редактирование материала{% else %}Новый материал{% endif %}</h1>
@@ -68,151 +70,167 @@
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Свойства</span>
-                    <button type="button" id="add-property-btn" class="btn btn-sm btn-outline-primary">+ Добавить свойство</button>
+                    <button type="button" id="add-property-btn" class="btn btn-sm btn-outline-primary">Добавить</button>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     {{ formset.management_form }}
                     {% if formset.non_form_errors %}
-                    <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+                    <div class="alert alert-danger m-3 mb-0">{{ formset.non_form_errors }}</div>
                     {% endif %}
                     {% if formset.errors and not formset.non_form_errors %}
-                    <div class="alert alert-danger">Исправьте ошибки в свойствах материала ниже.</div>
+                    <div class="alert alert-danger m-3 mb-0">Исправьте ошибки в свойствах материала ниже.</div>
                     {% endif %}
-                    <div id="property-forms-container">
-                        {% for form in formset %}
-                        <div class="row g-2 align-items-end mb-3 border-bottom pb-3 property-form-row">
-                            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
-                            <div class="col-md-5">
-                                <label class="form-label">Свойство</label>
-                                {{ form.property }}
-                                {% if form.property.errors %}<div class="text-danger small">{{ form.property.errors }}</div>{% endif %}
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label">Значение</label>
-                                {{ form.value }}
-                                {% if form.value.errors %}<div class="text-danger small">{{ form.value.errors }}</div>{% endif %}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Действия</label>
-                                <div class="text-nowrap">
-                                    {% if formset.can_delete %}
-                                    <span class="visually-hidden">{{ form.DELETE }}</span>
-                                    {% endif %}
-                                    <button type="button" class="btn btn-sm btn-danger delete-property-btn" title="Удалить свойство">✖</button>
-                                </div>
-                            </div>
-                            {% if form.non_field_errors %}
-                            <div class="col-12"><div class="text-danger small">{{ form.non_field_errors }}</div></div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
+                    <div class="table-responsive material-properties-table-wrap">
+                        <table class="table table-striped align-middle mb-0 app-data-table material-properties-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Свойство</th>
+                                    <th scope="col">Значение</th>
+                                    <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                                    <th scope="col" class="text-end">Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="property-forms-container">
+                                {% for form in formset %}
+                                {% include 'materials/includes/material_property_row.html' with property_form=form formset=formset %}
+                                {% endfor %}
+                            </tbody>
+                            <tbody>
+                                <tr id="material-form-properties-empty-row" class="material-props-section__empty{% if formset.forms %} d-none{% endif %}">
+                                    <td colspan="4" class="text-muted">Свойств пока нет — нажмите «Добавить», чтобы выбрать из справочника.</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                     <template id="empty-property-form-template">
-                        {% with form=formset.empty_form %}
-                        <div class="row g-2 align-items-end mb-3 border-bottom pb-3 property-form-row">
-                            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
-                            <div class="col-md-5">
-                                <label class="form-label">Свойство</label>
-                                {{ form.property }}
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label">Значение</label>
-                                {{ form.value }}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Действия</label>
-                                <div class="text-nowrap">
-                                    {% if formset.can_delete %}
-                                    <span class="visually-hidden">{{ form.DELETE }}</span>
-                                    {% endif %}
-                                    <button type="button" class="btn btn-sm btn-danger delete-property-btn" title="Удалить свойство">✖</button>
-                                </div>
-                            </div>
-                        </div>
+                        {% with property_form=formset.empty_form %}
+                        <tr class="property-form-row">
+                            {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
+                            <th scope="row" class="material-props-section__name">—</th>
+                            <td class="material-props-section__value">{{ property_form.value }}</td>
+                            <td class="material-props-section__unit">—</td>
+                            <td class="text-end text-nowrap">
+                                {% if formset.can_delete %}
+                                <span class="visually-hidden">{{ property_form.DELETE }}</span>
+                                {% endif %}
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-property-btn" title="Удалить свойство">✖</button>
+                            </td>
+                            <td class="visually-hidden">{{ property_form.property }}</td>
+                        </tr>
                         {% endwith %}
                     </template>
+                    {% include 'includes/reference_properties_modal.html' %}
+                    {% include 'includes/reference_materials_modal.html' %}
                 </div>
             </div>
 
             {% if layer_formset %}
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span>Слои композита</span>
-                    <button type="button" id="add-layer-btn" class="btn btn-sm btn-outline-primary">+ Добавить слой</button>
+            <div class="card mb-4 composite-layers-card">
+                <div class="card-header composite-layers-card__header d-flex flex-wrap align-items-center gap-2">
+                    <div>
+                        <span class="fw-semibold">Слои композита</span>
+                        <span id="layers-selection-meta" class="text-muted small ms-2"></span>
+                    </div>
+                    <div id="composite-layer-thickness-summary" class="composite-thickness-summary d-none ms-auto" aria-live="polite"></div>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     {{ layer_formset.management_form }}
                     {% if layer_formset.non_form_errors %}
-                    <div class="alert alert-danger">{{ layer_formset.non_form_errors }}</div>
+                    <div class="alert alert-danger m-3 mb-0">{{ layer_formset.non_form_errors }}</div>
                     {% endif %}
-                    <div id="layer-forms-container">
-                        {% for layer_form in layer_formset %}
-                        <div class="row g-2 align-items-end mb-3 border-bottom pb-3 layer-form-row">
-                            {% for hidden in layer_form.hidden_fields %}{{ hidden }}{% endfor %}
-                            <div class="col-md-2">
-                                <label class="form-label">Номер слоя</label>
-                                {{ layer_form.layer_number }}
-                                {% if layer_form.layer_number.errors %}<div class="text-danger small">{{ layer_form.layer_number.errors }}</div>{% endif %}
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Материал</label>
-                                {{ layer_form.material }}
-                                {% if layer_form.material.errors %}<div class="text-danger small">{{ layer_form.material.errors }}</div>{% endif %}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">{{ layer_form.angle.label }}</label>
-                                {{ layer_form.angle }}
-                                {% if layer_form.angle.errors %}<div class="text-danger small">{{ layer_form.angle.errors }}</div>{% endif %}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">{{ layer_form.thickness.label }}</label>
-                                {{ layer_form.thickness }}
-                                {% if layer_form.thickness.errors %}<div class="text-danger small">{{ layer_form.thickness.errors }}</div>{% endif %}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Действия</label>
-                                <div class="text-nowrap">
-                                    {% if layer_formset.can_delete %}
-                                    <span class="visually-hidden">{{ layer_form.DELETE }}</span>
-                                    {% endif %}
-                                    <button type="button" class="btn btn-sm btn-secondary duplicate-layer-btn me-1" title="Дублировать слой">⧉</button>
-                                    <button type="button" class="btn btn-sm btn-danger delete-layer-btn" title="Удалить слой">✖</button>
+                    <div class="composite-layers-layout composite-layers-layout--edit row g-0">
+                        <div class="col-lg-7 col-xl-8 border-end">
+                            <div class="composite-layers-table-toolbar">
+                                <div class="btn-group composite-layers-actions" role="group" aria-label="Действия со слоями">
+                                    <button type="button" id="add-layer-btn" class="btn btn-outline-primary" title="Добавить слой (Ins)">+</button>
+                                    <button type="button" id="duplicate-layers-btn" class="btn btn-outline-secondary" disabled title="Дублировать выбранные (Ctrl+D)">⧉</button>
+                                    <button type="button" id="delete-layers-btn" class="btn btn-outline-danger" disabled title="Удалить выбранные (Del)">✕</button>
+                                    <button type="button" id="move-layers-up-btn" class="btn btn-outline-secondary" disabled title="Вверх (↑)">↑</button>
+                                    <button type="button" id="move-layers-down-btn" class="btn btn-outline-secondary" disabled title="Вниз (↓)">↓</button>
                                 </div>
                             </div>
+                            <div class="table-responsive">
+                                <table class="table align-middle mb-0 composite-layers-edit-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col" class="composite-layers-edit-table__drag" aria-label="Порядок"></th>
+                                            <th scope="col" class="composite-layers-edit-table__select">
+                                                <input type="checkbox" class="form-check-input" id="layer-select-all" aria-label="Выбрать все слои">
+                                            </th>
+                                            <th scope="col" class="composite-layers-edit-table__number">№</th>
+                                            <th scope="col">Материал</th>
+                                            <th scope="col" class="composite-layers-edit-table__angle">Угол армирования</th>
+                                            <th scope="col" class="composite-layers-edit-table__thickness">Толщина, мм</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="layer-forms-container">
+                                        {% for layer_form in layer_formset %}
+                                        <tr class="layer-form-row">
+                                            <td class="composite-layers-edit-table__drag">
+                                                <span class="layer-drag-handle" draggable="true" title="Перетащите для изменения порядка" aria-hidden="true">⋮⋮</span>
+                                            </td>
+                                            <td class="composite-layers-edit-table__select">
+                                                <input type="checkbox" class="form-check-input layer-row-select" aria-label="Выбрать слой">
+                                            </td>
+                                            <td class="composite-layers-edit-table__number">
+                                                <span class="layer-index-display">{{ forloop.counter }}</span>
+                                                {{ layer_form.layer_number }}
+                                                {% if layer_form.layer_number.errors %}<div class="text-danger small">{{ layer_form.layer_number.errors }}</div>{% endif %}
+                                            </td>
+                                            <td class="composite-layers-edit-table__material">
+                                                {{ layer_form.material }}
+                                                {% if layer_form.material.errors %}<div class="text-danger small">{{ layer_form.material.errors }}</div>{% endif %}
+                                            </td>
+                                            <td class="composite-layers-edit-table__angle">
+                                                {{ layer_form.angle }}
+                                                {% if layer_form.angle.errors %}<div class="text-danger small">{{ layer_form.angle.errors }}</div>{% endif %}
+                                            </td>
+                                            <td class="composite-layers-edit-table__thickness">
+                                                {{ layer_form.thickness }}
+                                                {% if layer_form.thickness.errors %}<div class="text-danger small">{{ layer_form.thickness.errors }}</div>{% endif %}
+                                            </td>
+                                            <td class="visually-hidden">
+                                                {% for hidden in layer_form.hidden_fields %}{{ hidden }}{% endfor %}
+                                                {% if layer_formset.can_delete %}{{ layer_form.DELETE }}{% endif %}
+                                            </td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr class="layer-empty-row">
+                                            <td colspan="6" class="text-muted text-center py-4">Слоёв пока нет — нажмите «+», чтобы добавить первый.</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="composite-layers-hint text-muted small px-3 py-2 mb-0 border-top">
+                                Клик — выбор, Shift+клик — диапазон, Ctrl+клик — несколько строк, перетаскивание — порядок.
+                            </p>
                         </div>
-                        {% endfor %}
+                        <div class="col-lg-5 col-xl-4">
+                            <div id="composite-layer-diagram-live" class="h-100"></div>
+                        </div>
                     </div>
                     <template id="empty-layer-form-template">
                         {% with layer_form=layer_formset.empty_form %}
-                        <div class="row g-2 align-items-end mb-3 border-bottom pb-3 layer-form-row">
-                            {% for hidden in layer_form.hidden_fields %}{{ hidden }}{% endfor %}
-                            <div class="col-md-2">
-                                <label class="form-label">Номер слоя</label>
+                        <tr class="layer-form-row">
+                            <td class="composite-layers-edit-table__drag">
+                                <span class="layer-drag-handle" draggable="true" title="Перетащите для изменения порядка" aria-hidden="true">⋮⋮</span>
+                            </td>
+                            <td class="composite-layers-edit-table__select">
+                                <input type="checkbox" class="form-check-input layer-row-select" aria-label="Выбрать слой">
+                            </td>
+                            <td class="composite-layers-edit-table__number">
+                                <span class="layer-index-display"></span>
                                 {{ layer_form.layer_number }}
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Материал</label>
-                                {{ layer_form.material }}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">{{ layer_form.angle.label }}</label>
-                                {{ layer_form.angle }}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">{{ layer_form.thickness.label }}</label>
-                                {{ layer_form.thickness }}
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label">Действия</label>
-                                <div class="text-nowrap">
-                                    {% if layer_formset.can_delete %}
-                                    <span class="visually-hidden">{{ layer_form.DELETE }}</span>
-                                    {% endif %}
-                                    <button type="button" class="btn btn-sm btn-secondary duplicate-layer-btn me-1" title="Дублировать слой">⧉</button>
-                                    <button type="button" class="btn btn-sm btn-danger delete-layer-btn" title="Удалить слой">✖</button>
-                                </div>
-                            </div>
-                        </div>
+                            </td>
+                            <td class="composite-layers-edit-table__material">{{ layer_form.material }}</td>
+                            <td class="composite-layers-edit-table__angle">{{ layer_form.angle }}</td>
+                            <td class="composite-layers-edit-table__thickness">{{ layer_form.thickness }}</td>
+                            <td class="visually-hidden">
+                                {% for hidden in layer_form.hidden_fields %}{{ hidden }}{% endfor %}
+                                {% if layer_formset.can_delete %}{{ layer_form.DELETE }}{% endif %}
+                            </td>
+                        </tr>
                         {% endwith %}
                     </template>
                 </div>
@@ -220,7 +238,7 @@
             {% endif %}
 
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary">Сохранить</button>
+                <button type="submit" class="btn btn-primary">{% if material %}Сохранить{% else %}Создать{% endif %}</button>
                 {% if material %}
                 <a href="{% url 'materials:detail' material.pk %}" class="btn btn-outline-secondary">Отмена</a>
                 {% else %}
@@ -230,8 +248,14 @@
         </form>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
+<script src="{% static 'js/reference_properties_picker.js' %}"></script>
+<script src="{% static 'js/reference_materials_picker.js' %}"></script>
+<script src="{% static 'js/material_picker_fields.js' %}"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
+<script src="{% static 'js/composite_layer_diagram_live.js' %}"></script>
 <script src="{% static 'js/composite_layers_formset.js' %}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {

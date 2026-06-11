@@ -9,7 +9,7 @@
 #   Domain → nginx:80
 #
 # Образы без build — Dokploy при деплое не тянет Docker Hub.
-# Первый build: GitLab CI (job build) или вручную на сервере, когда сеть до registry есть.
+# Сборка образов — в Dokploy или вручную на сервере, когда сеть до registry есть.
 # WEB_IMAGE / NGINX_IMAGE — теги локальных или GitLab registry образов.
 
 services:

@@ -29,7 +29,7 @@ class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, L
     def get_attachment_form(self):
         if hasattr(self, '_attachment_form'):
             return self._attachment_form
-        kwargs = {'prefix': 'attachment'}
+        kwargs = {'prefix': 'attachment', 'material': self.material}
         if self.request.method == 'POST':
             kwargs['data'] = self.request.POST
             kwargs['files'] = self.request.FILES
@@ -37,7 +37,12 @@ class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, L
 
     def post(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
-        form = MaterialAttachmentForm(request.POST, request.FILES, prefix='attachment')
+        form = MaterialAttachmentForm(
+            request.POST,
+            request.FILES,
+            prefix='attachment',
+            material=self.material,
+        )
         if form.is_valid():
             attachment = form.save(commit=False)
             attachment.material = self.material

@@ -4,6 +4,11 @@ from django.forms import inlineformset_factory
 
 from apps.materials.form_widgets import material_select_widget_attrs
 from apps.composites.models import CompositeLayer
+from apps.core.fields import (
+    LocalizedFloatField,
+    LocalizedPropertyValueField,
+    clean_localized_number_value,
+)
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.materials.models import Material, MaterialProperty
 from apps.structures.models import StructureType
@@ -53,17 +58,31 @@ class MaterialPropertyInlineFormSet(forms.BaseInlineFormSet):
                 seen[prop.pk] = True
 
 
+class MaterialPropertyForm(forms.ModelForm):
+    value = LocalizedPropertyValueField(required=False)
+
+    class Meta:
+        model = MaterialProperty
+        fields = ['property', 'value']
+        widgets = {
+            'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        clean_localized_number_value(self)
+        return cleaned_data
+
+
 MaterialPropertyFormSet = inlineformset_factory(
     Material,
     MaterialProperty,
+    form=MaterialPropertyForm,
     fields=['property', 'value'],
     extra=0,
     can_delete=True,
     formset=MaterialPropertyInlineFormSet,
-    widgets={
-        'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
-        'value': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
-    },
+    widgets={},
 )
 
 
@@ -116,6 +135,9 @@ class CompositeLayerFormSet(forms.BaseInlineFormSet):
 
 
 class CompositeLayerForm(forms.ModelForm):
+    angle = LocalizedFloatField(label='Угол армирования, °', required=False)
+    thickness = LocalizedFloatField(label='Толщина, мм', required=False)
+
     class Meta:
         model = CompositeLayer
         fields = ['layer_number', 'material', 'angle', 'thickness']
@@ -123,8 +145,6 @@ class CompositeLayerForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['layer_number'].required = False
-        self.fields['angle'].label = 'Угол армирования, °'
-        self.fields['thickness'].label = 'Толщина, мм'
 
 
 def get_composite_layer_formset():
@@ -140,8 +160,6 @@ def get_composite_layer_formset():
         widgets={
             'layer_number': forms.NumberInput(attrs=_LAYER_NUMBER_WIDGET),
             'material': forms.Select(attrs=material_select_widget_attrs()),
-            'angle': forms.NumberInput(attrs=_BOOTSTRAP_INPUT),
-            'thickness': forms.NumberInput(attrs=_BOOTSTRAP_INPUT),
         },
     )
 

@@ -32,6 +32,7 @@ from apps.structures.identifiers import (
     preview_table_name_from_title,
     validate_field_column_name,
     validate_structure_code,
+    validate_table_name,
 )
 from apps.structures.sql_executor import SQLExecutor
 from apps.structures.property_mapping import (
@@ -107,6 +108,38 @@ class StructureIdentifierTests(TestCase):
         with self.assertRaises(ValueError):
             validate_field_column_name('created_at')
 
+    def test_validate_table_name_requires_structures_prefix(self):
+        with self.assertRaises(ValueError):
+            validate_table_name('my_custom_table')
+
+    def test_validate_table_name_rejects_sql_injection(self):
+        with self.assertRaises(ValueError):
+            validate_table_name('structures_danger; DROP TABLE users;--')
+
+    def test_structure_type_form_accepts_custom_table_name(self):
+        form = StructureTypeForm(
+            data={
+                'name': 'UI Sandwich',
+                'description': '',
+                'display_color': 'tone-teal',
+                'table_name': 'structures_custom_panel',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['table_name'], 'structures_custom_panel')
+
+    def test_structure_type_form_rejects_invalid_table_name(self):
+        form = StructureTypeForm(
+            data={
+                'name': 'UI Sandwich',
+                'description': '',
+                'display_color': 'tone-teal',
+                'table_name': 'structures_bad-name',
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('table_name', form.errors)
+
     def test_structure_type_form_generates_code_from_name(self):
         form = StructureTypeForm(
             data={
@@ -157,7 +190,7 @@ class StructureIdentifierTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn('default_value', form.errors)
-        self.assertIn('без точки', form.errors['default_value'][0])
+        self.assertIn('без дробной части', form.errors['default_value'][0])
 
     def test_structure_field_form_accepts_decimal_default_with_dot(self):
         form = StructureFieldForm(
@@ -166,6 +199,20 @@ class StructureIdentifierTests(TestCase):
                 'name': 'thickness',
                 'field_type': 'DecimalField',
                 'default_value': '12.34',
+                'sort_order': '1',
+                'max_digits': '10',
+                'decimal_places': '2',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_structure_field_form_accepts_decimal_default_with_comma(self):
+        form = StructureFieldForm(
+            data={
+                'label': 'Толщина',
+                'name': 'thickness',
+                'field_type': 'DecimalField',
+                'default_value': '12,34',
                 'sort_order': '1',
                 'max_digits': '10',
                 'decimal_places': '2',
@@ -384,8 +431,11 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         self.assertEqual(structure_type.fields.count(), 1)
 
         manage_url = reverse('structures:type_manage', args=[structure_type.code])
-        manage_response = self.client.get(manage_url)
-        self.assertContains(manage_response, 'Создать таблицу в БД')
+        self.assertRedirects(response, f'{manage_url}?prompt_create_table=1')
+        manage_response = self.client.get(f'{manage_url}?prompt_create_table=1')
+        self.assertContains(manage_response, 'create-table-prompt-modal')
+        self.assertContains(manage_response, 'сохранён')
+        self.assertContains(manage_response, 'create-table/')
 
         table_response = self.client.post(
             reverse('structures:type_create_table', args=[structure_type.code])
@@ -428,6 +478,54 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type.refresh_from_db()
         self.assertTrue(structure_type.is_created)
         self.assertTrue(SQLExecutor.table_exists(structure_type))
+
+    def test_create_table_with_custom_table_name_via_post(self):
+        structure_type = StructureType.objects.create(
+            name='UI Custom Table',
+            code='ui_custom_table',
+            display_color='tone-blue',
+        )
+        table_response = self.client.post(
+            reverse('structures:type_create_table', args=[structure_type.code]),
+            {'table_name': 'structures_ui_custom_name'},
+        )
+        self.assertRedirects(
+            table_response,
+            reverse('structures:type_manage', args=[structure_type.code]),
+        )
+        structure_type.refresh_from_db()
+        self.assertTrue(structure_type.is_created)
+        self.assertEqual(structure_type.table_name, 'structures_ui_custom_name')
+        self.assertTrue(SQLExecutor.table_exists(structure_type))
+
+    def test_create_table_rejects_invalid_table_name_via_post(self):
+        structure_type = StructureType.objects.create(
+            name='UI Bad Table',
+            code='ui_bad_table',
+            display_color='tone-blue',
+        )
+        table_response = self.client.post(
+            reverse('structures:type_create_table', args=[structure_type.code]),
+            {'table_name': 'structures_bad;drop'},
+            follow=True,
+        )
+        structure_type.refresh_from_db()
+        self.assertFalse(structure_type.is_created)
+        self.assertContains(table_response, 'snake_case')
+
+    def test_manage_page_prompts_create_table_for_existing_unsaved_type(self):
+        structure_type = StructureType.objects.create(
+            name='UI Prompt Existing',
+            code='ui_prompt_existing',
+            display_color='tone-blue',
+        )
+        manage_url = reverse('structures:type_manage', args=[structure_type.code])
+        response = self.client.get(manage_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'create-table-prompt-modal')
+        self.assertContains(response, 'SQL-таблица ещё не создана')
+        self.assertNotContains(response, 'сохранён')
 
     def test_drop_table_from_public_ui(self):
         structure_type = StructureType.objects.create(
@@ -478,7 +576,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'без точки')
+        self.assertContains(response, 'без дробной части')
         structure_type.refresh_from_db()
         self.assertFalse(structure_type.is_created)
 
@@ -631,7 +729,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         result = SQLExecutor.create_table(self.structure_type)
 
         self.assertFalse(result['success'])
-        self.assertIn('без точки', result['error'])
+        self.assertIn('без дробной части', result['error'])
 
     def test_create_table_accepts_decimal_default_with_dot(self):
         StructureField.objects.filter(structure_type=self.structure_type, name='thickness').update(

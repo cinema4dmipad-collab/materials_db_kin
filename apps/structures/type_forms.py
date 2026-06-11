@@ -6,6 +6,7 @@ from apps.structures.default_values import validate_structure_field_default
 from apps.structures.identifiers import (
     normalize_identifier,
     preview_table_name_from_title,
+    resolve_table_name,
     table_name_for_code,
     validate_field_column_name,
     validate_structure_code,
@@ -21,12 +22,13 @@ _BOOTSTRAP_CHECK = {'class': 'form-check-input'}
 class StructureTypeForm(forms.ModelForm):
     class Meta:
         model = StructureType
-        fields = ['name', 'description', 'display_color', 'allow_layers']
+        fields = ['name', 'description', 'display_color', 'allow_layers', 'table_name']
         labels = {
             'name': 'Название типа',
             'description': 'Описание для операторов',
             'display_color': 'Цвет в списке материалов',
             'allow_layers': 'Разрешить слои композита',
+            'table_name': 'Имя SQL-таблицы',
         }
         widgets = {
             'name': forms.TextInput(
@@ -45,11 +47,21 @@ class StructureTypeForm(forms.ModelForm):
             ),
             'display_color': forms.RadioSelect(choices=StructureType._meta.get_field('display_color').choices),
             'allow_layers': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECK),
+            'table_name': forms.TextInput(
+                attrs={
+                    **_BOOTSTRAP_INPUT,
+                    'placeholder': 'structures_sendvichnaya_panel',
+                    'autocomplete': 'off',
+                    'spellcheck': 'false',
+                    'pattern': r'structures_[a-z][a-z0-9_]*',
+                }
+            ),
         }
         help_texts = {
-            'name': (
-                'Понятное название на русском. Код и имя SQL-таблицы '
-                'сформируются автоматически (транслит + snake_case).'
+            'name': 'Понятное название на русском. Код сформируется автоматически (транслит + snake_case).',
+            'table_name': (
+                'Только латиница, цифры и _. Обязательный префикс structures_. '
+                'Если оставить пустым — имя построится автоматически из названия.'
             ),
             'display_color': (
                 'Один цвет для всех материалов этого типа — инженеру проще '
@@ -67,6 +79,27 @@ class StructureTypeForm(forms.ModelForm):
             name = self.initial.get('name') or self.data.get('name', '')
             self.generated_code = normalize_identifier(name, max_length=50)
             self.generated_table_name = preview_table_name_from_title(name)
+
+        if 'table_name' in self.fields:
+            if self.instance.pk and self.instance.is_created:
+                self.fields['table_name'].disabled = True
+            elif (
+                not self.data
+                and not self.initial.get('table_name')
+                and self.generated_table_name
+            ):
+                self.initial['table_name'] = (
+                    self.instance.table_name or self.generated_table_name
+                )
+
+    def clean_table_name(self):
+        value = (self.cleaned_data.get('table_name') or '').strip()
+        if not value:
+            return ''
+        try:
+            return validate_table_name(value)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
 
     def clean_name(self):
         name = (self.cleaned_data.get('name') or '').strip()
@@ -118,15 +151,18 @@ class StructureTypeForm(forms.ModelForm):
             if self.instance.pk:
                 code_qs = code_qs.exclude(pk=self.instance.pk)
 
-        table_name = table_name_for_code(code)
+        table_name = resolve_table_name(
+            cleaned_data.get('table_name') or '',
+            fallback_code=code,
+        )
         try:
             validate_table_name(table_name)
         except ValueError as exc:
-            self.add_error('name', str(exc))
+            self.add_error('table_name', str(exc))
             return cleaned_data
 
         if StructureType.objects.filter(table_name=table_name).exclude(pk=self.instance.pk).exists():
-            self.add_error('name', f'Таблица {table_name} уже используется другим типом.')
+            self.add_error('table_name', f'Таблица {table_name} уже используется другим типом.')
 
         cleaned_data['code'] = code
         cleaned_data['table_name'] = table_name

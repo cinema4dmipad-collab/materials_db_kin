@@ -2,6 +2,7 @@ from django import forms
 
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.scans.models import ScanRecord
+from apps.scans.title_utils import default_scan_title
 from apps.scans.validators import format_max_scan_file_size, validate_scan_file
 
 
@@ -19,7 +20,7 @@ class ScanRecordForm(TagNamesFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         sample = kwargs.pop('sample', None)
         if sample and 'data' not in kwargs:
-            kwargs.setdefault('initial', {})['title'] = sample.name
+            kwargs.setdefault('initial', {})['title'] = default_scan_title(sample)
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():
             css_class = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'

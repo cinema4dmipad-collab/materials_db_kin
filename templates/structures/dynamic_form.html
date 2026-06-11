@@ -1,10 +1,12 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}
 {% if is_edit %}Редактирование{% else %}Новая запись{% endif %} — {{ structure_type.name }}
 {% endblock %}
 
 {% block content %}
+<link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 <div class="row justify-content-center">
     <div class="col-lg-8">
         <div class="card">
@@ -34,7 +36,7 @@
                     {% endfor %}
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                        <button type="submit" class="btn btn-primary">{% if is_edit %}Сохранить{% else %}Создать{% endif %}</button>
                         {% if is_edit %}
                         <a href="{% url 'structures:detail' structure_type.code record.id %}" class="btn btn-outline-secondary">Отмена</a>
                         {% else %}
@@ -46,4 +48,10 @@
         </div>
     </div>
 </div>
+{% include 'includes/reference_materials_modal.html' %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/reference_materials_picker.js' %}"></script>
+<script src="{% static 'js/material_picker_fields.js' %}"></script>
 {% endblock %}

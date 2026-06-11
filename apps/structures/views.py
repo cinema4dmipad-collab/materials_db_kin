@@ -5,6 +5,7 @@ from django.views.generic import DetailView, FormView, ListView, TemplateView, V
 
 from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
 
+from apps.materials.picker_data import materials_for_picker
 from apps.structures.forms import StructureRecordForm
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
@@ -148,6 +149,7 @@ class StructureRecordCreateView(CreatedTableRequiredMixin, FormView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_edit'] = False
+        context['reference_materials'] = materials_for_picker()
         return context
 
     def form_valid(self, form):
@@ -202,6 +204,7 @@ class StructureRecordUpdateView(CreatedTableRequiredMixin, FormView):
         context['is_edit'] = True
         context['record'] = self.record
         context['record_label'] = structure_record_label(self.record, self.structure_type)
+        context['reference_materials'] = materials_for_picker()
         return context
 
     def form_valid(self, form):

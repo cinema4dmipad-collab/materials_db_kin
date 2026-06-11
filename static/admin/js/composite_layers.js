@@ -21,7 +21,7 @@
     function customizeAddLayerLink() {
         var $addRow = $('#compositelayer_set-group .add-row a');
         if ($addRow.length) {
-            $addRow.text('Добавить слой');
+            $addRow.text('Добавить');
         }
     }
 

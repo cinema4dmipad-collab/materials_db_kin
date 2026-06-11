@@ -437,7 +437,7 @@ class ScanViewsTests(TestCase):
 
         self.assertFalse(ScanRecord.objects.filter(title='Bad file').exists())
 
-    def test_create_form_prefills_title_with_sample_name(self):
+    def test_create_form_prefills_title_with_sample_name_and_sequence(self):
         create_url = reverse('scans:create', kwargs={'sample_pk': self.sample.pk})
 
         response = self.client.get(create_url)
@@ -445,11 +445,11 @@ class ScanViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            f'<input type="text" name="title" value="{self.sample.name}"',
+            f'<input type="text" name="title" value="{self.sample.name} #0001"',
             html=False,
         )
 
-    def test_scans_tab_attach_form_prefills_title_with_sample_name(self):
+    def test_scans_tab_attach_form_prefills_title_with_sample_name_and_sequence(self):
         scans_url = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
 
         response = self.client.get(scans_url)
@@ -457,6 +457,20 @@ class ScanViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            f'<input type="text" name="scan-title" value="{self.sample.name}"',
+            f'<input type="text" name="scan-title" value="{self.sample.name} #0001"',
+            html=False,
+        )
+
+    def test_default_scan_title_increments_sequence(self):
+        ScanRecord.objects.create(
+            sample=self.sample,
+            title=f'{self.sample.name} #0001',
+            method='echo',
+        )
+        create_url = reverse('scans:create', kwargs={'sample_pk': self.sample.pk})
+        response = self.client.get(create_url)
+        self.assertContains(
+            response,
+            f'value="{self.sample.name} #0002"',
             html=False,
         )

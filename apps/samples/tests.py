@@ -140,6 +140,24 @@ class SampleViewsTests(TestCase):
             '1.62',
         )
 
+    def test_sample_create_form_renders_property_picker(self):
+        Property.objects.create(
+            name='picker_density',
+            display_name='Picker density',
+            data_type='number',
+        )
+        response = self.client.get(reverse('samples:create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Свойства из материала')
+        self.assertContains(response, 'Дополнительные свойства')
+        self.assertContains(response, 'reference-properties-modal')
+        self.assertContains(response, 'reference-properties-data')
+        self.assertContains(response, 'reference_properties_picker.js')
+        self.assertContains(response, 'id="add-extra-property-btn"')
+        self.assertContains(response, 'data-sample-material-select')
+        self.assertContains(response, 'material-property-forms-container')
+        self.assertContains(response, 'extra-property-forms-container')
+
     def test_sample_create_view_saves_property_formset(self):
         density = Property.objects.create(
             name='sample_density',
@@ -235,7 +253,7 @@ class SampleViewsTests(TestCase):
         payload = response.json()
         self.assertEqual(len(payload['properties']), 1)
         self.assertEqual(payload['properties'][0]['property_id'], str(density.pk))
-        self.assertEqual(payload['properties'][0]['value'], '1.55')
+        self.assertEqual(payload['properties'][0]['value'], '1,55')
 
     def test_sample_detail_shows_properties(self):
         density = Property.objects.create(
@@ -260,7 +278,7 @@ class SampleViewsTests(TestCase):
         self.assertContains(response, 'Свойства')
         self.assertContains(response, 'Из свойств материала')
         self.assertContains(response, 'Density')
-        self.assertContains(response, '2.10')
+        self.assertContains(response, '2,10')
         self.assertNotContains(response, 'client_filter_bar')
 
     def test_attach_scan_on_sample_scans_tab(self):
@@ -357,7 +375,7 @@ class SampleViewsTests(TestCase):
 
         self.assertContains(get_response, 'Файлы')
 
-        self.assertContains(get_response, 'Прикрепить файл')
+        self.assertContains(get_response, 'Создать')
 
         post_response = self.client.post(
 
@@ -377,7 +395,7 @@ class SampleViewsTests(TestCase):
 
         self.assertTrue(SampleAttachment.objects.filter(title='Photo').exists())
 
-    def test_attachments_tab_prefills_title_with_sample_name(self):
+    def test_attachments_tab_prefills_title_with_sample_name_and_sequence(self):
         attachments_url = reverse('attachments:list', kwargs={'sample_pk': self.sample.pk})
 
         response = self.client.get(attachments_url)
@@ -385,7 +403,21 @@ class SampleViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            f'<input type="text" name="attachment-title" value="{self.sample.name}"',
+            f'<input type="text" name="attachment-title" value="{self.sample.name} #0001"',
+            html=False,
+        )
+
+    def test_attachment_title_increments_sequence(self):
+        SampleAttachment.objects.create(
+            sample=self.sample,
+            title=f'{self.sample.name} #0001',
+            file=SimpleUploadedFile('a.txt', b'a', content_type='text/plain'),
+        )
+        attachments_url = reverse('attachments:list', kwargs={'sample_pk': self.sample.pk})
+        response = self.client.get(attachments_url)
+        self.assertContains(
+            response,
+            f'value="{self.sample.name} #0002"',
             html=False,
         )
 

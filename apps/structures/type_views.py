@@ -2,12 +2,35 @@ from django.contrib import messages
 from django.db import transaction
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView, View
 
 from apps.materials.models import Material
+from apps.structures.identifiers import validate_table_name
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
 from apps.structures.type_forms import StructureFieldInlineFormSet, StructureTypeDisplayColorForm, StructureTypeForm
+
+
+def _apply_posted_table_name(structure_type, raw_table_name: str) -> str | None:
+    """Validate POST table_name and save on structure_type. Returns error text or None."""
+    raw_table_name = (raw_table_name or '').strip()
+    if not raw_table_name:
+        return None
+    try:
+        table_name = validate_table_name(raw_table_name)
+    except ValueError as exc:
+        return str(exc)
+    if (
+        StructureType.objects.filter(table_name=table_name)
+        .exclude(pk=structure_type.pk)
+        .exists()
+    ):
+        return f'Таблица {table_name} уже используется другим типом.'
+    if structure_type.table_name != table_name:
+        structure_type.table_name = table_name
+        structure_type.save(update_fields=['table_name'])
+    return None
 
 
 class StructureTypeFormsetMixin:
@@ -66,8 +89,9 @@ class StructureTypeCreateView(StructureTypeFormsetMixin, CreateView):
             form.add_error(None, str(exc))
             return self.render_with_formsets(form, field_formset)
 
-        messages.success(self.request, 'Тип структуры создан. Создайте SQL-таблицу, когда поля будут готовы.')
-        return redirect('structures:type_manage', type_code=self.object.code)
+        messages.success(self.request, f'Тип структуры «{self.object.name}» создан.')
+        manage_url = reverse('structures:type_manage', kwargs={'type_code': self.object.code})
+        return redirect(f'{manage_url}?prompt_create_table=1')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -152,6 +176,7 @@ class StructureTypeManageView(TemplateView):
         context['table_exists'] = (
             structure_type.is_created or SQLExecutor.table_exists(structure_type)
         )
+        context['prompt_create_table'] = not structure_type.is_created
         return context
 
 
@@ -164,6 +189,14 @@ class StructureTypeCreateTableView(View):
         )
         if structure_type.is_created:
             messages.warning(request, 'SQL-таблица уже создана.')
+            return redirect('structures:type_manage', type_code=type_code)
+
+        table_name_error = _apply_posted_table_name(
+            structure_type,
+            request.POST.get('table_name'),
+        )
+        if table_name_error:
+            messages.error(request, table_name_error)
             return redirect('structures:type_manage', type_code=type_code)
 
         result = SQLExecutor.create_table(structure_type)

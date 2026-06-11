@@ -1,5 +1,6 @@
 from django import forms
 
+from apps.materials.attachment_title import default_material_attachment_title
 from apps.materials.models import MaterialAttachment
 from apps.samples.validators import validate_attachment_file
 
@@ -17,6 +18,9 @@ class MaterialAttachmentForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        material = kwargs.pop('material', None)
+        if material and 'data' not in kwargs:
+            kwargs.setdefault('initial', {})['title'] = default_material_attachment_title(material)
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs.setdefault('class', _BOOTSTRAP_INPUT['class'])
