@@ -3,158 +3,215 @@
 
     function parseTags(value) {
         return (value || '')
-            .split(',')
+            .split(/[,;]+/)
             .map(function (part) { return part.trim(); })
             .filter(Boolean);
     }
 
-    function getCurrentToken(value) {
-        var parts = (value || '').split(',');
-        return parts[parts.length - 1].trim();
-    }
-
-    function tagAlreadySelected(input, tagName) {
-        var selected = parseTags(input.value).map(function (name) {
-            return name.toLowerCase();
-        });
-        return selected.indexOf(tagName.toLowerCase()) !== -1;
-    }
-
-    function applyTagName(input, tagName) {
-        if (tagAlreadySelected(input, tagName)) {
-            return;
+    function tagIndex(tags, tagName) {
+        var target = tagName.toLowerCase();
+        for (var i = 0; i < tags.length; i += 1) {
+            if (tags[i].toLowerCase() === target) {
+                return i;
+            }
         }
-
-        var value = input.value || '';
-        var parts = value.split(',');
-        var lastIndex = parts.length - 1;
-        var lastPart = parts[lastIndex].trim();
-
-        if (!value.trim()) {
-            input.value = tagName;
-        } else if (lastPart === '' || value.trim().endsWith(',')) {
-            input.value = value.replace(/\s*,\s*$/, '') + ', ' + tagName;
-        } else {
-            parts[lastIndex] = ' ' + tagName;
-            input.value = parts
-                .map(function (part) { return part.trim(); })
-                .filter(Boolean)
-                .join(', ');
-        }
-
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.focus();
-    }
-
-    function filterSuggestions(allTags, token) {
-        var query = token.toLowerCase();
-        if (!query) {
-            return allTags;
-        }
-        return allTags.filter(function (tag) {
-            return tag.name.toLowerCase().indexOf(query) !== -1
-                || tag.slug.toLowerCase().indexOf(query) !== -1;
-        });
-    }
-
-    function renderDropdown(widget, input, dropdown, suggestions) {
-        var token = getCurrentToken(input.value);
-        var matches = filterSuggestions(suggestions, token);
-
-        dropdown.innerHTML = '';
-        if (!matches.length || (!token && !input.matches(':focus'))) {
-            dropdown.hidden = true;
-            return;
-        }
-
-        matches.forEach(function (tag) {
-            var button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'tag-input-dropdown__item';
-            button.setAttribute('role', 'option');
-            button.dataset.tagName = tag.name;
-            button.innerHTML = '<span class="tag-input-dropdown__name">' + tag.name + '</span>';
-            button.addEventListener('mousedown', function (event) {
-                event.preventDefault();
-            });
-            button.addEventListener('click', function () {
-                applyTagName(input, tag.name);
-                dropdown.hidden = true;
-            });
-            dropdown.appendChild(button);
-        });
-        dropdown.hidden = false;
-    }
-
-    function markUsedSuggestions(widget, input) {
-        var selected = parseTags(input.value).map(function (name) {
-            return name.toLowerCase();
-        });
-        widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
-            var tagName = (button.dataset.tagName || '').toLowerCase();
-            button.classList.toggle('tag-input-pick--selected', selected.indexOf(tagName) !== -1);
-        });
+        return -1;
     }
 
     function initWidget(widget) {
-        var input = widget.querySelector('.tag-input-field');
-        var dropdown = widget.querySelector('.tag-input-dropdown');
-        if (!input || !dropdown) {
+        var hiddenInput = widget.querySelector('.tag-input-value');
+        var typingInput = widget.querySelector('.tag-input-typing');
+        var chipsContainer = widget.querySelector('.tag-input-chips');
+        var composer = widget.querySelector('.tag-input-composer');
+        var existingBlock = widget.querySelector('.tag-input-existing');
+        var existingLabel = widget.querySelector('.tag-input-existing__label');
+        var emptyMessage = widget.querySelector('.tag-input-existing__empty');
+        if (!hiddenInput || !typingInput || !chipsContainer || !composer) {
             return;
         }
 
-        var suggestions = [];
-        try {
-            suggestions = JSON.parse(widget.dataset.tagSuggestions || '[]');
-        } catch (error) {
-            suggestions = [];
+        var tags = parseTags(hiddenInput.value);
+
+        function syncHidden() {
+            hiddenInput.value = tags.join(', ');
+            hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
+
+        function renderChips() {
+            chipsContainer.innerHTML = '';
+            tags.forEach(function (tagName) {
+                var chip = document.createElement('span');
+                chip.className = 'tag-input-chip entity-tag tone-tag';
+                chip.dataset.tagName = tagName;
+
+                var label = document.createElement('span');
+                label.className = 'tag-input-chip__label';
+                label.textContent = tagName;
+
+                var removeButton = document.createElement('button');
+                removeButton.type = 'button';
+                removeButton.className = 'tag-input-chip__remove';
+                removeButton.setAttribute('aria-label', 'Убрать тег «' + tagName + '»');
+                removeButton.innerHTML = '&times;';
+                removeButton.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    removeTag(tagName);
+                });
+
+                chip.appendChild(label);
+                chip.appendChild(removeButton);
+                chipsContainer.appendChild(chip);
+            });
+            updatePickButtons();
+            filterExistingTags();
+        }
+
+        function updatePickButtons() {
+            widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
+                var tagName = button.dataset.tagName || '';
+                var selected = tagIndex(tags, tagName) !== -1;
+                button.classList.toggle('tag-input-pick--selected', selected);
+                button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            });
+        }
+
+        function tagMatchesQuery(button, query) {
+            var tagName = (button.dataset.tagName || '').toLowerCase();
+            var tagSlug = (button.dataset.tagSlug || '').toLowerCase();
+            return tagName.indexOf(query) !== -1 || tagSlug.indexOf(query) !== -1;
+        }
+
+        function filterExistingTags() {
+            var query = typingInput.value.trim().toLowerCase();
+            var visibleCount = 0;
+            var isFiltering = query.length > 0;
+
+            if (existingBlock) {
+                existingBlock.classList.toggle('tag-input-existing--filtered', isFiltering);
+            }
+            if (existingLabel) {
+                existingLabel.textContent = isFiltering ? 'Похожие теги' : 'Существующие теги';
+            }
+
+            widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
+                var tagName = button.dataset.tagName || '';
+                var visible;
+                if (!isFiltering) {
+                    visible = true;
+                } else {
+                    visible = tagMatchesQuery(button, query) && tagIndex(tags, tagName) === -1;
+                }
+                button.hidden = !visible;
+                if (visible) {
+                    visibleCount += 1;
+                }
+            });
+
+            if (emptyMessage) {
+                emptyMessage.hidden = !isFiltering || visibleCount > 0;
+            }
+        }
+
+        function firstVisiblePick() {
+            return widget.querySelector('.tag-input-pick:not([hidden])');
+        }
+
+        function addTag(tagName) {
+            var normalized = (tagName || '').trim();
+            if (!normalized || tagIndex(tags, normalized) !== -1) {
+                return false;
+            }
+            tags.push(normalized);
+            syncHidden();
+            renderChips();
+            return true;
+        }
+
+        function removeTag(tagName) {
+            var index = tagIndex(tags, tagName);
+            if (index === -1) {
+                return false;
+            }
+            tags.splice(index, 1);
+            syncHidden();
+            renderChips();
+            return true;
+        }
+
+        function toggleTag(tagName) {
+            if (tagIndex(tags, tagName) !== -1) {
+                removeTag(tagName);
+            } else {
+                addTag(tagName);
+            }
+        }
+
+        function commitTyping() {
+            var token = typingInput.value.trim();
+            if (!token) {
+                return false;
+            }
+            var added = addTag(token);
+            typingInput.value = '';
+            filterExistingTags();
+            return added;
+        }
+
+        composer.addEventListener('click', function () {
+            typingInput.focus();
+        });
 
         widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
             button.addEventListener('click', function () {
-                applyTagName(input, button.dataset.tagName || '');
-                markUsedSuggestions(widget, input);
+                toggleTag(button.dataset.tagName || '');
+                typingInput.focus();
             });
         });
 
-        dropdown.addEventListener('mousedown', function (event) {
-            event.preventDefault();
-        });
+        typingInput.addEventListener('input', filterExistingTags);
 
-        input.addEventListener('focus', function () {
-            renderDropdown(widget, input, dropdown, suggestions);
-        });
-
-        input.addEventListener('input', function () {
-            renderDropdown(widget, input, dropdown, suggestions);
-            markUsedSuggestions(widget, input);
-        });
-
-        input.addEventListener('keydown', function (event) {
+        typingInput.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
-                dropdown.hidden = true;
+                typingInput.value = '';
+                filterExistingTags();
                 return;
             }
-            if (event.key !== 'Enter' || dropdown.hidden) {
+            if (event.key === 'Backspace' && !typingInput.value && tags.length) {
+                removeTag(tags[tags.length - 1]);
+                event.preventDefault();
                 return;
             }
-            var firstItem = dropdown.querySelector('.tag-input-dropdown__item');
-            if (!firstItem) {
+            if (event.key === ',' || event.key === ';') {
+                event.preventDefault();
+                commitTyping();
+                return;
+            }
+            if (event.key !== 'Enter') {
+                return;
+            }
+            var token = typingInput.value.trim();
+            if (!token) {
                 return;
             }
             event.preventDefault();
-            applyTagName(input, firstItem.dataset.tagName || '');
-            dropdown.hidden = true;
-            markUsedSuggestions(widget, input);
+            var firstPick = firstVisiblePick();
+            if (firstPick && typingInput.value.trim()) {
+                addTag(firstPick.dataset.tagName || '');
+                typingInput.value = '';
+                filterExistingTags();
+                return;
+            }
+            commitTyping();
         });
 
-        input.addEventListener('blur', function () {
+        typingInput.addEventListener('blur', function () {
             window.setTimeout(function () {
-                dropdown.hidden = true;
+                commitTyping();
             }, 120);
         });
 
-        markUsedSuggestions(widget, input);
+        renderChips();
     }
 
     document.addEventListener('DOMContentLoaded', function () {

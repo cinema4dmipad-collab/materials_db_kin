@@ -73,13 +73,70 @@ def _database_info() -> list[dict]:
 
 def _runtime_info() -> list[dict]:
     storage_backend = settings.STORAGES.get('default', {}).get('BACKEND', '—')
-    return [
+    items = [
         {'label': 'App version', 'value': settings.APP_VERSION},
         {'label': 'Django', 'value': get_version()},
         {'label': 'DEBUG', 'value': 'on' if settings.DEBUG else 'off'},
         {'label': 'Storage backend', 'value': storage_backend},
         {'label': 'S3 storage', 'value': 'enabled' if getattr(settings, 'USE_S3_STORAGE', False) else 'disabled'},
     ]
+    if getattr(settings, 'USE_S3_STORAGE', False):
+        items.append({
+            'label': 'S3 bucket',
+            'value': getattr(settings, 'AWS_STORAGE_BUCKET_NAME', '') or '—',
+        })
+        items.append({
+            'label': 'S3 endpoint',
+            'value': getattr(settings, 'AWS_S3_ENDPOINT_URL', '') or '—',
+        })
+    return items
+
+
+def _s3_admin_links() -> list[dict]:
+    if not getattr(settings, 'USE_S3_STORAGE', False):
+        return []
+
+    base = getattr(settings, 'DEBUG_S3_ADMIN_BASE_URL', 'http://localhost').rstrip('/')
+    bucket = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', '')
+    filer_port = getattr(settings, 'SEAWEEDFS_FILER_PORT', '8888')
+    master_port = getattr(settings, 'SEAWEEDFS_MASTER_PORT', '9333')
+    admin_port = getattr(settings, 'SEAWEEDFS_ADMIN_PORT', '23646')
+
+    links = [
+        {
+            'label': 'Filer',
+            'url': f'{base}:{filer_port}/',
+            'hint': 'Просмотр файлов и бакетов',
+        },
+        {
+            'label': 'Master',
+            'url': f'{base}:{master_port}/',
+            'hint': 'Статус кластера SeaweedFS',
+        },
+        {
+            'label': 'SeaweedFS Admin',
+            'url': f'{base}:{admin_port}/',
+            'hint': 'Административная панель',
+        },
+    ]
+    if bucket:
+        links.insert(0, {
+            'label': f'Бакет «{bucket}»',
+            'url': f'{base}:{filer_port}/buckets/{bucket}/',
+            'hint': 'Файлы текущего бакета приложения',
+        })
+    return links
+
+
+def _log_line_css_class(line: str) -> str:
+    upper = line.upper()
+    if ' ERROR ' in f' {upper} ' or upper.startswith('ERROR'):
+        return 'debug-log-list__item--error'
+    if ' WARNING ' in f' {upper} ' or upper.startswith('WARNING'):
+        return 'debug-log-list__item--warning'
+    if ' CRITICAL ' in f' {upper} ' or upper.startswith('CRITICAL'):
+        return 'debug-log-list__item--critical'
+    return ''
 
 
 def _read_recent_log_lines(log_file: Path, max_lines: int = RECENT_LOG_LINES) -> tuple[list[str], str]:
@@ -105,7 +162,11 @@ def _read_recent_log_lines(log_file: Path, max_lines: int = RECENT_LOG_LINES) ->
     if not lines:
         return [], 'Файл логов пуст.'
 
-    return lines[-max_lines:], ''
+    recent_lines = lines[-max_lines:]
+    return [
+        {'text': line, 'css_class': _log_line_css_class(line)}
+        for line in recent_lines
+    ], ''
 
 
 @never_cache
@@ -117,6 +178,8 @@ def debug_page(request):
         'database_status': _database_status(),
         'database_info': _database_info(),
         'runtime_info': _runtime_info(),
+        's3_admin_links': _s3_admin_links(),
+        'use_s3_storage': getattr(settings, 'USE_S3_STORAGE', False),
         'log_file_name': log_file.name,
         'log_lines': log_lines,
         'log_message': log_message,

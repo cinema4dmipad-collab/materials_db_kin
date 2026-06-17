@@ -159,7 +159,9 @@ def get_composite_layer_formset():
         can_delete=True,
         widgets={
             'layer_number': forms.NumberInput(attrs=_LAYER_NUMBER_WIDGET),
-            'material': forms.Select(attrs=material_select_widget_attrs()),
+            'material': forms.Select(
+                attrs=material_select_widget_attrs(**{'data-material-picker-compact': 'true'}),
+            ),
         },
     )
 

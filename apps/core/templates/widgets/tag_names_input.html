@@ -1,21 +1,35 @@
 <div class="tag-input-widget" data-tag-suggestions="{{ widget.tag_suggestions_json }}">
     <div class="tag-input-widget__field-wrap">
-        <input type="{{ widget.type }}" name="{{ widget.name }}"{% if widget.value != None %} value="{{ widget.value|stringformat:'s' }}"{% endif %}{{ widget.extra_attrs|safe }}>
-        <div class="tag-input-dropdown" hidden role="listbox" aria-label="Подсказки тегов"></div>
+        <div class="tag-input-composer">
+            <div class="tag-input-chips" aria-live="polite"></div>
+            <input type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   class="tag-input-typing"
+                   placeholder="Добавить тег…"
+                   aria-label="Добавить тег"
+                   {% if widget.attrs.id %} id="{{ widget.attrs.id }}"{% endif %}>
+            <input type="hidden"
+                   name="{{ widget.name }}"
+                   class="tag-input-value"
+                   {% if widget.value != None %} value="{{ widget.value|stringformat:'s' }}"{% endif %}>
+        </div>
     </div>
     {% if widget.tag_suggestions %}
     <div class="tag-input-existing">
-        <div class="tag-input-existing__label">Существующие теги — нажмите, чтобы подставить каноническое название</div>
+        <div class="tag-input-existing__label">Существующие теги</div>
         <div class="tag-input-existing__list">
             {% for tag in widget.tag_suggestions %}
             <button type="button"
                     class="entity-tag tone-tag tag-input-pick"
                     data-tag-name="{{ tag.name }}"
-                    title="Создать тег «{{ tag.name }}»">
+                    data-tag-slug="{{ tag.slug }}"
+                    title="Добавить или убрать тег «{{ tag.name }}»">
                 {{ tag.name }}
             </button>
             {% endfor %}
         </div>
+        <p class="tag-input-existing__empty text-muted small mb-0" hidden>Совпадений не найдено — Enter создаст новый тег</p>
     </div>
     {% endif %}
 </div>

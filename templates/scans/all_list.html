@@ -4,8 +4,9 @@
 
 {% block content %}
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h1 class="h4 mb-0">Сканы</h1>
+        <p class="text-muted small mb-0 text-end ms-auto">Сканы добавляются только через карточку образца.</p>
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}

@@ -13,13 +13,12 @@ class TagListView(QuerySetFilterMixin, ListView):
     template_name = 'core/tag_list.html'
     context_object_name = 'tags'
     paginate_by = 30
-    search_fields = ('name', 'slug')
+    search_fields = ('name',)
     search_scopes = (
-        ('', 'Везде', ('name', 'slug')),
+        ('', 'Везде', ('name',)),
         ('name', 'Название', ('name',)),
-        ('slug', 'Код', ('slug',)),
     )
-    search_placeholder = 'Поиск по названию или коду...'
+    search_placeholder = 'Поиск по названию...'
 
     def get_queryset(self):
         return self.filter_queryset(

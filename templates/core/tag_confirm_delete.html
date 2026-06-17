@@ -10,7 +10,7 @@
     <div class="card-body">
         <div class="alert alert-warning">
             Вы уверены, что хотите удалить тег
-            <strong>{{ tag_obj.name }}</strong> (<code>{{ tag_obj.slug }}</code>)?
+            <strong>{{ tag_obj.name }}</strong>?
             {% if usage_count %}
             Тег будет снят с {{ usage_count }} запис{{ usage_count|pluralize:"и,ей,ей" }}:
             {% if material_count %}{{ material_count }} материал{{ material_count|pluralize:"а,ов" }}{% endif %}

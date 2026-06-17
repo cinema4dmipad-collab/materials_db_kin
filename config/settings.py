@@ -244,6 +244,13 @@ else:
         },
     }
 
+# Ссылки на веб-UI SeaweedFS на странице /debug/ (хост, доступный из браузера оператора).
+DEBUG_S3_ADMIN_BASE_URL = env_str('DEBUG_S3_ADMIN_BASE_URL', 'http://localhost').rstrip('/')
+SEAWEEDFS_S3_PORT = env_str('SEAWEEDFS_S3_PORT', '8333')
+SEAWEEDFS_FILER_PORT = env_str('SEAWEEDFS_FILER_PORT', '8888')
+SEAWEEDFS_MASTER_PORT = env_str('SEAWEEDFS_MASTER_PORT', '9333')
+SEAWEEDFS_ADMIN_PORT = env_str('SEAWEEDFS_ADMIN_PORT', '23646')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 if not DEBUG:

@@ -18,7 +18,7 @@ class TagForm(forms.ModelForm):
             'name': 'Название',
         }
         help_texts = {
-            'name': 'Код тега формируется автоматически из названия.',
+            'name': 'Название должно быть уникальным.',
         }
 
     def clean_name(self):
@@ -39,7 +39,8 @@ class TagForm(forms.ModelForm):
         if self.instance.pk:
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
-            self.add_error('name', f'Тег с кодом «{slug}» уже существует.')
+            existing = queryset.first()
+            self.add_error('name', f'Тег «{existing.name}» уже существует.')
         return cleaned_data
 
     def save(self, commit=True):
