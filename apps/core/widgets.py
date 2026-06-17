@@ -14,8 +14,8 @@ class TagNamesWidget(forms.TextInput):
     def __init__(self, attrs=None, tag_suggestions=None):
         self.tag_suggestions = tag_suggestions
         default_attrs = {
-            'class': 'form-control tag-input-field',
-            'placeholder': 'преpreg, T700, лаборатория',
+            'class': 'tag-input-typing',
+            'placeholder': 'Добавить тег…',
             'autocomplete': 'off',
             'spellcheck': 'false',
         }

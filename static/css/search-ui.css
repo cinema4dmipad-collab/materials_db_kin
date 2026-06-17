@@ -263,59 +263,88 @@
     position: relative;
 }
 
-.tag-input-field {
+.tag-input-composer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
     min-height: 2.65rem;
-}
-
-.tag-input-dropdown {
-    position: absolute;
-    z-index: 20;
-    top: calc(100% + 0.35rem);
-    left: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    max-height: min(240px, 40vh);
-    padding: 0.35rem;
-    border: 1px solid rgba(0, 118, 121, 0.22);
-    border-radius: 0.35rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--kx-border, #ced4da);
+    border-radius: 0.375rem;
     background: #fff;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
+    cursor: text;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.tag-input-dropdown__item {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.1rem;
-    width: 100%;
-    padding: 0.45rem 0.65rem;
+.tag-input-composer:focus-within {
+    border-color: rgba(0, 118, 121, 0.65);
+    box-shadow: 0 0 0 0.2rem rgba(0, 118, 121, 0.12);
+}
+
+.tag-input-chips {
+    display: contents;
+}
+
+.tag-input-chip {
+    animation: tag-chip-in 0.18s ease;
+}
+
+@keyframes tag-chip-in {
+    from {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.tag-input-chip__label {
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tag-input-chip__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    margin-left: 0.1rem;
+    padding: 0;
     border: none;
-    border-radius: 0.35rem;
+    border-radius: 999px;
     background: transparent;
-    text-align: left;
+    color: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    opacity: 0.65;
     cursor: pointer;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
 }
 
-.tag-input-dropdown__item:hover,
-.tag-input-dropdown__item:focus {
-    background: var(--kx-brand-soft);
+.tag-input-chip__remove:hover,
+.tag-input-chip__remove:focus-visible {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.08);
     outline: none;
 }
 
-.tag-input-dropdown__name {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--kx-brand-dark);
+.tag-input-typing {
+    flex: 1 1 7rem;
+    min-width: 7rem;
+    border: none;
+    outline: none;
+    padding: 0.15rem 0.25rem;
+    background: transparent;
+    font-size: 0.9375rem;
 }
 
-.tag-input-dropdown__hint {
-    font-size: 0.75rem;
-    color: var(--kx-text-muted);
+.tag-input-typing::placeholder {
+    color: var(--kx-text-muted, #6c757d);
 }
 
 .tag-input-existing {
@@ -323,6 +352,12 @@
     border: 1px dashed rgba(0, 118, 121, 0.22);
     border-radius: 0.35rem;
     background: var(--kx-brand-soft);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.tag-input-existing--filtered {
+    border-color: rgba(0, 118, 121, 0.45);
+    background: #eef8f8;
 }
 
 .tag-input-existing__label {
@@ -349,6 +384,15 @@
 
 button.tag-input-pick {
     cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+
+button.tag-input-pick:not(.tag-input-pick--selected):hover {
+    transform: translateY(-1px);
+}
+
+button.tag-input-pick[hidden] {
+    display: none;
 }
 
 button.tag-input-pick--selected {

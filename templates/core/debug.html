@@ -1,6 +1,11 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Debug — База композитов{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/debug-page.css' %}" rel="stylesheet">
+{% endblock %}
 
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
@@ -49,17 +54,50 @@
     </div>
 </div>
 
+{% if use_s3_storage %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Админка S3</h2>
+    </div>
+    <div class="card-body">
+        {% if s3_admin_links %}
+        <p class="text-muted small mb-3">
+            Веб-интерфейсы SeaweedFS. Базовый хост задаётся через
+            <code>DEBUG_S3_ADMIN_BASE_URL</code> (по умолчанию <code>http://localhost</code>).
+        </p>
+        <div class="debug-s3-links">
+            {% for link in s3_admin_links %}
+            <a href="{{ link.url }}"
+               class="debug-s3-link"
+               target="_blank"
+               rel="noopener noreferrer"
+               title="{{ link.hint }}">
+                <span class="debug-s3-link__label">{{ link.label }}</span>
+                <span class="debug-s3-link__hint">{{ link.hint }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">Ссылки на админку S3 не настроены.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center gap-3">
         <h2 class="h5 mb-0">Последние строки логов</h2>
         <span class="text-muted small">{{ log_file_name }}</span>
     </div>
-    <div class="card-body">
+    <div class="card-body p-0">
         {% if log_lines %}
-        <pre class="bg-light border rounded p-3 mb-0 small" style="max-height: 420px; overflow: auto;"><code>{% for line in log_lines %}{{ line }}
-{% endfor %}</code></pre>
+        <ul class="debug-log-list list-unstyled" role="log" aria-label="Последние строки логов">
+            {% for line in log_lines %}
+            <li class="debug-log-list__item {{ line.css_class }}">{{ line.text }}</li>
+            {% endfor %}
+        </ul>
         {% else %}
-        <p class="text-muted mb-0">{{ log_message }}</p>
+        <p class="text-muted mb-0 p-3">{{ log_message }}</p>
         {% endif %}
     </div>
 </div>

@@ -30,22 +30,28 @@
         }
         select.dataset.materialPickerBound = 'true';
 
+        var compact = select.dataset.materialPickerCompact === 'true';
+
         var wrap = document.createElement('div');
-        wrap.className = 'material-picker-field d-flex gap-2 align-items-stretch';
+        wrap.className = 'material-picker-field d-flex gap-2 align-items-stretch'
+            + (compact ? ' material-picker-field--compact' : '');
         select.parentNode.insertBefore(wrap, select);
 
         var labelNode = document.createElement('button');
         labelNode.type = 'button';
         labelNode.className = 'material-picker-field__label form-control form-control-sm text-start flex-grow-1';
-        labelNode.setAttribute('aria-label', 'Выбранный материал');
-
-        var openBtn = document.createElement('button');
-        openBtn.type = 'button';
-        openBtn.className = 'btn btn-sm btn-outline-primary material-picker-open-btn text-nowrap';
-        openBtn.textContent = 'Выбрать';
+        labelNode.setAttribute('aria-label', 'Выбранный материал — нажмите, чтобы изменить');
+        labelNode.title = 'Нажмите, чтобы выбрать материал';
 
         wrap.appendChild(labelNode);
-        wrap.appendChild(openBtn);
+        if (!compact) {
+            var openBtn = document.createElement('button');
+            openBtn.type = 'button';
+            openBtn.className = 'btn btn-sm btn-outline-primary material-picker-open-btn text-nowrap';
+            openBtn.textContent = 'Выбрать';
+            openBtn.addEventListener('click', openPicker);
+            wrap.appendChild(openBtn);
+        }
         wrap.appendChild(select);
 
         select.classList.add('material-picker-select--hidden');
@@ -57,7 +63,6 @@
         }
 
         labelNode.addEventListener('click', openPicker);
-        openBtn.addEventListener('click', openPicker);
         select.addEventListener('change', function () {
             syncSelect(select);
         });

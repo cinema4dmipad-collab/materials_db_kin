@@ -62,3 +62,11 @@
 .composite-layers-edit-table .material-picker-field {
     min-width: 12rem;
 }
+
+.material-picker-field--compact {
+    width: 100%;
+}
+
+.material-picker-field--compact .material-picker-field__label {
+    width: 100%;
+}

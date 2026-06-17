@@ -19,7 +19,7 @@ class TagNamesFormMixin:
         self.fields[self.tag_field_name] = forms.CharField(
             required=False,
             label='Теги',
-            help_text='Через запятую или выберите из списка ниже — подставится каноническое название из базы.',
+            help_text='Введите название и нажмите Enter, или выберите из списка. Повторный клик по тегу убирает его.',
             initial=initial,
             widget=TagNamesWidget(),
         )

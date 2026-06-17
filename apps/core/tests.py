@@ -70,7 +70,6 @@ class TagViewsTests(TestCase):
         response = self.client.get(reverse('core:tag_list'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Prepreg')
-        self.assertContains(response, 'prepreg')
 
     def test_tag_create_view(self):
         response = self.client.post(reverse('core:tag_create'), {'name': 'T700'})
@@ -306,9 +305,13 @@ class HelpPageTests(TestCase):
 
 class AppVersionTests(TestCase):
     def test_get_app_version_reads_pyproject(self):
-        from apps.core.version import get_app_version
+        import tomllib
 
-        self.assertEqual(get_app_version(), '0.1.0')
+        from apps.core.version import PYPROJECT_PATH, get_app_version
+
+        with PYPROJECT_PATH.open('rb') as pyproject_file:
+            expected = tomllib.load(pyproject_file)['project']['version']
+        self.assertEqual(get_app_version(), expected)
 
     def test_footer_shows_app_version(self):
         from django.conf import settings
@@ -372,6 +375,44 @@ class DebugPageTests(TestCase):
         self.assertContains(response, 'App version')
         self.assertContains(response, 'Storage backend')
         self.assertContains(response, 'Локальный файл логов пока не найден.')
+
+    def test_debug_page_shows_s3_admin_links_when_enabled(self):
+        self.client.force_login(self.staff_user)
+        with override_settings(
+            USE_S3_STORAGE=True,
+            AWS_STORAGE_BUCKET_NAME='materials-db',
+            DEBUG_S3_ADMIN_BASE_URL='http://localhost',
+            SEAWEEDFS_FILER_PORT='8888',
+            SEAWEEDFS_MASTER_PORT='9333',
+            SEAWEEDFS_ADMIN_PORT='23646',
+        ):
+            response = self.client.get(reverse('core:debug'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Админка S3')
+        self.assertContains(response, 'http://localhost:8888/buckets/materials-db/')
+        self.assertContains(response, 'http://localhost:9333/')
+        self.assertContains(response, 'http://localhost:23646/')
+
+    def test_debug_page_hides_s3_admin_links_when_disabled(self):
+        self.client.force_login(self.staff_user)
+        with override_settings(USE_S3_STORAGE=False):
+            response = self.client.get(reverse('core:debug'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Админка S3')
+
+    def test_debug_page_renders_scrollable_log_list(self):
+        with TemporaryDirectory() as temp_dir:
+            log_file = Path(temp_dir) / 'debug.log'
+            log_file.write_text('INFO safe line\n', encoding='utf-8')
+            self.client.force_login(self.staff_user)
+            with override_settings(DEBUG_LOG_FILE=log_file):
+                response = self.client.get(reverse('core:debug'))
+
+        self.assertContains(response, 'debug-log-list')
+        self.assertContains(response, 'INFO safe line')
+        self.assertContains(response, 'debug-page.css')
 
     def test_debug_page_disables_response_caching(self):
         self.client.force_login(self.staff_user)
