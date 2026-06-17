@@ -313,6 +313,31 @@ class AppVersionTests(TestCase):
             expected = tomllib.load(pyproject_file)['project']['version']
         self.assertEqual(get_app_version(), expected)
 
+    def test_get_git_commit_hash_reads_env_variable(self):
+        import os
+
+        from apps.core.version import get_git_commit_hash
+
+        get_git_commit_hash.cache_clear()
+        previous = os.environ.pop('GIT_COMMIT', None)
+        os.environ['GIT_COMMIT'] = 'abc1234'
+        try:
+            self.assertEqual(get_git_commit_hash(), 'abc1234')
+        finally:
+            os.environ.pop('GIT_COMMIT', None)
+            if previous is not None:
+                os.environ['GIT_COMMIT'] = previous
+            get_git_commit_hash.cache_clear()
+
+    def test_format_version_with_commit_joins_version_and_hash(self):
+        from apps.core.version import format_version_with_commit
+
+        self.assertEqual(
+            format_version_with_commit('0.1.1', 'deadbeef'),
+            '0.1.1 · deadbeef',
+        )
+        self.assertEqual(format_version_with_commit('0.1.1', ''), '0.1.1')
+
     def test_footer_shows_app_version(self):
         from django.conf import settings
 
@@ -355,6 +380,14 @@ class DebugPageTests(TestCase):
         self.assertNotContains(response, 'href="/debug/"')
         self.assertNotContains(response, '>Debug</a>')
 
+    def test_admin_index_links_to_debug_for_staff(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('admin:index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse('core:debug'))
+        self.assertContains(response, '>Debug</a>')
+
     def test_base_layout_includes_file_transfer_progress_assets(self):
         response = self.client.get(reverse('core:dashboard'))
         self.assertEqual(response.status_code, 200)
@@ -363,6 +396,8 @@ class DebugPageTests(TestCase):
         self.assertContains(response, 'file_transfer_progress.css')
 
     def test_debug_page_renders_database_and_runtime_info_without_log_file(self):
+        from django.conf import settings
+
         with TemporaryDirectory() as temp_dir:
             missing_log = Path(temp_dir) / 'debug.log'
             self.client.force_login(self.staff_user)
@@ -373,8 +408,31 @@ class DebugPageTests(TestCase):
         self.assertContains(response, 'Подключение к БД')
         self.assertContains(response, 'DB engine')
         self.assertContains(response, 'App version')
+        self.assertContains(response, settings.APP_VERSION)
         self.assertContains(response, 'Storage backend')
         self.assertContains(response, 'Локальный файл логов пока не найден.')
+
+    def test_debug_page_shows_commit_hash_next_to_version(self):
+        import os
+
+        from django.conf import settings
+
+        from apps.core.version import get_git_commit_hash
+
+        get_git_commit_hash.cache_clear()
+        previous = os.environ.pop('GIT_COMMIT', None)
+        os.environ['GIT_COMMIT'] = 'cafe001'
+        self.client.force_login(self.staff_user)
+        try:
+            response = self.client.get(reverse('core:debug'))
+        finally:
+            os.environ.pop('GIT_COMMIT', None)
+            if previous is not None:
+                os.environ['GIT_COMMIT'] = previous
+            get_git_commit_hash.cache_clear()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'{settings.APP_VERSION} · cafe001')
 
     def test_debug_page_shows_s3_admin_links_when_enabled(self):
         self.client.force_login(self.staff_user)

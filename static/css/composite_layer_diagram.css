@@ -49,6 +49,22 @@
     min-height: 320px;
 }
 
+.composite-layers-layout > [class*="col-"]:last-child {
+    display: flex;
+    flex-direction: column;
+}
+
+#composite-layer-diagram-live {
+    display: flex;
+    flex-direction: column;
+}
+
+#composite-layer-diagram-live .composite-layer-diagram:not(.composite-layer-diagram--empty),
+.composite-layers-layout > [class*="col-"]:last-child .composite-layer-diagram {
+    flex: 0 0 auto;
+    height: auto;
+}
+
 .composite-layers-layout--edit .composite-layers-edit-table .form-control,
 .composite-layers-layout--edit .composite-layers-edit-table .form-select {
     min-width: 0;
@@ -107,16 +123,6 @@
     padding-left: 0.5rem;
     padding-right: 0.25rem;
     text-align: center;
-}
-
-.composite-layers-edit-table__select {
-    width: 2.25rem;
-    text-align: center;
-}
-
-.composite-layers-edit-table__select .form-check-input {
-    float: none;
-    margin: 0;
 }
 
 .composite-layers-edit-table__number {
@@ -180,8 +186,21 @@
 }
 
 .composite-layers-edit-table .layer-form-row {
-    cursor: pointer;
     transition: background-color 0.12s ease;
+    user-select: none;
+}
+
+.composite-layers-edit-table .layer-form-row input,
+.composite-layers-edit-table .layer-form-row select,
+.composite-layers-edit-table .layer-form-row textarea,
+.composite-layers-edit-table .layer-form-row .material-picker-field__label {
+    user-select: text;
+    cursor: text;
+}
+
+.composite-layers-edit-table .layer-form-row .layer-index-display,
+.composite-layers-edit-table .layer-form-row .layer-drag-handle {
+    cursor: pointer;
 }
 
 .composite-layers-edit-table .layer-form-row:hover {
@@ -194,6 +213,15 @@
 
 .composite-layers-edit-table .layer-form-row.layer-form-row--selected > td:first-child {
     box-shadow: inset 3px 0 0 var(--kx-brand);
+}
+
+.composite-layers-card--keyboard:focus {
+    outline: none;
+}
+
+.composite-layers-card--keyboard:focus-visible {
+    outline: 2px solid rgba(0, 118, 121, 0.35);
+    outline-offset: 2px;
 }
 
 .composite-layers-hint {
@@ -269,7 +297,12 @@
     flex-direction: column;
     width: 100%;
     max-width: 180px;
-    height: 320px;
+    --layer-stack-max-height: 320px;
+    --layer-stack-segment-height: 56px;
+    height: min(
+        var(--layer-stack-max-height),
+        calc(var(--layer-stack-count, 1) * var(--layer-stack-segment-height))
+    );
     border: 2px solid #334155;
     border-radius: 0.5rem;
     overflow: hidden;

@@ -35,15 +35,35 @@
         return Array.from(container.querySelectorAll('.layer-form-row')).filter(isRowVisible);
     }
 
-    function getRowSelectCheckbox(row) {
-        return row.querySelector('.layer-row-select');
+    function isRowSelected(row) {
+        return row.classList.contains('layer-form-row--selected');
+    }
+
+    function setRowSelected(row, selected) {
+        row.classList.toggle('layer-form-row--selected', Boolean(selected));
+        row.setAttribute('aria-selected', selected ? 'true' : 'false');
     }
 
     function getSelectedRows(container) {
-        return getVisibleRows(container).filter(function (row) {
-            var checkbox = getRowSelectCheckbox(row);
-            return checkbox && checkbox.checked;
-        });
+        return getVisibleRows(container).filter(isRowSelected);
+    }
+
+    function isLayerEditableTarget(element) {
+        if (!element) {
+            return false;
+        }
+        return Boolean(element.closest(
+            'input:not([type="hidden"]):not([readonly]), select, textarea, .material-picker-field__label',
+        ));
+    }
+
+    function isLayerRowSelectionTarget(element) {
+        if (!element) {
+            return false;
+        }
+        return Boolean(element.closest(
+            '.layer-drag-handle, input, select, textarea, button, .material-picker-field',
+        ));
     }
 
     function updateEmptyState(container) {
@@ -115,7 +135,6 @@
     function deleteRow(container, row, totalFormsInput) {
         var idInput = row.querySelector('input[name$="-id"]');
         var deleteInput = row.querySelector('input[name$="-DELETE"]');
-        var checkbox = getRowSelectCheckbox(row);
 
         if (idInput && idInput.value && deleteInput) {
             deleteInput.checked = true;
@@ -124,10 +143,7 @@
             row.remove();
             reindexForms(container, totalFormsInput);
         }
-        if (checkbox) {
-            checkbox.checked = false;
-        }
-        row.classList.remove('layer-form-row--selected');
+        setRowSelected(row, false);
     }
 
     function appendLayerFromTemplate(container, template, totalFormsInput) {
@@ -146,7 +162,7 @@
         return row;
     }
 
-    function duplicateRows(container, rows, template, totalFormsInput, ui) {
+    function duplicateRows(container, rows, template, totalFormsInput, ui, state) {
         rows.forEach(function (sourceRow) {
             var newRow = appendLayerFromTemplate(container, template, totalFormsInput);
             if (newRow) {
@@ -224,18 +240,9 @@
         refreshDiagram(container);
     }
 
-    function updateRowSelectionState(row) {
-        var checkbox = getRowSelectCheckbox(row);
-        row.classList.toggle('layer-form-row--selected', Boolean(checkbox && checkbox.checked));
-    }
-
     function clearSelection(container) {
         getVisibleRows(container).forEach(function (row) {
-            var checkbox = getRowSelectCheckbox(row);
-            if (checkbox) {
-                checkbox.checked = false;
-            }
-            updateRowSelectionState(row);
+            setRowSelected(row, false);
         });
     }
 
@@ -282,15 +289,10 @@
                 ui.selectionMeta.textContent = 'Выбрано ' + selectedCount + ' из ' + visibleRows.length;
             }
         }
-
-        if (ui.selectAll) {
-            ui.selectAll.indeterminate = selectedCount > 0 && selectedCount < visibleRows.length;
-            ui.selectAll.checked = visibleRows.length > 0 && selectedCount === visibleRows.length;
-        }
     }
 
     function bindLiveUpdates(container, row) {
-        row.querySelectorAll('input:not(.layer-row-select), select').forEach(function (input) {
+        row.querySelectorAll('input, select').forEach(function (input) {
             if (input.dataset.layerDiagramBound === 'true') {
                 return;
             }
@@ -305,11 +307,6 @@
     }
 
     function handleRowSelection(container, row, event, ui, state) {
-        var checkbox = getRowSelectCheckbox(row);
-        if (!checkbox) {
-            return;
-        }
-
         var visibleRows = getVisibleRows(container);
 
         if (event.shiftKey && state.lastSelectedRow && visibleRows.indexOf(state.lastSelectedRow) !== -1) {
@@ -321,31 +318,95 @@
                 end = tmp;
             }
             for (var i = start; i <= end; i += 1) {
-                var cb = getRowSelectCheckbox(visibleRows[i]);
-                if (cb) {
-                    cb.checked = true;
-                    updateRowSelectionState(visibleRows[i]);
-                }
+                setRowSelected(visibleRows[i], true);
             }
         } else if (event.ctrlKey || event.metaKey) {
-            if (event.target.classList.contains('layer-row-select')) {
-                updateRowSelectionState(row);
-            } else {
-                checkbox.checked = !checkbox.checked;
-                updateRowSelectionState(row);
-            }
-        } else if (event.target.classList.contains('layer-row-select')) {
-            updateRowSelectionState(row);
+            setRowSelected(row, !isRowSelected(row));
         } else {
             clearSelection(container);
-            checkbox.checked = true;
-            updateRowSelectionState(row);
+            setRowSelected(row, true);
         }
 
-        if (checkbox.checked) {
+        if (isRowSelected(row)) {
             state.lastSelectedRow = row;
         }
         updateToolbarState(container, ui);
+        focusLayersCard(container);
+    }
+
+    function focusLayersCard(container) {
+        var layersCard = container.closest('.composite-layers-card');
+        if (layersCard && typeof layersCard.focus === 'function') {
+            layersCard.focus({ preventScroll: true });
+        }
+        return layersCard;
+    }
+
+    function shouldHandleLayerShortcuts(layersCard, active, container) {
+        if (!layersCard) {
+            return false;
+        }
+        if (isLayerEditableTarget(active)) {
+            return false;
+        }
+        if (layersCard.contains(active)) {
+            return true;
+        }
+        if (getSelectedRows(container).length > 0) {
+            var tag = active && active.tagName;
+            if (!active || tag === 'BODY' || tag === 'HTML') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function isDeleteKey(event) {
+        return event.key === 'Delete' || event.code === 'Delete';
+    }
+
+    function isInsertKey(event) {
+        return event.key === 'Insert' || event.code === 'Insert';
+    }
+
+    function handleLayerKeyboardEvent(event, container, totalFormsInput, ui) {
+        var layersCard = container.closest('.composite-layers-card');
+        var active = document.activeElement;
+        if (!shouldHandleLayerShortcuts(layersCard, active, container)) {
+            return;
+        }
+
+        if (isInsertKey(event) || (event.key === 'Enter' && event.altKey)) {
+            event.preventDefault();
+            ui.addLayer();
+            return;
+        }
+
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+            event.preventDefault();
+            ui.duplicateSelected();
+            return;
+        }
+
+        if (isDeleteKey(event) && getSelectedRows(container).length) {
+            event.preventDefault();
+            ui.deleteSelected();
+            focusLayersCard(container);
+            return;
+        }
+
+        if (event.key === 'ArrowUp' && (event.altKey || getSelectedRows(container).length)) {
+            event.preventDefault();
+            moveSelectedRows(container, -1, totalFormsInput);
+            updateToolbarState(container, ui);
+            return;
+        }
+
+        if (event.key === 'ArrowDown' && (event.altKey || getSelectedRows(container).length)) {
+            event.preventDefault();
+            moveSelectedRows(container, 1, totalFormsInput);
+            updateToolbarState(container, ui);
+        }
     }
 
     function bindDragAndDrop(container, totalFormsInput, ui) {
@@ -393,77 +454,39 @@
         });
     }
 
-    function bindKeyboardShortcuts(container, template, totalFormsInput, ui, state) {
+    function bindKeyboardShortcuts(container, totalFormsInput, ui) {
+        var layersCard = container.closest('.composite-layers-card');
+        if (layersCard) {
+            layersCard.setAttribute('tabindex', '-1');
+            layersCard.classList.add('composite-layers-card--keyboard');
+        }
+
         document.addEventListener('keydown', function (event) {
             if (!container.closest('.composite-layers-card')) {
                 return;
             }
-            var active = document.activeElement;
-            var inLayers = container.contains(active) || active.closest('.composite-layers-card');
-            if (!inLayers) {
-                return;
-            }
-            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
-                if (event.key !== 'Delete' && event.key !== 'Backspace') {
-                    return;
-                }
-            }
-
-            if (event.key === 'Insert' || (event.key === 'Enter' && event.altKey)) {
-                event.preventDefault();
-                ui.addLayer();
-                return;
-            }
-
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
-                event.preventDefault();
-                ui.duplicateSelected();
-                return;
-            }
-
-            if (event.key === 'Delete' || event.key === 'Backspace') {
-                if (getSelectedRows(container).length) {
-                    event.preventDefault();
-                    ui.deleteSelected();
-                }
-                return;
-            }
-
-            if (event.key === 'ArrowUp' && (event.altKey || getSelectedRows(container).length)) {
-                event.preventDefault();
-                moveSelectedRows(container, -1, totalFormsInput);
-                updateToolbarState(container, ui);
-                return;
-            }
-
-            if (event.key === 'ArrowDown' && (event.altKey || getSelectedRows(container).length)) {
-                event.preventDefault();
-                moveSelectedRows(container, 1, totalFormsInput);
-                updateToolbarState(container, ui);
-            }
+            handleLayerKeyboardEvent(event, container, totalFormsInput, ui);
         });
     }
 
     function bindRow(container, row, totalFormsInput, ui, state) {
         bindLiveUpdates(container, row);
-
-        var checkbox = getRowSelectCheckbox(row);
-        if (checkbox && checkbox.dataset.bound !== 'true') {
-            checkbox.dataset.bound = 'true';
-            checkbox.addEventListener('click', function (event) {
-                event.stopPropagation();
-            });
-            checkbox.addEventListener('change', function (event) {
-                handleRowSelection(container, row, event, ui, state);
-            });
-        }
+        row.setAttribute('aria-selected', 'false');
 
         if (row.dataset.rowBound === 'true') {
             return;
         }
         row.dataset.rowBound = 'true';
+
+        row.addEventListener('mousedown', function (event) {
+            if (isLayerRowSelectionTarget(event.target)) {
+                return;
+            }
+            event.preventDefault();
+        });
+
         row.addEventListener('click', function (event) {
-            if (event.target.closest('.layer-drag-handle, .material-picker-field, button')) {
+            if (isLayerRowSelectionTarget(event.target)) {
                 return;
             }
             handleRowSelection(container, row, event, ui, state);
@@ -478,7 +501,6 @@
         var deleteBtn = document.getElementById('delete-layers-btn');
         var moveUpBtn = document.getElementById('move-layers-up-btn');
         var moveDownBtn = document.getElementById('move-layers-down-btn');
-        var selectAll = document.getElementById('layer-select-all');
         var selectionMeta = document.getElementById('layers-selection-meta');
         var totalFormsInput = document.getElementById('id_layers-TOTAL_FORMS');
         var form = container ? container.closest('form') : null;
@@ -493,7 +515,6 @@
             deleteBtn: deleteBtn,
             moveUpBtn: moveUpBtn,
             moveDownBtn: moveDownBtn,
-            selectAll: selectAll,
             selectionMeta: selectionMeta,
             addLayer: function () {},
             duplicateSelected: function () {},
@@ -509,13 +530,10 @@
                 copyRowValues(lastRow, row);
             }
             clearSelection(container);
-            var checkbox = getRowSelectCheckbox(row);
-            if (checkbox) {
-                checkbox.checked = true;
-                updateRowSelectionState(row);
-                state.lastSelectedRow = row;
-            }
+            setRowSelected(row, true);
+            state.lastSelectedRow = row;
             updateToolbarState(container, ui);
+            focusLayersCard(container);
             row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         };
 
@@ -524,7 +542,7 @@
             if (!selected.length) {
                 return;
             }
-            duplicateRows(container, selected, template, totalFormsInput, ui);
+            duplicateRows(container, selected, template, totalFormsInput, ui, state);
             updateToolbarState(container, ui);
         };
 
@@ -564,22 +582,9 @@
                 updateToolbarState(container, ui);
             });
         }
-        if (selectAll) {
-            selectAll.addEventListener('change', function () {
-                var checked = selectAll.checked;
-                getVisibleRows(container).forEach(function (row) {
-                    var checkbox = getRowSelectCheckbox(row);
-                    if (checkbox) {
-                        checkbox.checked = checked;
-                        updateRowSelectionState(row);
-                    }
-                });
-                updateToolbarState(container, ui);
-            });
-        }
 
         bindDragAndDrop(container, totalFormsInput, ui);
-        bindKeyboardShortcuts(container, template, totalFormsInput, ui, state);
+        bindKeyboardShortcuts(container, totalFormsInput, ui);
 
         if (form) {
             form.addEventListener('submit', function () {

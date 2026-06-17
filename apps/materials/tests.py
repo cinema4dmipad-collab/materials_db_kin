@@ -680,7 +680,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(response, 'composite-layer-diagram-live')
         self.assertContains(response, 'composite-layers-edit-table')
         self.assertContains(response, 'composite-layers-actions')
-        self.assertContains(response, 'layer-select-all')
+        self.assertContains(response, 'layer-form-row')
         self.assertContains(response, 'duplicate-layers-btn')
         self.assertContains(response, 'layer-drag-handle')
         self.assertContains(response, 'data-material-picker')
@@ -1069,6 +1069,65 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(layer.angle, 90)
         self.assertEqual(layer.thickness, 0.5)
 
+    def test_public_material_update_accepts_duplicated_layers_with_same_posted_layer_number(self):
+        row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
+        layer_material = Material.objects.create(
+            code='MAT-LAYER-DUP-SOURCE',
+            name='Layer material',
+        )
+        material = Material.objects.create(
+            code='MAT-PUBLIC-LAYER-DUP',
+            name='Material with duplicated layers',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        layer = CompositeLayer.objects.create(
+            parent_material=material,
+            material=layer_material,
+            layer_number=1,
+            angle=45,
+            thickness='0.25',
+        )
+
+        duplicate_payload = {}
+        for index in range(1, 8):
+            prefix = f'layers-{index}'
+            duplicate_payload.update(
+                self._layer_formset_data(
+                    layer_material,
+                    prefix=prefix,
+                    **{
+                        f'{prefix}-layer_number': '1',
+                        f'{prefix}-angle': '45',
+                        f'{prefix}-thickness': '0.25',
+                    },
+                )
+            )
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-LAYER-DUP',
+                name='Material with duplicated layers',
+                **self._layer_formset_management_data(total='8', initial='1'),
+                **{
+                    'layers-0-id': str(layer.pk),
+                    'layers-0-layer_number': '1',
+                    'layers-0-material': str(layer_material.pk),
+                    'layers-0-angle': '45',
+                    'layers-0-thickness': '0.25',
+                },
+                **duplicate_payload,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        layers = list(
+            CompositeLayer.objects.filter(parent_material=material).order_by('layer_number')
+        )
+        self.assertEqual(len(layers), 8)
+        self.assertEqual([item.layer_number for item in layers], list(range(1, 9)))
+
     def test_public_material_update_shared_row_creates_new_dynamic_row(self):
         row_id = self.insert_structure_row(title='Shared panel', thickness='8.25')
         material = Material.objects.create(
@@ -1258,6 +1317,59 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Material.objects.filter(code='MAT-PUBLIC-001').exists())
         self.assertContains(response, 'Обязательное поле.')
+        self.assertContains(response, 'Исправьте ошибки перед сохранением')
+        self.assertContains(response, 'Параметры структуры:')
+
+    def test_public_material_create_shows_layer_validation_for_incomplete_row(self):
+        layer_material = Material.objects.create(
+            code='MAT-LAYER-INCOMPLETE',
+            name='Layer material',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._layer_formset_management_data(),
+                **self._layer_formset_data(
+                    layer_material,
+                    **{
+                        'layers-0-angle': '',
+                        'layers-0-thickness': '',
+                    },
+                ),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Material.objects.filter(code='MAT-PUBLIC-001').exists())
+        self.assertContains(response, 'Укажите угол армирования.')
+        self.assertContains(response, 'Укажите толщину слоя.')
+        self.assertContains(response, 'Слои композита:')
+        self.assertContains(response, 'Слой 1')
+
+    def test_public_material_create_shows_errors_from_multiple_sections(self):
+        density = Property.objects.create(
+            name='density_validation',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                code='',
+                **self._property_formset_management_data(),
+                **self._property_formset_data(
+                    density,
+                    **{'properties-0-value': 'not-a-number'},
+                ),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Исправьте ошибки перед сохранением')
+        self.assertContains(response, 'Материал:')
+        self.assertContains(response, 'Свойства:')
+        self.assertContains(response, 'разделах')
 
     def test_public_material_create_persists_and_displays_zero_decimal_value(self):
         response = self.client.post(
