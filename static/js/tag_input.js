@@ -139,14 +139,6 @@
             return true;
         }
 
-        function toggleTag(tagName) {
-            if (tagIndex(tags, tagName) !== -1) {
-                removeTag(tagName);
-            } else {
-                addTag(tagName);
-            }
-        }
-
         function commitTyping() {
             var token = typingInput.value.trim();
             if (!token) {
@@ -163,8 +155,18 @@
         });
 
         widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
+            button.addEventListener('mousedown', function (event) {
+                event.preventDefault();
+            });
             button.addEventListener('click', function () {
-                toggleTag(button.dataset.tagName || '');
+                var tagName = button.dataset.tagName || '';
+                if (tagIndex(tags, tagName) === -1) {
+                    addTag(tagName);
+                    typingInput.value = '';
+                    filterExistingTags();
+                } else {
+                    removeTag(tagName);
+                }
                 typingInput.focus();
             });
         });
@@ -207,6 +209,9 @@
 
         typingInput.addEventListener('blur', function () {
             window.setTimeout(function () {
+                if (widget.contains(document.activeElement)) {
+                    return;
+                }
                 commitTyping();
             }, 120);
         });
