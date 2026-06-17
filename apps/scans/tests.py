@@ -366,6 +366,47 @@ class ScanViewsTests(TestCase):
 
         self.assertFalse(scan.file.storage.exists(file_name))
 
+    def test_download_view_streams_file_through_app(self):
+        scan = ScanRecord.objects.create(
+            sample=self.sample,
+            title='Download scan',
+            method='echo',
+            file=make_hdf5_upload('download.h5'),
+        )
+        download_url = reverse(
+            'scans:download',
+            kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk},
+        )
+
+        response = self.client.get(download_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertNotIn('seaweedfs', download_url)
+        try:
+            self.assertTrue(b''.join(response.streaming_content))
+        finally:
+            response.close()
+
+    def test_list_page_uses_app_download_url(self):
+        scan = ScanRecord.objects.create(
+            sample=self.sample,
+            title='Listed scan',
+            method='echo',
+            file=make_hdf5_upload('listed.h5'),
+        )
+        list_url = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
+        download_url = reverse(
+            'scans:download',
+            kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk},
+        )
+
+        response = self.client.get(list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, download_url)
+        self.assertNotContains(response, 'seaweedfs:8333')
+
     def test_all_scans_list_filters_by_method_search(self):
         ScanRecord.objects.create(
             sample=self.sample,

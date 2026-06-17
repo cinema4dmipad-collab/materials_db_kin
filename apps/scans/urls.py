@@ -4,6 +4,7 @@ from apps.scans.views import (
     ScanCreateView,
     ScanDeleteView,
     ScanDetailView,
+    ScanDownloadView,
     ScanListView,
     ScanUpdateView,
 )
@@ -15,5 +16,6 @@ urlpatterns = [
     path('create/', ScanCreateView.as_view(), name='create'),
     path('<uuid:pk>/', ScanDetailView.as_view(), name='detail'),
     path('<uuid:pk>/edit/', ScanUpdateView.as_view(), name='edit'),
+    path('<uuid:pk>/download/', ScanDownloadView.as_view(), name='download'),
     path('<uuid:pk>/delete/', ScanDeleteView.as_view(), name='delete'),
 ]

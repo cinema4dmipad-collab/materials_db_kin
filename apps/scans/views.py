@@ -1,7 +1,11 @@
 from django.contrib import messages
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+
+from apps.core.file_download import build_file_download_response
 
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
@@ -216,3 +220,11 @@ class ScanDeleteView(SampleScanMixin, DeleteView):
         self.object.delete()
         messages.success(self.request, 'Скан удалён.')
         return redirect(self.get_success_url())
+
+
+class ScanDownloadView(SampleScanMixin, View):
+    def get(self, request, *args, **kwargs):
+        scan = get_object_or_404(self.sample.scans.all(), pk=kwargs['pk'])
+        if not scan.file:
+            raise Http404('Файл не найден')
+        return build_file_download_response(scan.file, filename=scan.filename)

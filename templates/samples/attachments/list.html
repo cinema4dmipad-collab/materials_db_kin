@@ -28,12 +28,12 @@
                     <tr>
                         <td>{{ attachment.title }}</td>
                         <td>
-                            <a href="{{ attachment.file.url }}" class="file-download-link" data-download-name="{{ attachment.filename }}">{{ attachment.filename }}</a>
+                            <a href="{% url 'attachments:download' sample.pk attachment.pk %}" class="file-download-link" data-download-name="{{ attachment.filename }}">{{ attachment.filename }}</a>
                         </td>
                         <td>{{ attachment.description|default:"—"|truncatewords:12 }}</td>
                         <td>{{ attachment.uploaded_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end text-nowrap">
-                            <a href="{{ attachment.file.url }}" class="btn btn-sm btn-outline-secondary file-download-link" data-download-name="{{ attachment.filename }}">Скачать</a>
+                            <a href="{% url 'attachments:download' sample.pk attachment.pk %}" class="btn btn-sm btn-outline-secondary file-download-link" data-download-name="{{ attachment.filename }}">Скачать</a>
                             <a href="{% url 'attachments:delete' sample.pk attachment.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
                         </td>
                     </tr>

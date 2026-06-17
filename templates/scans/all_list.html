@@ -40,7 +40,7 @@
                         <td>{{ scan.uploaded_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end">
                             <div class="table-actions">
-                            <a href="{{ scan.file.url }}" class="btn btn-sm btn-outline-secondary btn-action-view file-download-link" data-download-name="{{ scan.filename }}">Скачать</a>
+                            <a href="{% url 'scans:download' scan.sample.pk scan.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view file-download-link" data-download-name="{{ scan.filename }}">Скачать</a>
                             <a href="{% url 'scans:detail' scan.sample.pk scan.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view">Просмотр</a>
                             <a href="{% url 'scans:list' scan.sample.pk %}" class="btn btn-sm btn-outline-primary btn-action-link">Образец</a>
                             </div>

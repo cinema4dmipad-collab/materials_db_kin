@@ -1,7 +1,11 @@
 from django.contrib import messages
-from django.shortcuts import redirect
+from django.http import Http404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.views import View
 from django.views.generic import DeleteView, ListView
+
+from apps.core.file_download import build_file_download_response
 
 from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
 from apps.materials.forms_attachments import MaterialAttachmentForm
@@ -79,3 +83,11 @@ class MaterialAttachmentDeleteView(MaterialAttachmentMixin, DeleteView):
         self.object.delete()
         messages.success(self.request, 'Файл удалён.')
         return redirect(self.get_success_url())
+
+
+class MaterialAttachmentDownloadView(MaterialAttachmentMixin, View):
+    def get(self, request, *args, **kwargs):
+        attachment = get_object_or_404(self.material.attachments.all(), pk=kwargs['pk'])
+        if not attachment.file:
+            raise Http404('Файл не найден')
+        return build_file_download_response(attachment.file, filename=attachment.filename)

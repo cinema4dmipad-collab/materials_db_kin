@@ -1,10 +1,13 @@
 from django import forms
 from django.contrib import messages
 from django.db import transaction
-from django.http import HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
+from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+
+from apps.core.file_download import build_file_download_response
 
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
@@ -361,3 +364,11 @@ class AttachmentDeleteView(SampleAttachmentMixin, DeleteView):
         self.object.delete()
         messages.success(self.request, 'Файл удалён.')
         return redirect(self.get_success_url())
+
+
+class AttachmentDownloadView(SampleAttachmentMixin, View):
+    def get(self, request, *args, **kwargs):
+        attachment = get_object_or_404(self.sample.attachments.all(), pk=kwargs['pk'])
+        if not attachment.file:
+            raise Http404('Файл не найден')
+        return build_file_download_response(attachment.file, filename=attachment.filename)
