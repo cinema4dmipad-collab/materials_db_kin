@@ -45,21 +45,19 @@ class FormValidationTests(SimpleTestCase):
         class InlineForm(forms.Form):
             title = forms.CharField(label='Заголовок')
 
-        class InlineFormSet(forms.BaseFormSet):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.forms = [
-                    InlineForm(data={'title': ''}),
-                    InlineForm(data={'title': 'ok'}),
-                ]
-                for inline_form in self.forms:
-                    inline_form.is_valid()
+        invalid_form = InlineForm(data={'title': ''})
+        valid_form = InlineForm(data={'title': 'ok'})
+        self.assertFalse(invalid_form.is_valid())
+        self.assertTrue(valid_form.is_valid())
 
+        class StubFormSet:
             def non_form_errors(self):
                 return []
 
+            forms = [invalid_form, valid_form]
+
         summary = collect_inline_formset_errors(
-            InlineFormSet(),
+            StubFormSet(),
             section_label='Слои композита',
             row_label='слой',
         )
