@@ -1,5 +1,5 @@
 {% if layer_diagram %}
-<div class="composite-layer-diagram p-3 p-lg-4 h-100">
+<div class="composite-layer-diagram p-3 p-lg-4">
     <h3 class="composite-layer-diagram__title">Схема укладки</h3>
 
     {% if layer_diagram.material_legend %}
@@ -15,7 +15,7 @@
 
     <div class="layer-stack-panel">
         <div class="layer-stack-title">Сверху ↓ вниз</div>
-        <div class="layer-stack-column">
+        <div class="layer-stack-column" style="--layer-stack-count: {{ layer_diagram.layer_count }};">
             {% for item in layer_diagram.layers %}
             <div class="layer-stack-segment"
                  style="flex: {{ item.flex_grow }} 1 0%; background-color: {{ item.color }};"

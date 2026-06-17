@@ -8,6 +8,7 @@ from django.db import connection
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
+from apps.core.version import format_version_with_commit
 from apps.materials.models import Material
 from apps.samples.models import Sample
 from apps.structures.models import StructureType
@@ -74,7 +75,7 @@ def _database_info() -> list[dict]:
 def _runtime_info() -> list[dict]:
     storage_backend = settings.STORAGES.get('default', {}).get('BACKEND', '—')
     items = [
-        {'label': 'App version', 'value': settings.APP_VERSION},
+        {'label': 'App version', 'value': format_version_with_commit(settings.APP_VERSION)},
         {'label': 'Django', 'value': get_version()},
         {'label': 'DEBUG', 'value': 'on' if settings.DEBUG else 'off'},
         {'label': 'Storage backend', 'value': storage_backend},

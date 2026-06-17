@@ -8,6 +8,11 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView, View
 
 from apps.core.list_filters import ALL_SEARCH_SCOPE, STRUCT_TYPE_SEARCH_SCOPE, TAG_SEARCH_SCOPE, QuerySetFilterMixin
+from apps.materials.form_validation import (
+    build_material_form_validation_summary,
+    validation_flash_message,
+    validation_sections,
+)
 from apps.materials.forms import (
     MaterialForm,
     MaterialPropertyFormSet,
@@ -92,7 +97,47 @@ class MaterialFormsetMixin:
             context['layers_allowed'] = self.layers_allowed()
         context['reference_properties'] = reference_properties_for_picker()
         context['reference_materials'] = materials_for_picker()
+        self._attach_validation_summary(context)
         return context
+
+    def _validate_related_formsets(self, formset, layer_formset):
+        if self.request.method != 'POST':
+            return
+        if formset is not None:
+            formset.is_valid()
+        if layer_formset is not None:
+            layer_formset.is_valid()
+
+    def _attach_validation_summary(self, context):
+        form = context.get('form')
+        if form is None:
+            return
+        summary = build_material_form_validation_summary(
+            form,
+            properties_formset=context.get('formset'),
+            layers_formset=context.get('layer_formset'),
+        )
+        context['form_validation_summary'] = summary
+        context['form_validation_sections'] = set(validation_sections(summary))
+
+    def _notify_validation_errors(self, form, formset, layer_formset):
+        summary = build_material_form_validation_summary(form, formset, layer_formset)
+        message = validation_flash_message(summary)
+        if message:
+            messages.error(self.request, message)
+
+    def form_invalid(self, form):
+        formset = self.get_formset()
+        layer_formset = self.get_layer_formset()
+        self._validate_related_formsets(formset, layer_formset)
+        self._notify_validation_errors(form, formset, layer_formset)
+        return self.render_to_response(
+            self.get_context_data(
+                form=form,
+                formset=formset,
+                layer_formset=layer_formset,
+            )
+        )
 
     def post(self, request, *args, **kwargs):
         if request.POST.get('_apply_struct_type'):
@@ -171,20 +216,18 @@ class MaterialFormsetMixin:
         elif not is_update:
             self.object = None
 
-        if formset is not None and not formset.is_valid():
-            messages.error(self.request, 'Проверьте значения свойств материала.')
-        elif layer_formset is not None and not layer_formset.is_valid():
-            messages.error(self.request, 'Проверьте данные слоёв композита.')
+        if formset is None:
+            formset = self.get_formset()
+        if layer_formset is None:
+            layer_formset = self.get_layer_formset()
+        self._validate_related_formsets(formset, layer_formset)
+        self._notify_validation_errors(form, formset, layer_formset)
 
         return self.render_to_response(
             self.get_context_data(
                 form=form,
-                formset=formset or self.get_formset(),
-                layer_formset=(
-                    layer_formset
-                    if layer_formset is not None
-                    else self.get_layer_formset()
-                ),
+                formset=formset,
+                layer_formset=layer_formset,
             )
         )
 

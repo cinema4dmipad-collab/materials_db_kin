@@ -17,6 +17,8 @@
             {% csrf_token %}
             <input type="hidden" name="_apply_struct_type" value="" id="apply-struct-type-flag">
 
+            {% include 'includes/form_validation_summary.html' %}
+
             <div class="card mb-4">
                 <div class="card-header">Материал</div>
                 <div class="card-body">
@@ -41,6 +43,9 @@
             <div class="card mb-4">
                 <div class="card-header">Параметры структуры</div>
                 <div class="card-body">
+                    {% if 'Параметры структуры' in form_validation_sections %}
+                    <div class="alert alert-danger">Проверьте параметры структуры ниже.</div>
+                    {% endif %}
                     {% if form.structure_bound_fields %}
                     {% for field in form.structure_bound_fields %}
                     <div class="mb-3">
@@ -76,9 +81,8 @@
                     {{ formset.management_form }}
                     {% if formset.non_form_errors %}
                     <div class="alert alert-danger m-3 mb-0">{{ formset.non_form_errors }}</div>
-                    {% endif %}
-                    {% if formset.errors and not formset.non_form_errors %}
-                    <div class="alert alert-danger m-3 mb-0">Исправьте ошибки в свойствах материала ниже.</div>
+                    {% elif 'Свойства' in form_validation_sections %}
+                    <div class="alert alert-danger m-3 mb-0">Проверьте значения свойств в таблице ниже.</div>
                     {% endif %}
                     <div class="table-responsive material-properties-table-wrap">
                         <table class="table table-striped align-middle mb-0 app-data-table material-properties-table">
@@ -137,6 +141,8 @@
                     {{ layer_formset.management_form }}
                     {% if layer_formset.non_form_errors %}
                     <div class="alert alert-danger m-3 mb-0">{{ layer_formset.non_form_errors }}</div>
+                    {% elif 'Слои композита' in form_validation_sections %}
+                    <div class="alert alert-danger m-3 mb-0">Проверьте данные слоёв в таблице ниже.</div>
                     {% endif %}
                     <div class="composite-layers-layout composite-layers-layout--edit row g-0">
                         <div class="col-lg-7 col-xl-8 border-end">
@@ -154,9 +160,6 @@
                                     <thead>
                                         <tr>
                                             <th scope="col" class="composite-layers-edit-table__drag" aria-label="Порядок"></th>
-                                            <th scope="col" class="composite-layers-edit-table__select">
-                                                <input type="checkbox" class="form-check-input" id="layer-select-all" aria-label="Выбрать все слои">
-                                            </th>
                                             <th scope="col" class="composite-layers-edit-table__number">№</th>
                                             <th scope="col">Материал</th>
                                             <th scope="col" class="composite-layers-edit-table__angle">Угол армирования</th>
@@ -165,12 +168,9 @@
                                     </thead>
                                     <tbody id="layer-forms-container">
                                         {% for layer_form in layer_formset %}
-                                        <tr class="layer-form-row">
+                                        <tr class="layer-form-row" aria-selected="false">
                                             <td class="composite-layers-edit-table__drag">
                                                 <span class="layer-drag-handle" draggable="true" title="Перетащите для изменения порядка" aria-hidden="true">⋮⋮</span>
-                                            </td>
-                                            <td class="composite-layers-edit-table__select">
-                                                <input type="checkbox" class="form-check-input layer-row-select" aria-label="Выбрать слой">
                                             </td>
                                             <td class="composite-layers-edit-table__number">
                                                 <span class="layer-index-display">{{ forloop.counter }}</span>
@@ -196,14 +196,14 @@
                                         </tr>
                                         {% empty %}
                                         <tr class="layer-empty-row">
-                                            <td colspan="6" class="text-muted text-center py-4">Слоёв пока нет — нажмите «+», чтобы добавить первый.</td>
+                                            <td colspan="5" class="text-muted text-center py-4">Слоёв пока нет — нажмите «+», чтобы добавить первый.</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
                             </div>
                             <p class="composite-layers-hint text-muted small px-3 py-2 mb-0 border-top">
-                                Клик — выбор, Shift+клик — диапазон, Ctrl+клик — несколько строк, перетаскивание — порядок.
+                                Клик по строке — выбор, Shift+клик — диапазон, Ctrl+клик — несколько. Del — удалить выбранные, Ins — добавить слой.
                             </p>
                         </div>
                         <div class="col-lg-5 col-xl-4">
@@ -212,12 +212,9 @@
                     </div>
                     <template id="empty-layer-form-template">
                         {% with layer_form=layer_formset.empty_form %}
-                        <tr class="layer-form-row">
+                        <tr class="layer-form-row" aria-selected="false">
                             <td class="composite-layers-edit-table__drag">
                                 <span class="layer-drag-handle" draggable="true" title="Перетащите для изменения порядка" aria-hidden="true">⋮⋮</span>
-                            </td>
-                            <td class="composite-layers-edit-table__select">
-                                <input type="checkbox" class="form-check-input layer-row-select" aria-label="Выбрать слой">
                             </td>
                             <td class="composite-layers-edit-table__number">
                                 <span class="layer-index-display"></span>

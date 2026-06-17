@@ -87,7 +87,55 @@ MaterialPropertyFormSet = inlineformset_factory(
 
 
 class CompositeLayerFormSet(forms.BaseInlineFormSet):
+    def _construct_form(self, i, **kwargs):
+        form = super()._construct_form(i, **kwargs)
+        form.parent_material = self.instance
+        form.layer_formset = self
+        return form
+
+    def full_clean(self):
+        self._prepare_layer_numbers_before_validation()
+        super().full_clean()
+
     def clean(self):
+        super().clean()
+        if self._layers_not_allowed():
+            raise ValidationError(
+                'Слои недоступны для выбранного типа структуры.',
+            )
+        self._assign_layer_numbers()
+
+    def _prepare_layer_numbers_before_validation(self):
+        self._pending_layer_numbers = {}
+        if not self.is_bound:
+            return
+
+        layer_num = 1
+        for form in self.forms:
+            if not self._should_number_form(form):
+                continue
+            self._pending_layer_numbers[id(form)] = layer_num
+            layer_num += 1
+
+    def _should_number_form(self, form):
+        if not form.is_bound:
+            return False
+
+        prefix = form.add_prefix('')
+        if form.data.get(f'{prefix}DELETE') in ('on', 'true', 'True', '1'):
+            return False
+
+        material = form.data.get(f'{prefix}material')
+        angle = form.data.get(f'{prefix}angle', '')
+        thickness = form.data.get(f'{prefix}thickness', '')
+        is_empty = (
+            not material
+            and not str(angle).strip()
+            and not str(thickness).strip()
+        )
+        if is_empty and not form.instance.pk:
+            return False
+        return not is_empty
         super().clean()
         if self._layers_not_allowed():
             raise ValidationError(
@@ -145,6 +193,73 @@ class CompositeLayerForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['layer_number'].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get('DELETE'):
+            return cleaned_data
+
+        material = cleaned_data.get('material')
+        angle = cleaned_data.get('angle')
+        thickness = cleaned_data.get('thickness')
+        is_empty = (
+            not material
+            and angle in (None, '')
+            and thickness in (None, '')
+        )
+        if is_empty:
+            return cleaned_data
+
+        if not material:
+            self.add_error('material', 'Укажите материал слоя.')
+        if angle is None:
+            self.add_error('angle', 'Укажите угол армирования.')
+        if thickness is None:
+            self.add_error('thickness', 'Укажите толщину слоя.')
+
+        parent_material = getattr(self, 'parent_material', None)
+        parent_material_id = getattr(parent_material, 'pk', None)
+        if material and parent_material_id and material.pk == parent_material_id:
+            self.add_error('material', 'Материал не может быть собственным слоем.')
+
+        layer_formset = getattr(self, 'layer_formset', None)
+        assigned = getattr(layer_formset, '_pending_layer_numbers', {}).get(id(self))
+        if assigned is not None:
+            cleaned_data['layer_number'] = assigned
+            self.instance.layer_number = assigned
+
+        return cleaned_data
+
+    def validate_unique(self):
+        layer_formset = getattr(self, 'layer_formset', None)
+        parent = getattr(layer_formset, 'instance', None) if layer_formset else None
+        parent_id = getattr(self.instance, 'parent_material_id', None) or getattr(parent, 'pk', None)
+        layer_number = self.cleaned_data.get('layer_number')
+
+        if not parent_id or layer_number is None:
+            return
+
+        exclude_pks = []
+        if layer_formset is not None:
+            exclude_pks = [
+                layer_form.instance.pk
+                for layer_form in layer_formset.forms
+                if layer_form.instance.pk
+            ]
+        if self.instance.pk:
+            exclude_pks.append(self.instance.pk)
+        exclude_pks = list({pk for pk in exclude_pks if pk})
+
+        conflicting = CompositeLayer.objects.filter(
+            parent_material_id=parent_id,
+            layer_number=layer_number,
+        )
+        if exclude_pks:
+            conflicting = conflicting.exclude(pk__in=exclude_pks)
+        if conflicting.exists():
+            raise ValidationError({
+                'layer_number': 'Номер слоя уже занят другим слоём этого материала.',
+            })
 
 
 def get_composite_layer_formset():

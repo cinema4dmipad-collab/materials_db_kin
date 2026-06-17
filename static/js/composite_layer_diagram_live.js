@@ -173,12 +173,14 @@
         }).join('');
 
         target.innerHTML = ''
-            + '<div class="composite-layer-diagram p-3 p-lg-4 h-100">'
+            + '<div class="composite-layer-diagram p-3 p-lg-4">'
             + '<h3 class="composite-layer-diagram__title">Схема укладки</h3>'
             + (legendHtml ? '<div class="layer-material-legend mb-3">' + legendHtml + '</div>' : '')
             + '<div class="layer-stack-panel">'
             + '<div class="layer-stack-title">Сверху ↓ вниз</div>'
-            + '<div class="layer-stack-column">' + stackHtml + '</div>'
+            + '<div class="layer-stack-column" style="--layer-stack-count: ' + diagram.layer_count + ';">'
+            + stackHtml
+            + '</div>'
             + '<div class="layer-stack-caption">Один материал — один цвет</div>'
             + '</div>'
             + '</div>';
