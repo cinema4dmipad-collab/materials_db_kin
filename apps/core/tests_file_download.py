@@ -31,9 +31,12 @@ class FileDownloadTests(TestCase):
                 filename='readme.txt',
             )
 
-            self.assertEqual(response.status_code, 200)
-            self.assertIn('attachment; filename="readme.txt"', response['Content-Disposition'])
-            self.assertEqual(b''.join(response.streaming_content), b'hello')
+            try:
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('attachment; filename="readme.txt"', response['Content-Disposition'])
+                self.assertEqual(b''.join(response.streaming_content), b'hello')
+            finally:
+                response.close()
 
     def test_build_file_download_response_raises_for_missing_file(self):
         with TemporaryDirectory() as temp_dir:

@@ -383,7 +383,10 @@ class ScanViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('attachment', response['Content-Disposition'])
         self.assertNotIn('seaweedfs', download_url)
-        self.assertTrue(b''.join(response.streaming_content))
+        try:
+            self.assertTrue(b''.join(response.streaming_content))
+        finally:
+            response.close()
 
     def test_list_page_uses_app_download_url(self):
         scan = ScanRecord.objects.create(
