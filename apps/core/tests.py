@@ -305,9 +305,13 @@ class HelpPageTests(TestCase):
 
 class AppVersionTests(TestCase):
     def test_get_app_version_reads_pyproject(self):
-        from apps.core.version import get_app_version
+        import tomllib
 
-        self.assertEqual(get_app_version(), '0.1.0')
+        from apps.core.version import PYPROJECT_PATH, get_app_version
+
+        with PYPROJECT_PATH.open('rb') as pyproject_file:
+            expected = tomllib.load(pyproject_file)['project']['version']
+        self.assertEqual(get_app_version(), expected)
 
     def test_footer_shows_app_version(self):
         from django.conf import settings
