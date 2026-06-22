@@ -192,11 +192,11 @@
             if (event.key !== 'Enter') {
                 return;
             }
+            event.preventDefault();
             var token = typingInput.value.trim();
             if (!token) {
                 return;
             }
-            event.preventDefault();
             var firstPick = firstVisiblePick();
             if (firstPick && typingInput.value.trim()) {
                 addTag(firstPick.dataset.tagName || '');
