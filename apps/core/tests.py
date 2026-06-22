@@ -364,6 +364,24 @@ class AppVersionTests(TestCase):
                     if value is not None:
                         os.environ[name] = value
 
+    def test_get_git_commit_hash_rejects_unexpanded_shell_command(self):
+        import os
+
+        from apps.core.version import format_git_commit_display, get_git_commit_hash
+
+        get_git_commit_hash.cache_clear()
+        saved = os.environ.pop('GIT_COMMIT', None)
+        os.environ['GIT_COMMIT'] = '$(git rev-parse --short HEAD)'
+        try:
+            self.assertEqual(get_git_commit_hash(), '')
+            self.assertIn('abf8eb9', format_git_commit_display())
+            self.assertIn('.env', format_git_commit_display())
+        finally:
+            os.environ.pop('GIT_COMMIT', None)
+            if saved is not None:
+                os.environ['GIT_COMMIT'] = saved
+            get_git_commit_hash.cache_clear()
+
     def test_footer_shows_app_version(self):
         from django.conf import settings
 

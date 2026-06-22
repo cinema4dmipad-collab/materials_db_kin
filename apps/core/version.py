@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 import os
+import re
 import subprocess
 
 import tomllib
@@ -10,6 +11,25 @@ PYPROJECT_PATH = PROJECT_ROOT / 'pyproject.toml'
 DEFAULT_VERSION = '0.0.0'
 DEFAULT_COMMIT_LENGTH = 7
 BUILD_COMMIT_PATH = PROJECT_ROOT / 'BUILD_COMMIT'
+_VALID_COMMIT_RE = re.compile(r'^[0-9a-fA-F]{7,40}$')
+
+
+def _sanitize_commit_value(value: str, *, length: int = DEFAULT_COMMIT_LENGTH) -> str:
+    value = value.strip()
+    if not value:
+        return ''
+    if value.startswith('$') or '(' in value or ' ' in value:
+        return ''
+    if not _VALID_COMMIT_RE.match(value):
+        return ''
+    if len(value) > length:
+        return value[:length].lower()
+    return value.lower()
+
+
+def _looks_like_unexpanded_shell(value: str) -> bool:
+    value = value.strip()
+    return bool(value) and (value.startswith('$') or 'git rev-parse' in value or '(' in value)
 
 
 @lru_cache(maxsize=1)
@@ -32,14 +52,15 @@ def get_git_commit_hash(*, length: int = DEFAULT_COMMIT_LENGTH) -> str:
         value = os.environ.get(env_name, '').strip()
         if not value:
             continue
-        if env_name == 'CI_COMMIT_SHA' and len(value) > length:
-            return value[:length]
-        return value[:length] if len(value) > length else value
+        sanitized = _sanitize_commit_value(value, length=length)
+        if sanitized:
+            return sanitized
 
     if BUILD_COMMIT_PATH.is_file():
         value = BUILD_COMMIT_PATH.read_text(encoding='utf-8').strip()
-        if value:
-            return value[:length] if len(value) > length else value
+        sanitized = _sanitize_commit_value(value, length=length)
+        if sanitized:
+            return sanitized
 
     try:
         result = subprocess.run(
@@ -55,6 +76,18 @@ def get_git_commit_hash(*, length: int = DEFAULT_COMMIT_LENGTH) -> str:
     if result.returncode != 0:
         return ''
     return result.stdout.strip()
+
+
+def format_git_commit_display(*, length: int = DEFAULT_COMMIT_LENGTH) -> str:
+    commit = get_git_commit_hash(length=length)
+    if commit:
+        return commit
+
+    raw = os.environ.get('GIT_COMMIT', '').strip()
+    if _looks_like_unexpanded_shell(raw):
+        return '— (укажите hash, например abf8eb9; .env не выполняет $(git ...))'
+
+    return '—'
 
 
 def format_version_with_commit(version: str | None = None, commit: str | None = None) -> str:

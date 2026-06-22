@@ -8,7 +8,7 @@ from django.db import connection
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
-from apps.core.version import format_version_with_commit, get_git_commit_hash
+from apps.core.version import format_git_commit_display, get_git_commit_hash
 from apps.materials.models import Material
 from apps.samples.models import Sample
 from apps.structures.models import StructureType
@@ -76,7 +76,7 @@ def _runtime_info() -> list[dict]:
     storage_backend = settings.STORAGES.get('default', {}).get('BACKEND', '—')
     items = [
         {'label': 'App version', 'value': settings.APP_VERSION},
-        {'label': 'Git commit', 'value': get_git_commit_hash() or '—'},
+        {'label': 'Git commit', 'value': format_git_commit_display()},
         {'label': 'Django', 'value': get_version()},
         {'label': 'DEBUG', 'value': 'on' if settings.DEBUG else 'off'},
         {'label': 'Storage backend', 'value': storage_backend},
