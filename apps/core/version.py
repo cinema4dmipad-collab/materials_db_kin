@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT_PATH = PROJECT_ROOT / 'pyproject.toml'
 DEFAULT_VERSION = '0.0.0'
 DEFAULT_COMMIT_LENGTH = 7
+BUILD_COMMIT_PATH = PROJECT_ROOT / 'BUILD_COMMIT'
 
 
 @lru_cache(maxsize=1)
@@ -26,14 +27,19 @@ def get_app_version() -> str:
 
 @lru_cache(maxsize=1)
 def get_git_commit_hash(*, length: int = DEFAULT_COMMIT_LENGTH) -> str:
-    """Short git commit hash from env (CI/Docker) or local repository."""
+    """Short git commit hash from env (CI/Docker), BUILD_COMMIT file, or local repo."""
     for env_name in ('GIT_COMMIT', 'CI_COMMIT_SHORT_SHA', 'CI_COMMIT_SHA'):
         value = os.environ.get(env_name, '').strip()
         if not value:
             continue
         if env_name == 'CI_COMMIT_SHA' and len(value) > length:
             return value[:length]
-        return value
+        return value[:length] if len(value) > length else value
+
+    if BUILD_COMMIT_PATH.is_file():
+        value = BUILD_COMMIT_PATH.read_text(encoding='utf-8').strip()
+        if value:
+            return value[:length] if len(value) > length else value
 
     try:
         result = subprocess.run(

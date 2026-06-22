@@ -8,7 +8,7 @@ from django.db import connection
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
-from apps.core.version import format_version_with_commit
+from apps.core.version import format_version_with_commit, get_git_commit_hash
 from apps.materials.models import Material
 from apps.samples.models import Sample
 from apps.structures.models import StructureType
@@ -75,7 +75,8 @@ def _database_info() -> list[dict]:
 def _runtime_info() -> list[dict]:
     storage_backend = settings.STORAGES.get('default', {}).get('BACKEND', '—')
     items = [
-        {'label': 'App version', 'value': format_version_with_commit(settings.APP_VERSION)},
+        {'label': 'App version', 'value': settings.APP_VERSION},
+        {'label': 'Git commit', 'value': get_git_commit_hash() or '—'},
         {'label': 'Django', 'value': get_version()},
         {'label': 'DEBUG', 'value': 'on' if settings.DEBUG else 'off'},
         {'label': 'Storage backend', 'value': storage_backend},
@@ -89,6 +90,10 @@ def _runtime_info() -> list[dict]:
         items.append({
             'label': 'S3 endpoint',
             'value': getattr(settings, 'AWS_S3_ENDPOINT_URL', '') or '—',
+        })
+        items.append({
+            'label': 'Debug S3 admin base',
+            'value': getattr(settings, 'DEBUG_S3_ADMIN_BASE_URL', '') or '—',
         })
     return items
 

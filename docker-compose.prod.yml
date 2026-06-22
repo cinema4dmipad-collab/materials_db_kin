@@ -24,6 +24,7 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
         PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
+        GIT_COMMIT: ${GIT_COMMIT:-}
     image: ${WEB_IMAGE:-materials-db-web:prod}
     pull_policy: build
     env_file: .env
