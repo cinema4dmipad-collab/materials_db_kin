@@ -338,6 +338,32 @@ class AppVersionTests(TestCase):
         )
         self.assertEqual(format_version_with_commit('0.1.1', ''), '0.1.1')
 
+    def test_get_git_commit_hash_reads_build_commit_file(self):
+        import os
+        import tempfile
+
+        from apps.core import version as version_module
+        from apps.core.version import get_git_commit_hash
+
+        get_git_commit_hash.cache_clear()
+        saved = {
+            name: os.environ.pop(name, None)
+            for name in ('GIT_COMMIT', 'CI_COMMIT_SHORT_SHA', 'CI_COMMIT_SHA')
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_commit = Path(temp_dir) / 'BUILD_COMMIT'
+            build_commit.write_text('abc1234', encoding='utf-8')
+            original_path = version_module.BUILD_COMMIT_PATH
+            version_module.BUILD_COMMIT_PATH = build_commit
+            try:
+                self.assertEqual(get_git_commit_hash(), 'abc1234')
+            finally:
+                version_module.BUILD_COMMIT_PATH = original_path
+                get_git_commit_hash.cache_clear()
+                for name, value in saved.items():
+                    if value is not None:
+                        os.environ[name] = value
+
     def test_footer_shows_app_version(self):
         from django.conf import settings
 
@@ -432,7 +458,8 @@ class DebugPageTests(TestCase):
             get_git_commit_hash.cache_clear()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f'{settings.APP_VERSION} · cafe001')
+        self.assertContains(response, 'Git commit')
+        self.assertContains(response, 'cafe001')
 
     def test_debug_page_shows_s3_admin_links_when_enabled(self):
         self.client.force_login(self.staff_user)
