@@ -13,7 +13,7 @@
         <h1 class="h4 mb-0">{% if material %}Редактирование материала{% else %}Новый материал{% endif %}</h1>
     </div>
     <div class="card-body">
-        <form method="post" novalidate>
+        <form method="post" novalidate id="material-form">
             {% csrf_token %}
             <input type="hidden" name="_apply_struct_type" value="" id="apply-struct-type-flag">
 
@@ -248,28 +248,11 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/material_form.js' %}"></script>
 <script src="{% static 'js/reference_properties_picker.js' %}"></script>
 <script src="{% static 'js/reference_materials_picker.js' %}"></script>
 <script src="{% static 'js/material_picker_fields.js' %}"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
 <script src="{% static 'js/composite_layer_diagram_live.js' %}"></script>
 <script src="{% static 'js/composite_layers_formset.js' %}"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var structureSelect = document.getElementById('id_struct_type');
-    if (!structureSelect) {
-        return;
-    }
-
-    structureSelect.addEventListener('change', function () {
-        var form = structureSelect.closest('form');
-        var flag = document.getElementById('apply-struct-type-flag');
-        if (!form || !flag) {
-            return;
-        }
-        flag.value = '1';
-        form.requestSubmit();
-    });
-});
-</script>
 {% endblock %}
