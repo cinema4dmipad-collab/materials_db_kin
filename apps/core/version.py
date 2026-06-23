@@ -62,6 +62,10 @@ def get_git_commit_hash(*, length: int = DEFAULT_COMMIT_LENGTH) -> str:
         if sanitized:
             return sanitized
 
+    raw_git_commit = os.environ.get('GIT_COMMIT', '').strip()
+    if raw_git_commit and not _sanitize_commit_value(raw_git_commit, length=length):
+        return ''
+
     try:
         result = subprocess.run(
             ['git', '-C', str(PROJECT_ROOT), 'rev-parse', f'--short={length}', 'HEAD'],
