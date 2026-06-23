@@ -5,6 +5,7 @@ ARG PIP_INDEX_URL=
 ARG PIP_TRUSTED_HOST=
 ARG PIP_MIRROR_URLS=
 ARG GIT_COMMIT=
+ARG CI_COMMIT_SHORT_SHA=
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -12,8 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VIRTUALENVS_CREATE=false \
     POETRY_CACHE_DIR=/tmp/poetry_cache \
     PIP_DEFAULT_TIMEOUT=120 \
-    PIP_RETRIES=10 \
-    GIT_COMMIT=${GIT_COMMIT}
+    PIP_RETRIES=10
 
 WORKDIR /app
 
@@ -32,7 +32,19 @@ RUN poetry install --no-ansi --no-root \
     && rm -rf "$POETRY_CACHE_DIR"
 
 COPY . .
-RUN if [ -n "$GIT_COMMIT" ]; then printf '%s' "$GIT_COMMIT" > /app/BUILD_COMMIT; fi
+ARG GIT_COMMIT=
+ARG CI_COMMIT_SHORT_SHA=
+RUN set -eu; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && RESOLVED="${GIT_COMMIT:-${CI_COMMIT_SHORT_SHA:-}}"; \
+    if [ -z "$RESOLVED" ] && git rev-parse --short=7 HEAD >/dev/null 2>&1; then \
+      RESOLVED="$(git rev-parse --short=7 HEAD)"; \
+    fi; \
+    if [ -n "$RESOLVED" ]; then printf '%s' "$RESOLVED" > /app/BUILD_COMMIT; fi; \
+    apt-get purge -y git \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 RUN poetry install --no-ansi --no-root \
     && rm -rf "$POETRY_CACHE_DIR"
 

@@ -1,4 +1,7 @@
 .git
+!.git/HEAD
+!.git/refs
+!.git/refs/**
 .gitignore
 .venv
 .env

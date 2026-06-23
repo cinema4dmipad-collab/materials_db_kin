@@ -47,17 +47,17 @@ def get_app_version() -> str:
 
 @lru_cache(maxsize=1)
 def get_git_commit_hash(*, length: int = DEFAULT_COMMIT_LENGTH) -> str:
-    """Short git commit hash from env (CI/Docker), BUILD_COMMIT file, or local repo."""
-    for env_name in ('GIT_COMMIT', 'CI_COMMIT_SHORT_SHA', 'CI_COMMIT_SHA'):
-        value = os.environ.get(env_name, '').strip()
-        if not value:
-            continue
+    """Short git commit hash from BUILD_COMMIT (Docker build), CI env, runtime env, or local repo."""
+    if BUILD_COMMIT_PATH.is_file():
+        value = BUILD_COMMIT_PATH.read_text(encoding='utf-8').strip()
         sanitized = _sanitize_commit_value(value, length=length)
         if sanitized:
             return sanitized
 
-    if BUILD_COMMIT_PATH.is_file():
-        value = BUILD_COMMIT_PATH.read_text(encoding='utf-8').strip()
+    for env_name in ('CI_COMMIT_SHORT_SHA', 'CI_COMMIT_SHA', 'GIT_COMMIT'):
+        value = os.environ.get(env_name, '').strip()
+        if not value:
+            continue
         sanitized = _sanitize_commit_value(value, length=length)
         if sanitized:
             return sanitized
