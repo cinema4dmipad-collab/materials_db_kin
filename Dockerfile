@@ -6,6 +6,8 @@ ARG PIP_TRUSTED_HOST=
 ARG PIP_MIRROR_URLS=
 ARG GIT_COMMIT=
 ARG CI_COMMIT_SHORT_SHA=
+ARG DOKPLOY_COMMIT_HASH=
+ARG SOURCE_COMMIT=
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -34,14 +36,19 @@ RUN poetry install --no-ansi --no-root \
 COPY . .
 ARG GIT_COMMIT=
 ARG CI_COMMIT_SHORT_SHA=
+ARG DOKPLOY_COMMIT_HASH=
+ARG SOURCE_COMMIT=
 RUN set -eu; \
     apt-get update \
     && apt-get install -y --no-install-recommends git \
-    && RESOLVED="${GIT_COMMIT:-${CI_COMMIT_SHORT_SHA:-}}"; \
-    if [ -z "$RESOLVED" ] && git rev-parse --short=7 HEAD >/dev/null 2>&1; then \
-      RESOLVED="$(git rev-parse --short=7 HEAD)"; \
+    && chmod +x /app/deploy/ci/resolve_git_commit.sh \
+    && RESOLVED="$(GIT_COMMIT="$GIT_COMMIT" CI_COMMIT_SHORT_SHA="$CI_COMMIT_SHORT_SHA" DOKPLOY_COMMIT_HASH="$DOKPLOY_COMMIT_HASH" SOURCE_COMMIT="$SOURCE_COMMIT" sh /app/deploy/ci/resolve_git_commit.sh /app)"; \
+    if [ -n "$RESOLVED" ]; then \
+      printf '%s' "$RESOLVED" > /app/BUILD_COMMIT; \
+      echo "Recorded BUILD_COMMIT=$RESOLVED"; \
+    else \
+      echo "WARN: BUILD_COMMIT not resolved during image build" >&2; \
     fi; \
-    if [ -n "$RESOLVED" ]; then printf '%s' "$RESOLVED" > /app/BUILD_COMMIT; fi; \
     apt-get purge -y git \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
