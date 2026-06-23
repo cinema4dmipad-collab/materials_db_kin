@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -23,6 +24,34 @@ from apps.core.number_utils import (
     normalize_decimal_input,
     parse_decimal,
 )
+
+_COMMIT_ENV_VARS = ('GIT_COMMIT', 'CI_COMMIT_SHORT_SHA', 'CI_COMMIT_SHA')
+
+
+@contextmanager
+def isolated_git_commit(*, build_commit_path=None, **env):
+    import os
+
+    from apps.core import version as version_module
+    from apps.core.version import get_git_commit_hash
+
+    get_git_commit_hash.cache_clear()
+    saved_env = {name: os.environ.pop(name, None) for name in _COMMIT_ENV_VARS}
+    original_path = version_module.BUILD_COMMIT_PATH
+    if build_commit_path is not None:
+        version_module.BUILD_COMMIT_PATH = build_commit_path
+    for name, value in env.items():
+        os.environ[name] = value
+    try:
+        yield
+    finally:
+        version_module.BUILD_COMMIT_PATH = original_path
+        for name in _COMMIT_ENV_VARS:
+            os.environ.pop(name, None)
+        for name, value in saved_env.items():
+            if value is not None:
+                os.environ[name] = value
+        get_git_commit_hash.cache_clear()
 from apps.core.tag_utils import assign_tags, get_or_create_tags, parse_tag_input, tag_slug_from_name
 from apps.materials.models import Material
 from apps.samples.models import Sample
@@ -314,20 +343,44 @@ class AppVersionTests(TestCase):
         self.assertEqual(get_app_version(), expected)
 
     def test_get_git_commit_hash_reads_env_variable(self):
-        import os
+        import tempfile
 
         from apps.core.version import get_git_commit_hash
 
-        get_git_commit_hash.cache_clear()
-        previous = os.environ.pop('GIT_COMMIT', None)
-        os.environ['GIT_COMMIT'] = 'abc1234'
-        try:
+        missing_build_commit = Path(tempfile.gettempdir()) / 'missing-build-commit-for-env-test'
+        with isolated_git_commit(
+            build_commit_path=missing_build_commit,
+            GIT_COMMIT='abc1234',
+        ):
             self.assertEqual(get_git_commit_hash(), 'abc1234')
-        finally:
-            os.environ.pop('GIT_COMMIT', None)
-            if previous is not None:
-                os.environ['GIT_COMMIT'] = previous
-            get_git_commit_hash.cache_clear()
+
+    def test_get_git_commit_hash_prefers_build_commit_over_env(self):
+        import tempfile
+
+        from apps.core.version import get_git_commit_hash
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_commit = Path(temp_dir) / 'BUILD_COMMIT'
+            build_commit.write_text('cafe001', encoding='utf-8')
+            with isolated_git_commit(
+                build_commit_path=build_commit,
+                GIT_COMMIT='deadbeef',
+            ):
+                self.assertEqual(get_git_commit_hash(), 'cafe001')
+
+    def test_get_git_commit_hash_rejects_unexpanded_shell_command(self):
+        import tempfile
+
+        from apps.core.version import format_git_commit_display, get_git_commit_hash
+
+        missing_build_commit = Path(tempfile.gettempdir()) / 'missing-build-commit-for-test'
+        with isolated_git_commit(
+            build_commit_path=missing_build_commit,
+            GIT_COMMIT='$(git rev-parse --short HEAD)',
+        ):
+            self.assertEqual(get_git_commit_hash(), '')
+            self.assertIn('abf8eb9', format_git_commit_display())
+            self.assertIn('.env', format_git_commit_display())
 
     def test_format_version_with_commit_joins_version_and_hash(self):
         from apps.core.version import format_version_with_commit
@@ -339,30 +392,15 @@ class AppVersionTests(TestCase):
         self.assertEqual(format_version_with_commit('0.1.1', ''), '0.1.1')
 
     def test_get_git_commit_hash_reads_build_commit_file(self):
-        import os
         import tempfile
 
-        from apps.core import version as version_module
         from apps.core.version import get_git_commit_hash
 
-        get_git_commit_hash.cache_clear()
-        saved = {
-            name: os.environ.pop(name, None)
-            for name in ('GIT_COMMIT', 'CI_COMMIT_SHORT_SHA', 'CI_COMMIT_SHA')
-        }
         with tempfile.TemporaryDirectory() as temp_dir:
             build_commit = Path(temp_dir) / 'BUILD_COMMIT'
             build_commit.write_text('abc1234', encoding='utf-8')
-            original_path = version_module.BUILD_COMMIT_PATH
-            version_module.BUILD_COMMIT_PATH = build_commit
-            try:
+            with isolated_git_commit(build_commit_path=build_commit):
                 self.assertEqual(get_git_commit_hash(), 'abc1234')
-            finally:
-                version_module.BUILD_COMMIT_PATH = original_path
-                get_git_commit_hash.cache_clear()
-                for name, value in saved.items():
-                    if value is not None:
-                        os.environ[name] = value
 
     def test_footer_shows_app_version(self):
         from django.conf import settings
@@ -439,27 +477,21 @@ class DebugPageTests(TestCase):
         self.assertContains(response, 'Локальный файл логов пока не найден.')
 
     def test_debug_page_shows_commit_hash_next_to_version(self):
-        import os
-
-        from django.conf import settings
+        import tempfile
 
         from apps.core.version import get_git_commit_hash
 
-        get_git_commit_hash.cache_clear()
-        previous = os.environ.pop('GIT_COMMIT', None)
-        os.environ['GIT_COMMIT'] = 'cafe001'
         self.client.force_login(self.staff_user)
-        try:
-            response = self.client.get(reverse('core:debug'))
-        finally:
-            os.environ.pop('GIT_COMMIT', None)
-            if previous is not None:
-                os.environ['GIT_COMMIT'] = previous
-            get_git_commit_hash.cache_clear()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_commit = Path(temp_dir) / 'BUILD_COMMIT'
+            build_commit.write_text('cafe001', encoding='utf-8')
+            with isolated_git_commit(build_commit_path=build_commit):
+                response = self.client.get(reverse('core:debug'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Git commit')
         self.assertContains(response, 'cafe001')
+        get_git_commit_hash.cache_clear()
 
     def test_debug_page_shows_s3_admin_links_when_enabled(self):
         self.client.force_login(self.staff_user)

@@ -83,7 +83,18 @@ services:
         condition: service_healthy
     ports:
       - '${SEAWEEDFS_ADMIN_PORT:-23646}:23646'
-    command: admin -masters=seaweedfs:9333 -ip=0.0.0.0
+    # admin не поддерживает -ip; слушает 0.0.0.0 по умолчанию на -port
+    command: admin -master=seaweedfs:9333 -port=23646
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q -O - http://127.0.0.1:23646/ >/dev/null 2>&1 || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
     networks:
       - dokploy-network
 
