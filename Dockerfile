@@ -44,21 +44,13 @@ ARG CI_COMMIT_SHORT_SHA=
 ARG DOKPLOY_COMMIT_HASH=
 ARG SOURCE_COMMIT=
 ARG BUILD_CACHE_BUST=1
-RUN set -eu; \
-    echo "BUILD_CACHE_BUST=${BUILD_CACHE_BUST}"; \
-    chmod +x /app/deploy/ci/resolve_git_commit.sh; \
-    RESOLVED="$(GIT_COMMIT="$GIT_COMMIT" CI_COMMIT_SHORT_SHA="$CI_COMMIT_SHORT_SHA" DOKPLOY_COMMIT_HASH="$DOKPLOY_COMMIT_HASH" SOURCE_COMMIT="$SOURCE_COMMIT" sh /app/deploy/ci/resolve_git_commit.sh /app)"; \
-    if [ -n "$RESOLVED" ]; then \
-      printf '%s' "$RESOLVED" > /app/BUILD_COMMIT; \
-      echo "Recorded BUILD_COMMIT=$RESOLVED"; \
-    else \
-      echo "WARN: BUILD_COMMIT not resolved during image build" >&2; \
-      if [ -f /app/.git/HEAD ]; then echo "Found .git/HEAD but could not parse commit"; cat /app/.git/HEAD; else echo "No .git/HEAD in build context"; fi >&2; \
-    fi; \
-    adduser --disabled-password --gecos '' appuser \
-    && mkdir -p /app/staticfiles /app/media \
-    && chown -R appuser:appuser /app \
-    && chmod +x /app/deploy/entrypoint.sh
+RUN chmod +x /app/deploy/ci/finalize_app_image.sh \
+    && BUILD_CACHE_BUST="${BUILD_CACHE_BUST}" \
+       GIT_COMMIT="${GIT_COMMIT}" \
+       CI_COMMIT_SHORT_SHA="${CI_COMMIT_SHORT_SHA}" \
+       DOKPLOY_COMMIT_HASH="${DOKPLOY_COMMIT_HASH}" \
+       SOURCE_COMMIT="${SOURCE_COMMIT}" \
+       sh /app/deploy/ci/finalize_app_image.sh
 
 USER appuser
 
