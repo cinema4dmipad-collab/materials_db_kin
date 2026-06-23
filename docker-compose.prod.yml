@@ -9,10 +9,9 @@
 #   Domain → nginx:80
 #
 # Образы собираются на сервере из Dockerfile (pull_policy: build).
-# Hash коммита для /debug/ пишется в образ автоматически (BUILD_COMMIT):
-#   - из build args GIT_COMMIT / CI_COMMIT_SHORT_SHA, или
-#   - из git rev-parse при сборке (см. Dockerfile и deploy/compose-prod.sh).
-# GIT_COMMIT в runtime .env не нужен — удалите, если задавали вручную.
+# Hash коммита для /debug/ (BUILD_COMMIT в образе) — при стандартном деплое Dokploy.
+# Command в UI Dokploy: ОСТАВИТЬ ПУСТЫМ (не sh deploy/dokploy-deploy.sh — см. deploy/DOKPLOY.md).
+# GIT_COMMIT в runtime .env не нужен.
 # WEB_IMAGE / NGINX_IMAGE — локальные теги после сборки, НЕ пути Docker Hub.
 # Для registry укажите полный URL, например:
 #   WEB_IMAGE=registry.gitlab.keeneticcorp.ru/.../materials_db_strict:abc1234
@@ -30,6 +29,9 @@ services:
         PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
         GIT_COMMIT: ${GIT_COMMIT:-}
         CI_COMMIT_SHORT_SHA: ${CI_COMMIT_SHORT_SHA:-}
+        DOKPLOY_COMMIT_HASH: ${DOKPLOY_COMMIT_HASH:-}
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-1}
     image: ${WEB_IMAGE:-materials-db-web:prod}
     pull_policy: build
     env_file: .env

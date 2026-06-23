@@ -1,4 +1,6 @@
-**/__pycache__/
+# Git metadata нужен Dockerfile для BUILD_COMMIT при сборке (не попадает в образ целиком).
+# .build-commit генерируется на хосте скриптом deploy/write-build-commit.sh
+.build-commit
 *.pyc
 .env
 media/
