@@ -37,45 +37,43 @@ if [ -f .build-commit ]; then
     printf '%s' "$sanitized"
     exit 0
   fi
-done
+fi
+
+if [ -f .git/HEAD ]; then
+  read -r head_line < .git/HEAD || head_line=''
+  case "$head_line" in
+    ref:*)
+      ref="$(printf '%s' "$head_line" | sed 's/^ref: //' | tr -d '[:space:]')"
+      if [ -f ".git/$ref" ]; then
+        read -r full_hash < ".git/$ref" || full_hash=''
+        full_hash="$(printf '%s' "$full_hash" | tr -d '[:space:]')"
+        if sanitized="$(sanitize "$full_hash" 2>/dev/null)"; then
+          printf '%s' "$sanitized"
+          exit 0
+        fi
+      fi
+      if [ -f .git/packed-refs ]; then
+        full_hash="$(grep " $ref\$" .git/packed-refs 2>/dev/null | awk 'NR==1 {print $1}')"
+        full_hash="$(printf '%s' "$full_hash" | tr -d '[:space:]')"
+        if sanitized="$(sanitize "$full_hash" 2>/dev/null)"; then
+          printf '%s' "$sanitized"
+          exit 0
+        fi
+      fi
+      ;;
+    *)
+      full_hash="$(printf '%s' "$head_line" | tr -d '[:space:]')"
+      if sanitized="$(sanitize "$full_hash" 2>/dev/null)"; then
+        printf '%s' "$sanitized"
+        exit 0
+      fi
+      ;;
+  esac
+fi
 
 if command -v git >/dev/null 2>&1 && git rev-parse --short=7 HEAD >/dev/null 2>&1; then
   git rev-parse --short=7 HEAD | tr 'A-F' 'a-f'
   exit 0
 fi
-
-if [ ! -f .git/HEAD ]; then
-  exit 0
-fi
-
-read -r head_line < .git/HEAD || exit 0
-case "$head_line" in
-  ref:*)
-    ref="$(printf '%s' "$head_line" | sed 's/^ref: //' | tr -d '[:space:]')"
-    if [ -f ".git/$ref" ]; then
-      read -r full_hash < ".git/$ref" || exit 0
-      full_hash="$(printf '%s' "$full_hash" | tr -d '[:space:]')"
-      if sanitized="$(sanitize "$full_hash" 2>/dev/null)"; then
-        printf '%s' "$sanitized"
-        exit 0
-      fi
-    fi
-    if [ -f .git/packed-refs ]; then
-      full_hash="$(grep " $ref\$" .git/packed-refs 2>/dev/null | awk 'NR==1 {print $1}')"
-      full_hash="$(printf '%s' "$full_hash" | tr -d '[:space:]')"
-      if sanitized="$(sanitize "$full_hash" 2>/dev/null)"; then
-        printf '%s' "$sanitized"
-        exit 0
-      fi
-    fi
-    ;;
-  *)
-    full_hash="$(printf '%s' "$head_line" | tr -d '[:space:]')"
-    if sanitized="$(sanitize "$full_hash" 2>/dev/null)"; then
-      printf '%s' "$sanitized"
-      exit 0
-    fi
-    ;;
-esac
 
 exit 0

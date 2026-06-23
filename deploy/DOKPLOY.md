@@ -36,9 +36,9 @@ compose -p <appName> -f docker-compose.prod.yml up -d --build --remove-orphans -
 
 Hash записывается в образ при сборке (`/app/BUILD_COMMIT`). **GIT_COMMIT в runtime .env не нужен.**
 
-При стандартном деплое Dokploy клонирует git-репозиторий на сервер; Dockerfile читает `.git` из build context и пишет hash автоматически.
+При стандартном деплое Dokploy клонирует git-репозиторий; Dockerfile читает `.git/HEAD` из build context.
 
-После деплоя проверка:
+### Проверка после деплоя
 
 ```bash
 docker exec <web-container> cat /app/BUILD_COMMIT
@@ -46,7 +46,35 @@ docker exec <web-container> cat /app/BUILD_COMMIT
 
 В логах сборки web должно быть: `Recorded BUILD_COMMIT=abc1234`
 
-Если hash пустой — пересоберите web **без кэша** (Rebuild / `--no-cache`).
+### Если hash пустой или в логах `#21 CACHED` со старым Dockerfile
+
+Docker взял **закэшированный слой** из прошлой сборки (без hash). Нужна пересборка **без кэша**:
+
+**Вариант A — переменная в Environment Dokploy** (Command оставить пустым):
+
+```env
+BUILD_CACHE_BUST=2
+```
+
+Увеличивайте число после каждой принудительной пересборки. Deploy с rebuild.
+
+**Вариант B — одноразово в Command** (полная команда, `<appName>` — имя сервиса в Dokploy):
+
+```text
+compose -p <appName> -f docker-compose.prod.yml build --no-cache web && compose -p <appName> -f docker-compose.prod.yml up -d --remove-orphans
+```
+
+После успешной сборки **очистите Command** снова.
+
+**Вариант C — SSH на сервер:**
+
+```bash
+cd /path/to/dokploy/compose/.../code
+sh deploy/dokploy-deploy.sh
+# или:
+docker compose -p <appName> -f docker-compose.prod.yml build --no-cache web
+docker compose -p <appName> -f docker-compose.prod.yml up -d
+```
 
 ## Ручной деплой по SSH (не через поле Command)
 
