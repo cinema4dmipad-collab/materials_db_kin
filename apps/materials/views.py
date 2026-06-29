@@ -150,7 +150,11 @@ class MaterialFormsetMixin:
         instance = getattr(self, 'object', None)
         if not isinstance(self, UpdateView):
             self.object = None
-        form = MaterialForm(self.request.POST, instance=instance)
+        form = MaterialForm(
+            self.request.POST,
+            instance=instance,
+            skip_validation=True,
+        )
         formset = MaterialPropertyFormSet(
             self.request.POST,
             instance=instance,

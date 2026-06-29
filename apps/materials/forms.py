@@ -1,6 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
+from django.forms.utils import ErrorDict
 
 from apps.materials.form_widgets import material_select_widget_attrs
 from apps.composites.models import CompositeLayer
@@ -299,7 +300,8 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             'created_by': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, skip_validation=False, **kwargs):
+        self.skip_validation = skip_validation
         super().__init__(*args, **kwargs)
         self._initial_struct_type_id = self.instance.struct_type_id if self.instance else None
         self._initial_struct_type = self.instance.struct_type if self.instance else None
@@ -398,6 +400,13 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             for bound_field in self.visible_fields()
             if bound_field.name not in structure_field_names
         ]
+
+    def full_clean(self):
+        if self.skip_validation:
+            self._errors = ErrorDict()
+            self.cleaned_data = {}
+            return
+        super().full_clean()
 
     def clean(self):
         cleaned_data = super().clean()

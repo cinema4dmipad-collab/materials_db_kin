@@ -689,6 +689,21 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertNotContains(response, 'Скрытое поле INITIAL_FORMS')
         self.assertNotContains(response, 'Отсутствующие поля: layers-TOTAL_FORMS')
 
+    def test_apply_struct_type_does_not_validate_empty_material_fields(self):
+        response = self.client.post(
+            reverse('materials:create'),
+            {
+                'struct_type': str(self.structure_type.pk),
+                '_apply_struct_type': '1',
+                **self._formset_management_data(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Исправьте ошибки перед сохранением')
+        self.assertNotContains(response, 'Обязательное поле')
+        self.assertContains(response, f'structure_field_{self.structure_type.fields.get(name="title").pk}')
+
     @override_settings(ROOT_URLCONF='apps.materials.tests')
     def test_public_material_form_renders_without_admin_url_namespace(self):
         form = PublicMaterialForm()
