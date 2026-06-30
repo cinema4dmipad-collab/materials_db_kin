@@ -1,0 +1,28 @@
+{% load ui_tags %}
+{% reference_structure_types_json_script reference_structure_types %}
+{% url 'structures:type_create' as structure_type_create_url %}
+
+<div class="modal fade" id="reference-structure-types-modal" tabindex="-1" aria-labelledby="reference-structure-types-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="reference-structure-types-modal-label">Выбор типа структуры</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+                    <input type="search" class="form-control form-control-sm flex-grow-1" id="reference-structure-types-search" placeholder="Поиск по названию, коду или описанию..." autocomplete="off">
+                    <a href="{{ structure_type_create_url }}?next={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary btn-sm text-nowrap">Создать</a>
+                </div>
+                <div id="reference-structure-types-empty" class="alert alert-info mb-0 d-none">
+                    Нет активных типов структуры. Создайте первый тип кнопкой выше.
+                </div>
+                <div id="reference-structure-types-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary btn-sm" id="reference-structure-types-select-btn">Выбрать</button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -129,11 +129,26 @@
         });
     }
 
+    function formatPropertyLabel(label, unit) {
+        label = (label || '').trim();
+        unit = (unit || '').trim();
+        if (!label) {
+            return '—';
+        }
+        if (!unit) {
+            return label;
+        }
+        if (label.endsWith(', ' + unit) || label.endsWith(',' + unit)) {
+            return label;
+        }
+        return label + ', ' + unit;
+    }
+
     function setRowPropertyMeta(row, label, unit) {
         var labelCell = row.querySelector('.material-props-section__name');
         var unitCell = row.querySelector('.material-props-section__unit');
         if (labelCell) {
-            labelCell.textContent = label || '—';
+            labelCell.textContent = formatPropertyLabel(label, unit);
         }
         if (unitCell) {
             unitCell.textContent = unit || '—';
@@ -198,7 +213,12 @@
     function fetchMaterialProperties(materialId, propertiesUrlTemplate) {
         if (!materialId) {
             materialPropertyIds = new Set();
-            return Promise.resolve([]);
+            return Promise.resolve({
+                properties: [],
+                structure_properties: [],
+                structure_message: '',
+                structure_type: null,
+            });
         }
 
         var url = propertiesUrlTemplate.replace('00000000-0000-0000-0000-000000000000', materialId);
@@ -218,15 +238,87 @@
                 materialPropertyIds = new Set(properties.map(function (item) {
                     return item.property_id;
                 }));
-                return properties;
+                return data;
             })
             .catch(function () {
                 materialPropertyIds = new Set();
-                return [];
+                return {
+                    properties: [],
+                    structure_properties: [],
+                    structure_message: '',
+                    structure_type: null,
+                };
             });
     }
 
-    function loadMaterialProperties(materialId, materialTemplate, totalFormsInput, propertiesUrlTemplate) {
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function buildStructurePropertyValueCell(prop, materialDetailUrlTemplate) {
+        if (prop.field_type === 'MaterialLink' && prop.value && materialDetailUrlTemplate) {
+            var detailUrl = materialDetailUrlTemplate.replace(
+                '00000000-0000-0000-0000-000000000000',
+                prop.value,
+            );
+            return '<a href="' + escapeHtml(detailUrl) + '">' + escapeHtml(prop.display_value || prop.value) + '</a>';
+        }
+        return escapeHtml(prop.display_value || '—');
+    }
+
+    function renderStructurePropertiesSection(data, materialDetailUrlTemplate) {
+        var section = document.getElementById('sample-structure-properties-section');
+        if (section) {
+            section.remove();
+        }
+
+        var properties = data.structure_properties || [];
+        var message = data.structure_message || '';
+        if (!properties.length && !message) {
+            return;
+        }
+
+        var materialContainer = getMaterialContainer();
+        if (!materialContainer) {
+            return;
+        }
+
+        var table = materialContainer.closest('table');
+        if (!table) {
+            return;
+        }
+
+        var tbody = document.createElement('tbody');
+        tbody.className = 'material-props-section';
+        tbody.id = 'sample-structure-properties-section';
+
+        var rowsHtml = '<tr class="material-props-section__header">'
+            + '<th scope="colgroup" colspan="3">Из параметров структуры</th>'
+            + '</tr>';
+
+        if (properties.length) {
+            properties.forEach(function (prop) {
+                rowsHtml += '<tr class="structure-property-row">'
+                    + '<th scope="row" class="material-props-section__name">' + escapeHtml(prop.label || prop.name || '—') + '</th>'
+                    + '<td class="material-props-section__value">' + buildStructurePropertyValueCell(prop, materialDetailUrlTemplate) + '</td>'
+                    + '<td class="material-props-section__unit">—</td>'
+                    + '</tr>';
+            });
+        } else {
+            rowsHtml += '<tr class="material-props-section__empty structure-properties-empty-row">'
+                + '<td colspan="3">' + escapeHtml(message) + '</td>'
+                + '</tr>';
+        }
+
+        tbody.innerHTML = rowsHtml;
+        table.insertBefore(tbody, table.querySelector('tbody'));
+    }
+
+    function loadMaterialProperties(materialId, materialTemplate, totalFormsInput, propertiesUrlTemplate, materialDetailUrlTemplate) {
         var materialContainer = getMaterialContainer();
         if (!materialContainer || !materialTemplate) {
             return Promise.resolve();
@@ -234,7 +326,9 @@
 
         var existingValues = collectExistingValues();
 
-        return fetchMaterialProperties(materialId, propertiesUrlTemplate).then(function (properties) {
+        return fetchMaterialProperties(materialId, propertiesUrlTemplate).then(function (data) {
+            renderStructurePropertiesSection(data, materialDetailUrlTemplate);
+            var properties = data.properties || [];
             clearContainer(materialContainer);
 
             if (!materialId) {
@@ -282,6 +376,7 @@
         }
 
         var propertiesUrlTemplate = form.getAttribute('data-material-properties-url');
+        var materialDetailUrlTemplate = form.getAttribute('data-material-detail-url');
 
         getAllRows().forEach(function (row) {
             if (row.classList.contains('property-form-row--extra')) {
@@ -333,18 +428,21 @@
                 materialTemplate,
                 totalFormsInput,
                 propertiesUrlTemplate,
+                materialDetailUrlTemplate,
             );
         });
 
-        fetchMaterialProperties(initialMaterialId, propertiesUrlTemplate).then(function () {
+        fetchMaterialProperties(initialMaterialId, propertiesUrlTemplate).then(function (data) {
             if (!hasMaterialRows && initialMaterialId) {
                 return loadMaterialProperties(
                     initialMaterialId,
                     materialTemplate,
                     totalFormsInput,
                     propertiesUrlTemplate,
+                    materialDetailUrlTemplate,
                 );
             }
+            renderStructurePropertiesSection(data, materialDetailUrlTemplate);
             removeExtraDuplicates();
             reindexForms(totalFormsInput);
             updateMaterialEmptyState();

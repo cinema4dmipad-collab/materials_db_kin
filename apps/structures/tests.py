@@ -64,6 +64,8 @@ class PropertyMappingTests(TestCase):
         self.assertEqual(data['field_type'], 'DecimalField')
         self.assertEqual(data['label'], 'Предел прочности, МПа')
         self.assertEqual(data['name'], 'tensile_strength')
+        self.assertEqual(data['decimal_places'], 4)
+        self.assertEqual(data['max_digits'], 10)
 
     def test_property_string_maps_to_char_field(self):
         prop = Property.objects.create(

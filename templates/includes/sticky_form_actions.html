@@ -1,0 +1,8 @@
+<div class="sticky-form-actions" role="region" aria-label="Действия формы">
+    <div class="sticky-form-actions__inner">
+        <a href="{{ cancel_url }}" class="btn btn-outline-secondary">{{ cancel_label|default:"Отмена" }}</a>
+        {% if show_submit is not False %}
+        <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
+        {% endif %}
+    </div>
+</div>

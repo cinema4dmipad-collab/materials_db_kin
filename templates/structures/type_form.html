@@ -20,7 +20,7 @@
             из справочника или ссылку на материал.
         </div>
 
-        <div class="card mb-4">
+        <div class="card mb-4 sticky-form-page">
             <div class="card-header">
                 <h1 class="h4 mb-0">
                     {% if is_edit %}Редактирование типа «{{ structure_type.name }}»{% else %}Новый тип структуры{% endif %}
@@ -68,7 +68,7 @@
                             {% if not fields_locked %}
                             <div class="d-flex flex-wrap gap-2">
                                 <button type="button" class="btn btn-outline-primary btn-sm" id="add-from-properties-btn">Добавить</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="add-material-link-btn">Создать</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="add-material-link-btn" title="Добавить поле, ссылающееся на другой материал">Ссылка на материал</button>
                             </div>
                             {% endif %}
                         </div>
@@ -130,7 +130,7 @@
                                         <input type="number" name="fields-__idx__-sort_order" value="0" min="0" id="id_fields-__idx__-sort_order">
                                         <input type="number" name="fields-__idx__-max_length" value="255" min="1" max="4000" id="id_fields-__idx__-max_length">
                                         <input type="number" name="fields-__idx__-max_digits" value="10" min="1" max="18" id="id_fields-__idx__-max_digits">
-                                        <input type="number" name="fields-__idx__-decimal_places" value="2" min="0" max="10" id="id_fields-__idx__-decimal_places">
+                                        <input type="number" name="fields-__idx__-decimal_places" value="4" min="0" max="10" id="id_fields-__idx__-decimal_places">
                                         <input type="text" name="fields-__idx__-default_value" maxlength="500" id="id_fields-__idx__-default_value">
                                         <input type="checkbox" name="fields-__idx__-DELETE" id="id_fields-__idx__-DELETE" class="d-none">
                                     </div>
@@ -140,16 +140,21 @@
                         </div>
                     </div>
 
-                    <div class="d-flex gap-2 mt-4">
-                        {% if not fields_locked %}
-                        <button type="submit" class="btn btn-primary">{% if is_edit %}Сохранить{% else %}Создать{% endif %}</button>
-                        {% endif %}
-                        {% if is_edit %}
-                        <a href="{% url 'structures:type_manage' structure_type.code %}" class="btn btn-outline-secondary">К управлению</a>
-                        {% else %}
-                        <a href="{% url 'structures:select_type' %}" class="btn btn-outline-secondary">Отмена</a>
-                        {% endif %}
-                    </div>
+                    {% if is_edit %}
+                    {% url 'structures:type_manage' structure_type.code as structure_type_cancel_url %}
+                    {% if fields_locked %}
+                    {% include 'includes/sticky_form_actions.html' with submit_label='Сохранить' cancel_url=structure_type_cancel_url cancel_label='К управлению' show_submit=False %}
+                    {% else %}
+                    {% include 'includes/sticky_form_actions.html' with submit_label='Сохранить' cancel_url=structure_type_cancel_url cancel_label='К управлению' %}
+                    {% endif %}
+                    {% else %}
+                    {% url 'structures:select_type' as structure_types_list_url %}
+                    {% if fields_locked %}
+                    {% include 'includes/sticky_form_actions.html' with submit_label='Создать' cancel_url=structure_types_list_url show_submit=False %}
+                    {% else %}
+                    {% include 'includes/sticky_form_actions.html' with submit_label='Создать' cancel_url=structure_types_list_url %}
+                    {% endif %}
+                    {% endif %}
                 </form>
             </div>
         </div>

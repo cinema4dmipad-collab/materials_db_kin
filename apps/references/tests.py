@@ -73,11 +73,39 @@ class PropertyViewsTests(TestCase):
             },
         )
 
+        created = Property.objects.get(name='young_modulus')
         self.assertRedirects(
             response,
-            f'{next_url}?open_properties=1',
+            f'{next_url}?created_property={created.pk}&open_properties=1',
             fetch_redirect_response=False,
         )
+
+    def test_property_create_redirects_to_material_form_with_created_property(self):
+        next_url = reverse('materials:create')
+        response = self.client.post(
+            f"{reverse('references:create')}?next={next_url}",
+            {
+                'display_name': 'Shear modulus',
+                'name': 'shear_modulus',
+                'unit': 'GPa',
+                'data_type': 'number',
+                'group': str(self.group.pk),
+                'description': '',
+                'next': next_url,
+            },
+        )
+
+        created = Property.objects.get(name='shear_modulus')
+        self.assertRedirects(
+            response,
+            f'{next_url}?created_property={created.pk}&open_properties=1',
+            fetch_redirect_response=False,
+        )
+
+        follow_response = self.client.get(response.url)
+        self.assertEqual(follow_response.status_code, 200)
+        self.assertContains(follow_response, f'"property_id": "{created.pk}"')
+        self.assertContains(follow_response, 'Shear modulus')
 
     def test_property_update_view(self):
         response = self.client.post(

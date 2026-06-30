@@ -243,6 +243,28 @@ a:hover {
     padding-bottom: 2rem;
 }
 
+.sticky-form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    margin-top: 1.5rem;
+    margin-left: calc(-1 * var(--bs-card-spacer-x, 1rem));
+    margin-right: calc(-1 * var(--bs-card-spacer-x, 1rem));
+    padding: 0.85rem var(--bs-card-spacer-x, 1rem);
+    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid var(--kx-border-strong);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.06);
+    backdrop-filter: blur(8px);
+}
+
+.sticky-form-actions__inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-start;
+}
+
 .app-hero {
     margin-bottom: 1.75rem;
     padding: 2rem 2.25rem;

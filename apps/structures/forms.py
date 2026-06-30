@@ -3,6 +3,7 @@ import uuid
 from django import forms
 from django.core.exceptions import ValidationError
 
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
 from apps.core.fields import LocalizedDecimalField, LocalizedFloatField
 from apps.core.number_utils import normalize_decimal_input, parse_decimal
 
@@ -117,8 +118,8 @@ def _build_dynamic_field(structure_field: StructureField) -> forms.Field:
             required=required,
             help_text=help_text,
             initial=initial,
-            max_digits=structure_field.max_digits or 10,
-            decimal_places=structure_field.decimal_places or 2,
+            max_digits=structure_field.max_digits or DEFAULT_MAX_DIGITS,
+            decimal_places=structure_field.decimal_places or DEFAULT_DECIMAL_PLACES,
         )
     if structure_field.field_type == 'FloatField':
         return LocalizedFloatField(

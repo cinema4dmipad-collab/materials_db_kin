@@ -262,7 +262,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Свойства')
         self.assertContains(response, 'Из параметров структуры')
         self.assertContains(response, 'Дополнительные свойства')
-        self.assertContains(response, 'Density')
+        self.assertContains(response, 'Density, g/cm3')
         self.assertContains(response, '1,55')
         self.assertContains(response, 'g/cm3')
         self.assertContains(response, 'Test Panel')
@@ -272,6 +272,51 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, '18,75')
         self.assertNotContains(response, 'client_filter_bar')
         self.assertNotContains(response, 'Параметры структуры')
+
+    def test_sample_detail_inherits_material_structure_properties(self):
+        from apps.samples.models import Sample
+
+        row_id = self.insert_structure_row(title='Inherited panel', thickness='12.50')
+        material = Material.objects.create(
+            code='MAT-SAMPLE-STRUCT',
+            name='Material for sample structure inheritance',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        sample = Sample.objects.create(
+            code='SMP-STRUCT-001',
+            name='Sample with inherited structure',
+            material=material,
+        )
+
+        response = self.client.get(reverse('samples:detail', kwargs={'pk': sample.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Из параметров структуры')
+        self.assertContains(response, 'Inherited panel')
+        self.assertContains(response, 'Thickness')
+        self.assertContains(response, '12,50')
+
+    def test_material_properties_json_includes_structure_properties(self):
+        row_id = self.insert_structure_row(title='JSON panel', thickness='9.25')
+        material = Material.objects.create(
+            code='MAT-JSON-STRUCT',
+            name='Material for JSON structure properties',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.get(
+            reverse('materials:properties_json', kwargs={'pk': material.pk}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        thickness = next(
+            item for item in payload['structure_properties'] if item['name'] == 'thickness'
+        )
+        self.assertEqual(thickness['display_value'], '9,25')
+        self.assertTrue(payload['structure_type'])
 
     def test_detail_page_ignores_service_columns_and_stale_foreign_key_fields(self):
         row_id = self.insert_structure_row(title='Visible panel')
@@ -782,7 +827,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'material-properties-table')
         self.assertContains(response, 'material-props-section__name')
-        self.assertContains(response, 'Readonly density')
+        self.assertContains(response, 'Readonly density, g/cm3')
         self.assertContains(response, 'g/cm3')
         self.assertContains(response, 'id="add-property-btn"')
         self.assertContains(response, 'reference-properties-modal')
@@ -1434,6 +1479,24 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         response = self.client.get(reverse('materials:create'))
 
         self.assertContains(response, 'Выберите тип структуры, чтобы заполнить параметры.')
+
+    def test_material_create_with_created_property_includes_it_in_picker_data(self):
+        new_property = Property.objects.create(
+            name='auto_add_property',
+            display_name='Auto add property',
+            unit='MPa',
+            data_type='number',
+        )
+
+        response = self.client.get(
+            reverse('materials:create'),
+            {'created_property': str(new_property.pk), 'open_properties': '1'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'material_properties_formset.js')
+        self.assertContains(response, f'"property_id": "{new_property.pk}"')
+        self.assertContains(response, 'Auto add property')
 
 
 class SeedDataCommandTests(TestCase):

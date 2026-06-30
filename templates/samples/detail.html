@@ -48,11 +48,17 @@
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h2 class="h5 mb-0">Свойства</h2>
+        {% if structure_type %}
+        <div class="text-muted small">
+            Тип структуры:
+            {% include 'includes/type_badge.html' with label=structure_type.name tone=structure_type.display_color %}
+        </div>
+        {% endif %}
     </div>
     <div class="card-body p-0">
-        {% if material_properties or extra_properties %}
+        {% if structure_properties or material_properties or extra_properties or structure_message %}
         <div class="table-responsive material-properties-table-wrap">
             <table class="table table-striped table-hover align-middle mb-0 app-data-table material-properties-table">
                 <thead>
@@ -62,6 +68,9 @@
                         <th scope="col" class="material-properties-table__unit-col">Единица</th>
                     </tr>
                 </thead>
+                {% if structure_properties or structure_message %}
+                {% include 'includes/structure_properties_tbody.html' %}
+                {% endif %}
                 {% if material_properties %}
                 <tbody class="material-props-section">
                     <tr class="material-props-section__header">
@@ -69,7 +78,7 @@
                     </tr>
                     {% for sp in material_properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ sp.property.display_name }}</th>
+                        <th scope="row" class="material-props-section__name">{{ sp.property.label_with_unit }}</th>
                         <td class="material-props-section__value">{% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}</td>
                         <td class="material-props-section__unit">{{ sp.property.unit|default:"—" }}</td>
                     </tr>
@@ -83,7 +92,7 @@
                     </tr>
                     {% for sp in extra_properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ sp.property.display_name }}</th>
+                        <th scope="row" class="material-props-section__name">{{ sp.property.label_with_unit }}</th>
                         <td class="material-props-section__value">{% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}</td>
                         <td class="material-props-section__unit">{{ sp.property.unit|default:"—" }}</td>
                     </tr>

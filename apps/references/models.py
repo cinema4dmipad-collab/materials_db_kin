@@ -35,5 +35,12 @@ class Property(models.Model):
     def __str__(self):
         return f"{self.display_name} ({self.unit})" if self.unit else self.display_name
 
+    def label_with_unit(self) -> str:
+        display_name = (self.display_name or self.name or '').strip()
+        unit = (self.unit or '').strip()
+        if unit:
+            return f'{display_name}, {unit}'
+        return display_name or '\u2014'
+
     class Meta:
         ordering = ['group__sort_order', 'display_name', 'name']

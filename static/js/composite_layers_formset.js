@@ -158,7 +158,6 @@
             window.MaterialPickerFields.init(row);
         }
         renumberLayers(container);
-        refreshDiagram(container);
         return row;
     }
 
@@ -291,19 +290,21 @@
         }
     }
 
-    function bindLiveUpdates(container, row) {
-        row.querySelectorAll('input, select').forEach(function (input) {
-            if (input.dataset.layerDiagramBound === 'true') {
+    function bindLiveUpdates(container) {
+        if (container.dataset.layerDiagramDelegationBound === 'true') {
+            return;
+        }
+        container.dataset.layerDiagramDelegationBound = 'true';
+
+        function handleLayerFieldUpdate(event) {
+            if (!event.target.closest('.layer-form-row')) {
                 return;
             }
-            input.dataset.layerDiagramBound = 'true';
-            input.addEventListener('input', function () {
-                refreshDiagram(container);
-            });
-            input.addEventListener('change', function () {
-                refreshDiagram(container);
-            });
-        });
+            refreshDiagram(container);
+        }
+
+        container.addEventListener('input', handleLayerFieldUpdate);
+        container.addEventListener('change', handleLayerFieldUpdate);
     }
 
     function handleRowSelection(container, row, event, ui, state) {
@@ -470,7 +471,6 @@
     }
 
     function bindRow(container, row, totalFormsInput, ui, state) {
-        bindLiveUpdates(container, row);
         row.setAttribute('aria-selected', 'false');
 
         if (row.dataset.rowBound === 'true') {
@@ -529,6 +529,8 @@
             if (lastRow) {
                 copyRowValues(lastRow, row);
             }
+            renumberLayers(container);
+            refreshDiagram(container);
             clearSelection(container);
             setRowSelected(row, true);
             state.lastSelectedRow = row;
@@ -558,6 +560,8 @@
         container.querySelectorAll('.layer-form-row').forEach(function (row) {
             bindRow(container, row, totalFormsInput, ui, state);
         });
+
+        bindLiveUpdates(container);
 
         if (window.MaterialPickerFields) {
             window.MaterialPickerFields.init(container);

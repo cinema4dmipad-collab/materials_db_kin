@@ -9,7 +9,7 @@
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 {% if sample %}{% include 'samples/includes/sample_tabs.html' %}{% endif %}
 
-<div class="card mb-4">
+<div class="card mb-4 sticky-form-page">
     <div class="card-header">
         <h1 class="h4 mb-0">{% if sample %}Редактирование образца{% else %}Новый образец{% endif %}</h1>
     </div>
@@ -17,7 +17,9 @@
         <form
             method="post"
             novalidate
+            id="sample-form"
             data-material-properties-url="{% url 'materials:properties_json' pk='00000000-0000-0000-0000-000000000000' %}"
+            data-material-detail-url="{% url 'materials:detail' pk='00000000-0000-0000-0000-000000000000' %}"
         >
             {% csrf_token %}
             {% if form.non_field_errors %}
@@ -72,14 +74,13 @@
             </p>
             {% endif %}
 
-            <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-primary">{% if sample %}Сохранить{% else %}Создать{% endif %}</button>
-                {% if sample %}
-                <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-outline-secondary">Отмена</a>
-                {% else %}
-                <a href="{% url 'samples:list' %}" class="btn btn-outline-secondary">Отмена</a>
-                {% endif %}
-            </div>
+            {% if sample %}
+            {% url 'samples:detail' sample.pk as sample_cancel_url %}
+            {% include 'includes/sticky_form_actions.html' with submit_label='Сохранить' cancel_url=sample_cancel_url %}
+            {% else %}
+            {% url 'samples:list' as samples_list_url %}
+            {% include 'includes/sticky_form_actions.html' with submit_label='Создать' cancel_url=samples_list_url %}
+            {% endif %}
         </form>
     </div>
 </div>

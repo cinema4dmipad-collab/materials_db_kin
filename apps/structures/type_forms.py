@@ -12,6 +12,7 @@ from apps.structures.identifiers import (
     validate_structure_code,
     validate_table_name,
 )
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
@@ -248,7 +249,7 @@ class StructureFieldForm(forms.ModelForm):
             'field_type': 'Строка — текст; Число — целое; Десятичная — размеры с дробной частью.',
             'max_length': 'Для строки: сколько символов хранить (обычно 255).',
             'max_digits': 'Для десятичного числа: всего цифр, включая дробную часть.',
-            'decimal_places': 'Сколько знаков после запятой (например 2 для 12.34).',
+            'decimal_places': 'Сколько знаков после запятой (например 4 для 1,6518).',
             'default_value': 'Необязательно. Для чисел используйте точку (12.5), для даты — ГГГГ-ММ-ДД.',
         }
 
@@ -294,8 +295,8 @@ class StructureFieldForm(forms.ModelForm):
             if max_length < 1 or max_length > 4000:
                 self.add_error('max_length', 'Длина строки — от 1 до 4000.')
         elif field_type == 'DecimalField':
-            max_digits = cleaned_data.get('max_digits') or 10
-            decimal_places = cleaned_data.get('decimal_places') or 2
+            max_digits = cleaned_data.get('max_digits') or DEFAULT_MAX_DIGITS
+            decimal_places = cleaned_data.get('decimal_places') or DEFAULT_DECIMAL_PLACES
             if max_digits < 1 or max_digits > 18:
                 self.add_error('max_digits', 'Всего цифр — от 1 до 18.')
             if decimal_places < 0 or decimal_places > 10:

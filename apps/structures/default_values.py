@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
 
 _BOOLEAN_DEFAULTS = {
@@ -51,8 +52,8 @@ def validate_structure_field_default(
                 f'по умолчанию «{raw}».'
             ) from exc
 
-        places = decimal_places if decimal_places is not None else 2
-        digits = max_digits if max_digits is not None else 10
+        places = decimal_places if decimal_places is not None else DEFAULT_DECIMAL_PLACES
+        digits = max_digits if max_digits is not None else DEFAULT_MAX_DIGITS
         sign, coefficient, exponent = decimal_value.as_tuple()
         scale = max(-exponent, 0)
         if scale > places:

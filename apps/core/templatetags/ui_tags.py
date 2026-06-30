@@ -2,6 +2,7 @@ from django import template
 from django.utils.html import json_script
 
 from apps.core.number_utils import format_decimal_display
+from apps.core.property_form_display import property_label_with_unit as format_property_label_with_unit
 
 register = template.Library()
 
@@ -63,6 +64,12 @@ def ui_category_tone(value):
 
 
 @register.filter
+def property_label_with_unit(property_obj):
+    """Название свойства с единицей измерения через запятую."""
+    return format_property_label_with_unit(property_obj)
+
+
+@register.filter
 def decimal_comma(value):
     """Отображает число с запятой в качестве десятичного разделителя."""
     if value in (None, ''):
@@ -82,3 +89,10 @@ def reference_materials_json_script(materials=None):
     if not isinstance(materials, list):
         materials = []
     return json_script(materials, 'reference-materials-data')
+
+
+@register.simple_tag
+def reference_structure_types_json_script(structure_types=None):
+    if not isinstance(structure_types, list):
+        structure_types = []
+    return json_script(structure_types, 'reference-structure-types-data')

@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
 from django.forms.utils import ErrorDict
 
-from apps.materials.form_widgets import material_select_widget_attrs
+from apps.materials.form_widgets import material_select_widget_attrs, structure_type_select_widget_attrs
 from apps.composites.models import CompositeLayer
 from apps.core.fields import (
     LocalizedFloatField,
@@ -296,7 +296,7 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'description': forms.Textarea(attrs={**_BOOTSTRAP_INPUT, 'rows': 3}),
-            'struct_type': forms.Select(attrs=_BOOTSTRAP_SELECT),
+            'struct_type': forms.Select(attrs=structure_type_select_widget_attrs()),
             'created_by': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
         }
 
@@ -306,6 +306,10 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         self._initial_struct_type_id = self.instance.struct_type_id if self.instance else None
         self._initial_struct_type = self.instance.struct_type if self.instance else None
         self._initial_struct_props_id = self.instance.struct_props_id if self.instance else None
+        self.fields['struct_type'].queryset = StructureType.objects.filter(
+            is_active=True,
+        ).order_by('name')
+        self.fields['struct_type'].empty_label = 'Без типа структуры'
         self.structure_type = self._selected_structure_type()
         self.structure_fields = []
         self.structure_empty_message = ''

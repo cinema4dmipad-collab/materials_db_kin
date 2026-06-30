@@ -17,7 +17,7 @@
 
     const FIELD_TYPE_DEFAULTS = {
         CharField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
-        DecimalField: { max_length: '', max_digits: '10', decimal_places: '2', default_value: '' },
+        DecimalField: { max_length: '', max_digits: '10', decimal_places: '4', default_value: '' },
         MaterialLink: { max_length: '', max_digits: '', decimal_places: '', default_value: '' },
     };
 
@@ -104,7 +104,12 @@
             nameNode.textContent = name;
         }
         if (typeNode) {
-            typeNode.textContent = fieldTypeLabel(fieldType);
+            let typeLabel = fieldTypeLabel(fieldType);
+            if (fieldType === 'DecimalField') {
+                const places = row.querySelector('[name$="-decimal_places"]')?.value || '4';
+                typeLabel = `${typeLabel} · ${places} зн.`;
+            }
+            typeNode.textContent = typeLabel;
             typeNode.dataset.fieldTypeValue = fieldType;
         }
     }
@@ -235,6 +240,12 @@
         setRowInputValue(row, 'field_type', data.field_type);
         setRowInputValue(row, 'sort_order', String(getNextSortOrder()));
         applyHiddenFieldDefaults(row, data.field_type);
+        if (data.decimal_places != null && data.decimal_places !== '') {
+            setRowInputValue(row, 'decimal_places', String(data.decimal_places));
+        }
+        if (data.max_digits != null && data.max_digits !== '') {
+            setRowInputValue(row, 'max_digits', String(data.max_digits));
+        }
         syncRowSummary(row);
     }
 

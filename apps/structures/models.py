@@ -11,6 +11,7 @@ MATERIAL_LINK_FIELD_TYPE = 'MaterialLink'
 
 
 from apps.structures.colors import DEFAULT_STRUCTURE_DISPLAY_COLOR, STRUCTURE_DISPLAY_COLOR_CHOICES
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES
 
 
 class StructureType(models.Model):
@@ -133,7 +134,7 @@ class StructureField(models.Model):
     help_text = models.CharField(max_length=500, blank=True)
     sort_order = models.IntegerField(default=0)
     max_digits = models.IntegerField(null=True, blank=True, default=10)
-    decimal_places = models.IntegerField(null=True, blank=True, default=2)
+    decimal_places = models.IntegerField(null=True, blank=True, default=DEFAULT_DECIMAL_PLACES)
     max_length = models.IntegerField(null=True, blank=True, default=255)
     foreign_key_model = models.CharField(
         max_length=200,

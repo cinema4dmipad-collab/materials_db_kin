@@ -2,13 +2,14 @@ from decimal import Decimal, InvalidOperation
 import uuid
 
 from apps.core.number_utils import format_decimal_display, parse_decimal
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
 
 
 def _decimal_places(field) -> int:
     places = getattr(field, 'decimal_places', None)
     if places is None:
-        return 2
+        return DEFAULT_DECIMAL_PLACES
     return max(int(places), 0)
 
 

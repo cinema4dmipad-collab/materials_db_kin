@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from apps.references.models import Property
 from apps.structures.identifiers import normalize_identifier, validate_field_column_name
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
 
 PROPERTY_DATA_TYPE_TO_FIELD_TYPE = {
     'number': 'DecimalField',
@@ -42,7 +42,7 @@ def property_to_structure_field_data(property_obj: Property) -> dict:
         property_obj.data_type,
         'DecimalField',
     )
-    return {
+    result = {
         'property_id': str(property_obj.id),
         'label': structure_field_label_from_property(property_obj),
         'name': structure_column_name_from_property(property_obj),
@@ -52,6 +52,10 @@ def property_to_structure_field_data(property_obj: Property) -> dict:
         'group_name': property_obj.group.name if property_obj.group_id else '',
         'help_text': (property_obj.description or '')[:500],
     }
+    if field_type == 'DecimalField':
+        result['max_digits'] = DEFAULT_MAX_DIGITS
+        result['decimal_places'] = DEFAULT_DECIMAL_PLACES
+    return result
 
 
 def reference_properties_for_picker() -> list[dict]:

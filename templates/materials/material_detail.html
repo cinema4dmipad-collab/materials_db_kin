@@ -70,30 +70,7 @@
                     </tr>
                 </thead>
                 {% if structure_properties or structure_message %}
-                <tbody class="material-props-section">
-                    <tr class="material-props-section__header">
-                        <th scope="colgroup" colspan="3">Из параметров структуры</th>
-                    </tr>
-                    {% if structure_properties %}
-                    {% for prop in structure_properties %}
-                    <tr>
-                        <th scope="row" class="material-props-section__name">{{ prop.label|default:prop.name }}</th>
-                        <td class="material-props-section__value">
-                            {% if prop.field_type == 'MaterialLink' and prop.value %}
-                            <a href="{% url 'materials:detail' prop.value %}">{{ prop.display_value }}</a>
-                            {% else %}
-                            {{ prop.display_value }}
-                            {% endif %}
-                        </td>
-                        <td class="material-props-section__unit">—</td>
-                    </tr>
-                    {% endfor %}
-                    {% else %}
-                    <tr class="material-props-section__empty">
-                        <td colspan="3">{{ structure_message }}</td>
-                    </tr>
-                    {% endif %}
-                </tbody>
+                {% include 'includes/structure_properties_tbody.html' %}
                 {% endif %}
                 {% if properties %}
                 <tbody class="material-props-section">
@@ -102,7 +79,7 @@
                     </tr>
                     {% for mp in properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ mp.property.display_name }}</th>
+                        <th scope="row" class="material-props-section__name">{{ mp.property.label_with_unit }}</th>
                         <td class="material-props-section__value">{% if mp.property.data_type == 'number' %}{{ mp.value|decimal_comma }}{% else %}{{ mp.value }}{% endif %}</td>
                         <td class="material-props-section__unit">{{ mp.property.unit|default:"—" }}</td>
                     </tr>

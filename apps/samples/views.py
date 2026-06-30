@@ -17,6 +17,7 @@ from apps.core.list_filters import (
     build_choice_label_filter,
 )
 from apps.materials.models import Material
+from apps.materials.structure_display import get_material_structure_context
 from apps.core.property_form_display import enrich_property_form_display
 from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyFormSet
 from apps.samples.models import Sample, SampleAttachment
@@ -119,6 +120,14 @@ class SampleFormsetMixin:
         context['material_property_ids'] = [str(item) for item in material_property_ids]
         context['reference_materials'] = materials_for_picker()
         context['reference_properties'] = reference_properties_for_picker()
+        if material:
+            context.update(get_material_structure_context(material))
+        else:
+            context.update({
+                'structure_type': None,
+                'structure_properties': [],
+                'structure_message': '',
+            })
         return context
 
     def form_valid(self, form):
@@ -210,7 +219,7 @@ class SampleDetailView(DetailView):
     active_tab = 'sample'
 
     def get_queryset(self):
-        return Sample.objects.select_related('material').prefetch_related('tags')
+        return Sample.objects.select_related('material', 'material__struct_type').prefetch_related('tags')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -234,6 +243,7 @@ class SampleDetailView(DetailView):
         context['extra_properties'] = [
             item for item in sample_properties if item.property_id not in material_property_ids
         ]
+        context.update(get_material_structure_context(self.object.material))
         return context
 
 

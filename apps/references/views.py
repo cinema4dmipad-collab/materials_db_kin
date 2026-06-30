@@ -68,7 +68,11 @@ class PropertyCreateView(CreateView):
         next_url = self._safe_next_url()
         if next_url:
             separator = '&' if '?' in next_url else '?'
-            return f'{next_url}{separator}open_properties=1'
+            created_property = self.object.pk
+            return (
+                f'{next_url}{separator}created_property={created_property}'
+                f'&open_properties=1'
+            )
         return str(self.success_url)
 
     def form_valid(self, form):

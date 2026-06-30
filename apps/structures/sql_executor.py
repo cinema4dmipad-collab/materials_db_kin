@@ -9,6 +9,7 @@ from django.utils import timezone
 from apps.core.number_utils import normalize_decimal_input
 from apps.structures.default_values import validate_structure_field_model
 from apps.structures.display_format import normalize_structure_field_value
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 
 IDENTIFIER_RE = re.compile(r'^[a-z][a-z0-9_]*$')
@@ -396,7 +397,7 @@ class SQLExecutor:
         if field.field_type == 'FloatField':
             return 'DOUBLE PRECISION' if connection.vendor == 'postgresql' else 'REAL'
         if field.field_type == 'DecimalField':
-            return f'DECIMAL({field.max_digits or 10}, {field.decimal_places or 2})'
+            return f'DECIMAL({field.max_digits or DEFAULT_MAX_DIGITS}, {field.decimal_places or DEFAULT_DECIMAL_PLACES})'
         if field.field_type == 'BooleanField':
             return 'BOOLEAN' if connection.vendor == 'postgresql' else 'INTEGER'
         if field.field_type == 'DateField':

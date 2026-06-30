@@ -21,9 +21,11 @@ from apps.materials.forms import (
 from apps.core.property_form_display import enrich_property_form_display
 from apps.core.number_utils import format_decimal_display
 from apps.materials.models import Material
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureType
+from apps.materials.structure_display import get_material_structure_context, serialize_structure_context
+from apps.structures.models import StructureType
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.property_mapping import reference_properties_for_picker
+from apps.structures.picker_data import structure_types_for_picker
 
 
 class MaterialFormsetMixin:
@@ -97,6 +99,7 @@ class MaterialFormsetMixin:
             context['layers_allowed'] = self.layers_allowed()
         context['reference_properties'] = reference_properties_for_picker()
         context['reference_materials'] = materials_for_picker()
+        context['reference_structure_types'] = structure_types_for_picker()
         self._attach_validation_summary(context)
         return context
 
@@ -275,7 +278,6 @@ class MaterialDetailView(DetailView):
     template_name = 'materials/material_detail.html'
     context_object_name = 'material'
     active_tab = 'material'
-    structure_service_columns = {'id', 'created_at', 'updated_at', 'created_by'}
 
     def get_queryset(self):
         return Material.objects.select_related('struct_type').prefetch_related('tags')
@@ -297,7 +299,7 @@ class MaterialDetailView(DetailView):
             self.get_composite_layers() if self.object.supports_layers else []
         )
         context['layer_diagram'] = self.get_layer_diagram(context['composite_layers'])
-        context.update(self.get_structure_context())
+        context.update(get_material_structure_context(self.object))
         return context
 
     def get_layer_diagram(self, composite_layers):
@@ -307,63 +309,6 @@ class MaterialDetailView(DetailView):
 
     def get_composite_layers(self):
         return self.object.composite_layers.select_related('material').order_by('layer_number')
-
-    def get_structure_context(self):
-        material = self.object
-        structure_context = {
-            'structure_type': material.struct_type,
-            'structure_properties': [],
-            'structure_message': '',
-        }
-
-        if not material.struct_type_id:
-            structure_context['structure_message'] = 'Структура не выбрана.'
-            return structure_context
-
-        if not material.struct_props_id:
-            structure_context['structure_message'] = 'Запись параметров структуры не выбрана.'
-            return structure_context
-
-        structure_params = material.get_structure_params()
-        if structure_params is None:
-            structure_context['structure_message'] = 'Запись параметров структуры не найдена.'
-            return structure_context
-
-        fields = (
-            material.struct_type.fields.exclude(name__in=self.structure_service_columns)
-            .exclude(field_type='ForeignKey')
-            .order_by('sort_order', 'name')
-        )
-        structure_context['structure_properties'] = [
-            {
-                'label': field.label,
-                'name': field.name,
-                'field_type': field.field_type,
-                'value': structure_params.get(field.name),
-                'display_value': self.get_structure_display_value(
-                    field,
-                    structure_params.get(field.name)
-                ),
-            }
-            for field in fields
-        ]
-
-        if not structure_context['structure_properties']:
-            structure_context['structure_message'] = 'Параметры структуры не заданы.'
-        return structure_context
-
-    def get_structure_display_value(self, field, value):
-        from apps.structures.display_format import format_structure_field_display
-        from apps.structures.forms import material_from_value
-
-        if value is None or value == '':
-            return '—'
-        if field.field_type == MATERIAL_LINK_FIELD_TYPE:
-            material = material_from_value(value)
-            if material is not None:
-                return f'{material.code} - {material.name}'
-            return value
-        return format_structure_field_display(field, value)
 
 
 class MaterialCreateView(MaterialFormsetMixin, CreateView):
@@ -413,11 +358,15 @@ class MaterialDeleteView(DeleteView):
 
 class MaterialPropertiesJSONView(View):
     def get(self, request, pk):
-        material = get_object_or_404(Material, pk=pk)
+        material = get_object_or_404(
+            Material.objects.select_related('struct_type'),
+            pk=pk,
+        )
         properties = material.properties.select_related('property').order_by(
             'property__group__sort_order',
             'property__name',
         )
+        structure_context = get_material_structure_context(material)
         return JsonResponse(
             {
                 'properties': [
@@ -433,5 +382,6 @@ class MaterialPropertiesJSONView(View):
                     }
                     for item in properties
                 ],
+                **serialize_structure_context(structure_context),
             }
         )

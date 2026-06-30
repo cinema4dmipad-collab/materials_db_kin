@@ -9,3 +9,12 @@ def material_select_widget_attrs(**extra):
     }
     attrs.update(extra)
     return attrs
+
+
+def structure_type_select_widget_attrs(**extra):
+    attrs = {
+        'class': 'form-select structure-type-picker-select',
+        'data-structure-type-picker': 'true',
+    }
+    attrs.update(extra)
+    return attrs
