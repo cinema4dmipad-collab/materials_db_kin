@@ -2,7 +2,7 @@
 
 This section describes the overall architecture of Materials DB: Django apps, dynamic structure storage, and request flow.
 
-**Related**: [Technology Stack](tech-stack.md) · [Testing](testing.md)
+**Related**: [Technology Stack](tech-stack.md) · [Testing](testing.md) · [Workspaces & RBAC](workspaces-rbac.md) · [Права пользователей (таблицы)](workspaces-permissions.md)
 
 ## System Architecture
 
@@ -29,8 +29,13 @@ Gunicorn + Django (config.wsgi)
 | **structures** | `apps/structures/` | Structure types, fields, SQL executor, public type UI |
 | **samples** | `apps/samples/` | Sample CRUD, property inheritance, attachments |
 | **scans** | `apps/scans/` | HDF5 scan upload, validation, listing |
+| **workspaces** | `apps/workspaces/` | Workspaces, membership, RBAC, sidebar context |
 
 URL routing: [`config/urls.py`](../../config/urls.py).
+
+## Workspaces & RBAC
+
+Multi-workspace isolation with shared property catalog. See [Workspaces & RBAC](workspaces-rbac.md).
 
 ## Dynamic Structure Storage
 

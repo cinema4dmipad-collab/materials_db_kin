@@ -9,12 +9,16 @@
 
 ### Added
 
+- План и ADR: workspaces, RBAC (admin/manager/operator), GitLab-подобный sidebar ([docs/architecture/workspaces-rbac.md](docs/architecture/workspaces-rbac.md)).
+- Приложение `apps.workspaces`: модели Workspace/Membership, middleware, login/logout, выбор пространства, sidebar, права manager/operator, UI администрирования пользователей и настроек WS.
+- Зависимость `django-guardian`; команда `migrate_to_workspaces` для переноса prod-данных в Legacy WS.
 - Форма материала: модальный выбор типа структуры; sticky-кнопки сохранения на длинных формах.
 - Автоподстановка нового свойства в форму материала после создания из справочника.
 - Образцы наследуют параметры структуры материала (просмотр и форма).
 
 ### Changed
 
+- Material/StructureType/Sample/Scan: поля `home_workspace`/`workspace`, видимость и фильтрация по активному пространству; код уникален в пределах WS.
 - Свойства: единица измерения в названии через запятую (колонка «Единица» сохранена).
 - Точность десятичных полей структуры по умолчанию — 4 знака после запятой.
 

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from apps.materials.models import Material
+from apps.workspaces.services import materials_visible_in
 
 
-def materials_for_picker() -> list[dict]:
-    materials = Material.objects.select_related('struct_type').order_by('code', 'name')
+def materials_for_picker(workspace=None) -> list[dict]:
+    if workspace is not None:
+        materials = materials_visible_in(workspace)
+    else:
+        materials = Material.objects.all()
+    materials = materials.select_related('struct_type').order_by('code', 'name')
     return [
         {
             'material_id': str(item.pk),

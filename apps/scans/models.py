@@ -16,6 +16,14 @@ class ScanRecord(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='scans')
+    workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='scan_records',
+        verbose_name='Пространство',
+    )
     file = models.FileField(
         upload_to='scans/%Y/%m/%d/',
         verbose_name='Файл скана (HDF5)',

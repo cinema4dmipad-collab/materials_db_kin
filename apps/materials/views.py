@@ -1,10 +1,11 @@
 from django import forms
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView, View
 
 from apps.core.list_filters import ALL_SEARCH_SCOPE, STRUCT_TYPE_SEARCH_SCOPE, TAG_SEARCH_SCOPE, QuerySetFilterMixin
@@ -16,6 +17,7 @@ from apps.materials.form_validation import (
 from apps.materials.forms import (
     MaterialForm,
     MaterialPropertyFormSet,
+    MaterialVisibilityForm,
     get_composite_layer_formset,
 )
 from apps.core.property_form_display import enrich_property_form_display
@@ -26,9 +28,28 @@ from apps.structures.models import StructureType
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.property_mapping import reference_properties_for_picker
 from apps.structures.picker_data import structure_types_for_picker
+from apps.workspaces.mixins import AppViewMixin, PermissionRequiredMixin
+from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm, is_editable_in_workspace
+from apps.workspaces.services import materials_owned_by, materials_shared_in, materials_visible_in, structure_types_visible_in
+
+
+MATERIAL_SCOPE_WORKSPACE = 'workspace'
+MATERIAL_SCOPE_SHARED = 'shared'
+MATERIAL_SCOPE_CHOICES = (MATERIAL_SCOPE_WORKSPACE, MATERIAL_SCOPE_SHARED)
 
 
 class MaterialFormsetMixin:
+    def get_tag_workspace(self, instance=None):
+        material = instance if instance is not None else getattr(self, 'object', None)
+        if material and material.home_workspace_id:
+            return material.home_workspace
+        return self.request.active_workspace
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['workspace'] = self.get_tag_workspace()
+        return kwargs
+
     def get_initial(self):
         initial = super().get_initial()
         if 'struct_type' in self.request.GET:
@@ -98,7 +119,7 @@ class MaterialFormsetMixin:
             context['layer_formset'] = self.get_layer_formset()
             context['layers_allowed'] = self.layers_allowed()
         context['reference_properties'] = reference_properties_for_picker()
-        context['reference_materials'] = materials_for_picker()
+        context['reference_materials'] = materials_for_picker(self.request.active_workspace)
         context['reference_structure_types'] = structure_types_for_picker()
         self._attach_validation_summary(context)
         return context
@@ -157,6 +178,7 @@ class MaterialFormsetMixin:
             self.request.POST,
             instance=instance,
             skip_validation=True,
+            workspace=self.get_tag_workspace(instance),
         )
         formset = MaterialPropertyFormSet(
             self.request.POST,
@@ -189,6 +211,9 @@ class MaterialFormsetMixin:
 
         try:
             with transaction.atomic():
+                if not is_update:
+                    form.instance.home_workspace = self.request.active_workspace
+                    form.instance.created_by_user = self.request.user
                 self.object = form.save()
                 formset = MaterialPropertyFormSet(
                     self.request.POST,
@@ -239,7 +264,7 @@ class MaterialFormsetMixin:
         )
 
 
-class MaterialListView(QuerySetFilterMixin, ListView):
+class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
     model = Material
     template_name = 'materials/material_list.html'
     context_object_name = 'materials'
@@ -258,32 +283,107 @@ class MaterialListView(QuerySetFilterMixin, ListView):
     choice_filters = (('struct_type', 'struct_type_id'),)
     choice_filter_labels = {'struct_type': 'Тип структуры'}
 
+    def get_material_scope(self):
+        scope = self.request.GET.get('scope', MATERIAL_SCOPE_WORKSPACE)
+        if scope not in MATERIAL_SCOPE_CHOICES:
+            return MATERIAL_SCOPE_WORKSPACE
+        return scope
+
+    def get_scope_url(self, scope):
+        params = self.request.GET.copy()
+        params.pop('page', None)
+        if scope == MATERIAL_SCOPE_WORKSPACE:
+            params.pop('scope', None)
+        else:
+            params['scope'] = scope
+        query = params.urlencode()
+        return reverse('materials:list') + (f'?{query}' if query else '')
+
     def get_queryset(self):
+        workspace = self.request.active_workspace
+        scope = self.get_material_scope()
+        if scope == MATERIAL_SCOPE_SHARED:
+            base_qs = materials_shared_in(workspace)
+        else:
+            base_qs = materials_owned_by(workspace)
         return self.filter_queryset(
-            Material.objects.select_related('struct_type').prefetch_related('tags')
+            base_qs.select_related('struct_type', 'home_workspace').prefetch_related('tags')
         )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        scope = self.get_material_scope()
+        context['material_scope'] = scope
+        context['material_scope_tabs'] = [
+            {
+                'key': MATERIAL_SCOPE_WORKSPACE,
+                'label': 'Пространство',
+                'url': self.get_scope_url(MATERIAL_SCOPE_WORKSPACE),
+            },
+            {
+                'key': MATERIAL_SCOPE_SHARED,
+                'label': 'Общие',
+                'url': self.get_scope_url(MATERIAL_SCOPE_SHARED),
+            },
+        ]
+        if scope != MATERIAL_SCOPE_WORKSPACE:
+            context['list_filter_preserve_params'] = [('scope', scope)]
+        else:
+            context['list_filter_preserve_params'] = []
+        params = self.request.GET.copy()
+        params.pop('page', None)
+        if scope == MATERIAL_SCOPE_WORKSPACE:
+            params.pop('scope', None)
+        else:
+            params['scope'] = scope
+        context['pagination_query'] = params.urlencode()
+        context['filter_reset_url'] = self.get_scope_url(scope)
+        return context
 
     def get_choice_filter_options(self):
         return {
             'struct_type': list(
-                StructureType.objects.filter(is_active=True)
+                structure_types_visible_in(self.request.active_workspace)
                 .order_by('name')
                 .values_list('pk', 'name')
             ),
         }
 
 
-class MaterialDetailView(DetailView):
+class MaterialEditableMixin:
+    def get_queryset(self):
+        return materials_visible_in(self.request.active_workspace).select_related('struct_type')
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not is_editable_in_workspace(self.request.user, obj, self.request.active_workspace):
+            raise PermissionDenied
+        return obj
+
+
+class MaterialDetailView(AppViewMixin, DetailView):
     model = Material
     template_name = 'materials/material_detail.html'
     context_object_name = 'material'
     active_tab = 'material'
 
     def get_queryset(self):
-        return Material.objects.select_related('struct_type').prefetch_related('tags')
+        return (
+            materials_visible_in(self.request.active_workspace)
+            .select_related('struct_type')
+            .prefetch_related('tags')
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        active_ws = self.request.active_workspace
+        context['material_is_readonly'] = not is_editable_in_workspace(
+            self.request.user, self.object, active_ws
+        )
+        context['can_publish_material'] = (
+            not context['material_is_readonly']
+            and has_workspace_perm(self.request.user, active_ws, WorkspacePerm.MATERIAL_PUBLISH)
+        )
         context['active_tab'] = self.active_tab
         context['attachment_count'] = self.object.attachments.count()
         context['sample_count'] = self.object.samples.count()
@@ -311,14 +411,14 @@ class MaterialDetailView(DetailView):
         return self.object.composite_layers.select_related('material').order_by('layer_number')
 
 
-class MaterialCreateView(MaterialFormsetMixin, CreateView):
+class MaterialCreateView(AppViewMixin, MaterialFormsetMixin, CreateView):
     model = Material
     form_class = MaterialForm
     template_name = 'materials/material_form.html'
     success_url = reverse_lazy('materials:list')
 
 
-class MaterialUpdateView(MaterialFormsetMixin, UpdateView):
+class MaterialUpdateView(AppViewMixin, MaterialEditableMixin, MaterialFormsetMixin, UpdateView):
     model = Material
     form_class = MaterialForm
     template_name = 'materials/material_form.html'
@@ -328,7 +428,7 @@ class MaterialUpdateView(MaterialFormsetMixin, UpdateView):
         return reverse_lazy('materials:detail', kwargs={'pk': self.object.pk})
 
 
-class MaterialDeleteView(DeleteView):
+class MaterialDeleteView(AppViewMixin, MaterialEditableMixin, DeleteView):
     model = Material
     template_name = 'materials/material_confirm_delete.html'
     context_object_name = 'material'
@@ -356,10 +456,10 @@ class MaterialDeleteView(DeleteView):
             return redirect('materials:detail', pk=self.object.pk)
 
 
-class MaterialPropertiesJSONView(View):
+class MaterialPropertiesJSONView(AppViewMixin, View):
     def get(self, request, pk):
         material = get_object_or_404(
-            Material.objects.select_related('struct_type'),
+            materials_visible_in(request.active_workspace).select_related('struct_type'),
             pk=pk,
         )
         properties = material.properties.select_related('property').order_by(
@@ -385,3 +485,32 @@ class MaterialPropertiesJSONView(View):
                 **serialize_structure_context(structure_context),
             }
         )
+
+
+class MaterialVisibilityView(AppViewMixin, PermissionRequiredMixin, UpdateView):
+    permission_codename = WorkspacePerm.MATERIAL_PUBLISH
+    model = Material
+    form_class = MaterialVisibilityForm
+    template_name = 'materials/material_visibility.html'
+    context_object_name = 'material'
+
+    def get_queryset(self):
+        return materials_visible_in(self.request.active_workspace)
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not is_editable_in_workspace(self.request.user, obj, self.request.active_workspace):
+            raise PermissionDenied
+        return obj
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['cancel_url'] = reverse('materials:detail', kwargs={'pk': self.object.pk})
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Настройки видимости материала сохранены.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('materials:detail', kwargs={'pk': self.object.pk})

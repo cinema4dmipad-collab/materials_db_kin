@@ -9,9 +9,12 @@ from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
 from apps.core.version import format_git_commit_display, get_git_commit_hash
-from apps.materials.models import Material
-from apps.samples.models import Sample
-from apps.structures.models import StructureType
+from apps.workspaces.mixins import workspace_login_required
+from apps.workspaces.services import (
+    materials_visible_in,
+    samples_in_workspace,
+    structure_types_visible_in,
+)
 
 
 SENSITIVE_VALUE_RE = re.compile(
@@ -24,16 +27,22 @@ RECENT_LOG_LINES = 80
 RECENT_LOG_BYTES = 64 * 1024
 
 
+@workspace_login_required
 def dashboard(request):
+    active_workspace = getattr(request, 'active_workspace', None)
+    materials_qs = materials_visible_in(active_workspace)
+    samples_qs = samples_in_workspace(active_workspace)
+    structures_qs = structure_types_visible_in(active_workspace)
     context = {
-        'materials_count': Material.objects.count(),
-        'samples_count': Sample.objects.count(),
-        'structures_count': StructureType.objects.filter(is_active=True).count(),
-        'recent_materials': Material.objects.order_by('-created_at')[:5],
+        'materials_count': materials_qs.count(),
+        'samples_count': samples_qs.count(),
+        'structures_count': structures_qs.count(),
+        'recent_materials': materials_qs.order_by('-created_at')[:5],
     }
     return render(request, 'core/dashboard.html', context)
 
 
+@workspace_login_required
 def help_page(request):
     return render(request, 'core/help.html')
 

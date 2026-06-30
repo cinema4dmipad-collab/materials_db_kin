@@ -18,6 +18,7 @@ from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Property, PropertyGroup
 from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
+from apps.workspaces.services import ensure_legacy_workspace
 
 urlpatterns = []
 
@@ -433,17 +434,24 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Test Panel')
 
     def test_material_list_combines_structure_type_search_with_multiple_tags(self):
+        legacy = ensure_legacy_workspace()
         tagged = Material.objects.create(
             code='MAT-LIST-TAGGED',
             name='Tagged structured material',
             struct_type=self.structure_type,
+            home_workspace=legacy,
         )
-        assign_tags(tagged, ['prepreg', 'lab'])
-        Material.objects.create(code='MAT-LIST-001', name='Plain material')
+        assign_tags(tagged, ['prepreg', 'lab'], workspace=legacy)
+        Material.objects.create(
+            code='MAT-LIST-001',
+            name='Plain material',
+            home_workspace=legacy,
+        )
         Material.objects.create(
             code='MAT-LIST-002',
             name='Structured material without tags',
             struct_type=self.structure_type,
+            home_workspace=legacy,
         )
 
         response = self.client.get(

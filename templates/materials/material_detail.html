@@ -12,6 +12,12 @@
 {% block content %}
 {% include 'materials/includes/material_tabs.html' %}
 
+{% if material_is_readonly %}
+<div class="alert alert-info" role="status">
+    Материал опубликован из другого пространства. Редактирование недоступно.
+</div>
+{% endif %}
+
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <div>
@@ -19,8 +25,13 @@
             <p class="text-muted mb-0 small">Код: <strong>{{ material.code }}</strong></p>
         </div>
         <div class="text-nowrap">
+            {% if not material_is_readonly %}
             <a href="{% url 'materials:edit' material.pk %}" class="btn btn-primary btn-sm">Изменить</a>
             <a href="{% url 'materials:delete' material.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            {% endif %}
+            {% if can_publish_material %}
+            <a href="{% url 'materials:visibility' material.pk %}" class="btn btn-outline-secondary btn-sm">Видимость</a>
+            {% endif %}
             <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
         </div>
     </div>

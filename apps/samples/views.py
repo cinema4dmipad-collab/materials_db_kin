@@ -23,6 +23,8 @@ from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyF
 from apps.samples.models import Sample, SampleAttachment
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.property_mapping import reference_properties_for_picker
+from apps.workspaces.mixins import AppViewMixin
+from apps.workspaces.services import materials_visible_in, samples_in_workspace
 
 
 def warn_extra_sample_properties(request, sample):
@@ -89,6 +91,11 @@ def _split_sample_property_formset(formset, material_property_ids):
 
 
 class SampleFormsetMixin:
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['workspace'] = self.request.active_workspace
+        return kwargs
+
     def get_formset(self):
         kwargs = {'prefix': 'properties'}
         if self.request.method == 'POST':
@@ -118,7 +125,7 @@ class SampleFormsetMixin:
         context['material_property_forms'] = material_forms
         context['extra_property_forms'] = extra_forms
         context['material_property_ids'] = [str(item) for item in material_property_ids]
-        context['reference_materials'] = materials_for_picker()
+        context['reference_materials'] = materials_for_picker(self.request.active_workspace)
         context['reference_properties'] = reference_properties_for_picker()
         if material:
             context.update(get_material_structure_context(material))
@@ -138,6 +145,9 @@ class SampleFormsetMixin:
 
         try:
             with transaction.atomic():
+                if not is_update:
+                    form.instance.workspace = self.request.active_workspace
+                    form.instance.created_by_user = self.request.user
                 self.object = form.save()
                 formset = SamplePropertyFormSet(
                     self.request.POST,
@@ -176,7 +186,7 @@ class SampleFormsetMixin:
         )
 
 
-class SampleListView(QuerySetFilterMixin, ListView):
+class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
     model = Sample
     template_name = 'samples/list.html'
     context_object_name = 'samples'
@@ -197,7 +207,9 @@ class SampleListView(QuerySetFilterMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            Sample.objects.select_related('material', 'material__struct_type').prefetch_related('tags')
+            samples_in_workspace(self.request.active_workspace)
+            .select_related('material', 'material__struct_type')
+            .prefetch_related('tags')
         )
 
     def get_choice_filter_options(self):
@@ -212,14 +224,18 @@ class SampleListView(QuerySetFilterMixin, ListView):
         }
 
 
-class SampleDetailView(DetailView):
+class SampleDetailView(AppViewMixin, DetailView):
     model = Sample
     template_name = 'samples/detail.html'
     context_object_name = 'sample'
     active_tab = 'sample'
 
     def get_queryset(self):
-        return Sample.objects.select_related('material', 'material__struct_type').prefetch_related('tags')
+        return (
+            samples_in_workspace(self.request.active_workspace)
+            .select_related('material', 'material__struct_type')
+            .prefetch_related('tags')
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -247,7 +263,7 @@ class SampleDetailView(DetailView):
         return context
 
 
-class SampleCreateView(SampleFormsetMixin, CreateView):
+class SampleCreateView(AppViewMixin, SampleFormsetMixin, CreateView):
     model = Sample
     form_class = SampleForm
     template_name = 'samples/form.html'
@@ -263,7 +279,7 @@ class SampleCreateView(SampleFormsetMixin, CreateView):
         return reverse('samples:detail', kwargs={'pk': self.object.pk})
 
 
-class SampleUpdateView(SampleFormsetMixin, UpdateView):
+class SampleUpdateView(AppViewMixin, SampleFormsetMixin, UpdateView):
     model = Sample
     form_class = SampleForm
     template_name = 'samples/form.html'
@@ -281,7 +297,7 @@ class SampleUpdateView(SampleFormsetMixin, UpdateView):
         return reverse('samples:detail', kwargs={'pk': self.object.pk})
 
 
-class SampleDeleteView(DeleteView):
+class SampleDeleteView(AppViewMixin, DeleteView):
     model = Sample
     template_name = 'samples/confirm_delete.html'
     context_object_name = 'sample'
@@ -292,11 +308,18 @@ class SampleDeleteView(DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
+    def get_queryset(self):
+        return samples_in_workspace(self.request.active_workspace)
+
+
 class SampleAttachmentMixin:
     active_tab = 'attachments'
 
     def dispatch(self, request, *args, **kwargs):
-        self.sample = get_object_or_404(Sample.objects.select_related('material'), pk=kwargs['sample_pk'])
+        self.sample = get_object_or_404(
+            samples_in_workspace(request.active_workspace).select_related('material'),
+            pk=kwargs['sample_pk'],
+        )
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -308,7 +331,7 @@ class SampleAttachmentMixin:
         return context
 
 
-class AttachmentListView(QuerySetFilterMixin, SampleAttachmentMixin, ListView):
+class AttachmentListView(AppViewMixin, QuerySetFilterMixin, SampleAttachmentMixin, ListView):
     model = SampleAttachment
     template_name = 'samples/attachments/list.html'
     context_object_name = 'attachments'
@@ -358,7 +381,7 @@ class AttachmentListView(QuerySetFilterMixin, SampleAttachmentMixin, ListView):
         return self.filter_queryset(self.sample.attachments.all())
 
 
-class AttachmentDeleteView(SampleAttachmentMixin, DeleteView):
+class AttachmentDeleteView(AppViewMixin, SampleAttachmentMixin, DeleteView):
     model = SampleAttachment
     template_name = 'samples/attachments/confirm_delete.html'
     context_object_name = 'attachment'
@@ -376,7 +399,7 @@ class AttachmentDeleteView(SampleAttachmentMixin, DeleteView):
         return redirect(self.get_success_url())
 
 
-class AttachmentDownloadView(SampleAttachmentMixin, View):
+class AttachmentDownloadView(AppViewMixin, SampleAttachmentMixin, View):
     def get(self, request, *args, **kwargs):
         attachment = get_object_or_404(self.sample.attachments.all(), pk=kwargs['pk'])
         if not attachment.file:

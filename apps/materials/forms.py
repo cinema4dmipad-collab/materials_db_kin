@@ -300,9 +300,9 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             'created_by': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
         }
 
-    def __init__(self, *args, skip_validation=False, **kwargs):
+    def __init__(self, *args, skip_validation=False, workspace=None, **kwargs):
         self.skip_validation = skip_validation
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, workspace=workspace, **kwargs)
         self._initial_struct_type_id = self.instance.struct_type_id if self.instance else None
         self._initial_struct_type = self.instance.struct_type if self.instance else None
         self._initial_struct_props_id = self.instance.struct_props_id if self.instance else None
@@ -498,3 +498,26 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             self.save_tags(material)
             self.save_m2m()
         return material
+
+
+class MaterialVisibilityForm(forms.ModelForm):
+    class Meta:
+        model = Material
+        fields = ('visibility_mode', 'published_workspaces')
+        labels = {
+            'visibility_mode': 'Режим видимости',
+            'published_workspaces': 'Опубликовано в пространствах',
+        }
+        widgets = {
+            'published_workspaces': forms.SelectMultiple(attrs={'class': 'form-select', 'size': 8}),
+            'visibility_mode': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from apps.workspaces.models import Workspace
+
+        self.fields['published_workspaces'].queryset = Workspace.objects.filter(
+            is_active=True,
+        ).order_by('name')
+

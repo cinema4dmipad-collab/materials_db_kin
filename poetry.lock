@@ -93,6 +93,21 @@ django = ">=4.2.9"
 sqlparse = ">=0.2"
 
 [[package]]
+name = "django-guardian"
+version = "3.3.2"
+description = "Per object permissions for Django"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "django_guardian-3.3.2-py3-none-any.whl", hash = "sha256:d5245d6be77a6c632f5b0c739221a44e6469dfa4925c75653ea49cec388e6765"},
+    {file = "django_guardian-3.3.2.tar.gz", hash = "sha256:f8edcf1576eb15d1593e23955693723ef351a7340667f9159e7bec786559c1ab"},
+]
+
+[package.dependencies]
+django = ">=3.2"
+
+[[package]]
 name = "django-storages"
 version = "1.14.6"
 description = "Support for many storage backends in Django"
@@ -349,4 +364,4 @@ zstd = ["backports-zstd (>=1.0.0) ; python_version < \"3.14\""]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13"
-content-hash = "701679666d00dd29dfabf62d009c12b4d15786b157e837d748107d7dfa4cc917"
+content-hash = "28bb4a7520192a4c0f3f99ecc3701e12a5e5f60aef608923367c6d74fad1739c"

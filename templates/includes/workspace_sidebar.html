@@ -1,0 +1,61 @@
+{% load static %}
+<aside class="workspace-sidebar" aria-label="Навигация пространства">
+    <div class="workspace-sidebar__header">
+        <div class="workspace-sidebar__label">Пространство</div>
+        {% if user_workspaces %}
+        <details class="workspace-sidebar__picker"{% if not active_workspace %} open{% endif %}>
+            <summary class="workspace-sidebar__picker-toggle">
+                {% if active_workspace %}
+                <span class="workspace-sidebar__workspace-name">{{ active_workspace.name }}</span>
+                <span class="workspace-sidebar__workspace-slug">{{ active_workspace.slug }}</span>
+                {% else %}
+                <span class="workspace-sidebar__workspace-name">Выберите пространство</span>
+                {% endif %}
+            </summary>
+            <ul class="workspace-sidebar__workspace-list">
+                {% for workspace in user_workspaces %}
+                <li>
+                    <form method="post" action="{% url 'workspaces:switch' workspace.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit"
+                                class="workspace-sidebar__workspace-option{% if active_workspace and workspace.pk == active_workspace.pk %} is-current{% endif %}">
+                            <span class="workspace-sidebar__workspace-option-name">{{ workspace.name }}</span>
+                            <span class="workspace-sidebar__workspace-option-slug">{{ workspace.slug }}</span>
+                        </button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% else %}
+        <p class="workspace-sidebar__empty mb-0">Нет доступных пространств.</p>
+        {% endif %}
+    </div>
+
+    <nav class="workspace-sidebar__nav">
+        {% for section in workspace_nav_sections %}
+        <div class="workspace-sidebar__section">
+            <div class="workspace-sidebar__section-title">{{ section.title }}</div>
+            <ul class="workspace-sidebar__list">
+                {% for item in section.items %}
+                {% if item.visible %}
+                <li>
+                    <a href="{{ item.url }}"
+                       class="workspace-sidebar__link{% if item.active_namespace and request.resolver_match.namespace == item.active_namespace %} is-active{% elif item.active_url_name and request.resolver_match.url_name == item.active_url_name %} is-active{% endif %}">
+                        {{ item.label }}
+                    </a>
+                </li>
+                {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </nav>
+
+    {% if workspace_membership %}
+    <div class="workspace-sidebar__footer">
+        <span class="workspace-sidebar__role">{{ workspace_membership.get_role_display }}</span>
+    </div>
+    {% endif %}
+</aside>

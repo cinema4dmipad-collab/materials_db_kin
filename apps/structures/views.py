@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
@@ -15,6 +16,9 @@ from apps.structures.table_storage import (
     get_row,
     structure_record_label,
 )
+from apps.workspaces.mixins import AppViewMixin
+from apps.workspaces.permissions import is_editable_in_workspace
+from apps.workspaces.services import structure_types_visible_in
 
 
 class StructureTypeMixin:
@@ -22,7 +26,7 @@ class StructureTypeMixin:
 
     def dispatch(self, request, *args, **kwargs):
         self.structure_type = get_object_or_404(
-            StructureType.objects.prefetch_related('fields'),
+            structure_types_visible_in(request.active_workspace).prefetch_related('fields'),
             code=kwargs['type_code'],
             is_active=True,
         )
@@ -47,7 +51,7 @@ class CreatedTableRequiredMixin(StructureTypeMixin):
         return response
 
 
-class StructureTypeSelectView(QuerySetFilterMixin, ListView):
+class StructureTypeSelectView(AppViewMixin, QuerySetFilterMixin, ListView):
     template_name = 'structures/select_type.html'
     context_object_name = 'types'
     search_fields = ('name', 'code', 'description', 'table_name')
@@ -61,13 +65,13 @@ class StructureTypeSelectView(QuerySetFilterMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            StructureType.objects.filter(is_active=True)
+            structure_types_visible_in(self.request.active_workspace)
             .prefetch_related('fields')
             .order_by('name')
         )
 
 
-class StructureRecordListView(CreatedTableRequiredMixin, QuerySetFilterMixin, TemplateView):
+class StructureRecordListView(AppViewMixin, CreatedTableRequiredMixin, QuerySetFilterMixin, TemplateView):
     template_name = 'structures/list.html'
     search_fields = ('label',)
     search_scopes = (
@@ -137,7 +141,7 @@ class StructureRecordListView(CreatedTableRequiredMixin, QuerySetFilterMixin, Te
         return context
 
 
-class StructureRecordCreateView(CreatedTableRequiredMixin, FormView):
+class StructureRecordCreateView(AppViewMixin, CreatedTableRequiredMixin, FormView):
     template_name = 'structures/dynamic_form.html'
     form_class = StructureRecordForm
 
@@ -149,10 +153,14 @@ class StructureRecordCreateView(CreatedTableRequiredMixin, FormView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_edit'] = False
-        context['reference_materials'] = materials_for_picker()
+        context['reference_materials'] = materials_for_picker(self.request.active_workspace)
         return context
 
     def form_valid(self, form):
+        if not is_editable_in_workspace(
+            self.request.user, self.structure_type, self.request.active_workspace
+        ):
+            raise PermissionDenied
         row_id = form.save()
         messages.success(self.request, 'Запись структуры создана.')
         return redirect(
@@ -162,7 +170,7 @@ class StructureRecordCreateView(CreatedTableRequiredMixin, FormView):
         )
 
 
-class StructureRecordDetailView(CreatedTableRequiredMixin, DetailView):
+class StructureRecordDetailView(AppViewMixin, CreatedTableRequiredMixin, DetailView):
     template_name = 'structures/detail.html'
     context_object_name = 'record'
 
@@ -185,7 +193,7 @@ class StructureRecordDetailView(CreatedTableRequiredMixin, DetailView):
         return context
 
 
-class StructureRecordUpdateView(CreatedTableRequiredMixin, FormView):
+class StructureRecordUpdateView(AppViewMixin, CreatedTableRequiredMixin, FormView):
     template_name = 'structures/dynamic_form.html'
     form_class = StructureRecordForm
 
@@ -204,10 +212,14 @@ class StructureRecordUpdateView(CreatedTableRequiredMixin, FormView):
         context['is_edit'] = True
         context['record'] = self.record
         context['record_label'] = structure_record_label(self.record, self.structure_type)
-        context['reference_materials'] = materials_for_picker()
+        context['reference_materials'] = materials_for_picker(self.request.active_workspace)
         return context
 
     def form_valid(self, form):
+        if not is_editable_in_workspace(
+            self.request.user, self.structure_type, self.request.active_workspace
+        ):
+            raise PermissionDenied
         row_id = form.save()
         messages.success(self.request, 'Запись сохранена.')
         return redirect(
@@ -217,7 +229,7 @@ class StructureRecordUpdateView(CreatedTableRequiredMixin, FormView):
         )
 
 
-class StructureRecordDeleteView(CreatedTableRequiredMixin, View):
+class StructureRecordDeleteView(AppViewMixin, CreatedTableRequiredMixin, View):
     template_name = 'structures/confirm_delete.html'
 
     def get(self, request, type_code, pk):
@@ -229,6 +241,8 @@ class StructureRecordDeleteView(CreatedTableRequiredMixin, View):
         return self.render(request, record)
 
     def post(self, request, type_code, pk):
+        if not is_editable_in_workspace(request.user, self.structure_type, request.active_workspace):
+            raise PermissionDenied
         record = get_row(self.structure_type, pk)
         if record is None:
             messages.error(request, 'Запись не найдена.')

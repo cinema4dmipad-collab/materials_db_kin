@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
@@ -9,7 +10,15 @@ from apps.materials.models import Material
 from apps.structures.identifiers import validate_table_name
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
-from apps.structures.type_forms import StructureFieldInlineFormSet, StructureTypeDisplayColorForm, StructureTypeForm
+from apps.structures.type_forms import (
+    StructureFieldInlineFormSet,
+    StructureTypeDisplayColorForm,
+    StructureTypeForm,
+    StructureTypeVisibilityForm,
+)
+from apps.workspaces.mixins import AppViewMixin, SystemAdminRequiredMixin
+from apps.workspaces.permissions import can_manage_structure_types
+from apps.workspaces.services import structure_types_visible_in
 
 
 def _apply_posted_table_name(structure_type, raw_table_name: str) -> str | None:
@@ -70,7 +79,18 @@ class StructureTypeFormsetMixin:
         )
 
 
-class StructureTypeCreateView(StructureTypeFormsetMixin, CreateView):
+class StructureTypeEditableMixin:
+    def get_queryset(self):
+        return structure_types_visible_in(self.request.active_workspace)
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not can_manage_structure_types(self.request.user):
+            raise PermissionDenied
+        return obj
+
+
+class StructureTypeCreateView(SystemAdminRequiredMixin, AppViewMixin, StructureTypeFormsetMixin, CreateView):
     model = StructureType
     form_class = StructureTypeForm
     template_name = 'structures/type_form.html'
@@ -82,7 +102,9 @@ class StructureTypeCreateView(StructureTypeFormsetMixin, CreateView):
 
         try:
             with transaction.atomic():
-                self.object = form.save()
+                self.object = form.save(commit=False)
+                self.object.visibility_mode = 'all_workspaces'
+                self.object.save()
                 field_formset.instance = self.object
                 field_formset.save()
         except Exception as exc:
@@ -100,7 +122,7 @@ class StructureTypeCreateView(StructureTypeFormsetMixin, CreateView):
         return context
 
 
-class StructureTypeUpdateView(StructureTypeFormsetMixin, UpdateView):
+class StructureTypeUpdateView(AppViewMixin, StructureTypeEditableMixin, StructureTypeFormsetMixin, UpdateView):
     model = StructureType
     form_class = StructureTypeForm
     template_name = 'structures/type_form.html'
@@ -109,7 +131,7 @@ class StructureTypeUpdateView(StructureTypeFormsetMixin, UpdateView):
     slug_url_kwarg = 'type_code'
 
     def get_queryset(self):
-        return StructureType.objects.filter(is_active=True)
+        return structure_types_visible_in(self.request.active_workspace).filter(is_active=True)
 
     def dispatch(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -142,18 +164,20 @@ class StructureTypeUpdateView(StructureTypeFormsetMixin, UpdateView):
         return context
 
 
-class StructureTypeManageView(TemplateView):
+class StructureTypeManageView(AppViewMixin, TemplateView):
     template_name = 'structures/type_manage.html'
 
     def get_structure_type(self):
         return get_object_or_404(
-            StructureType.objects.prefetch_related('fields'),
+            structure_types_visible_in(self.request.active_workspace).prefetch_related('fields'),
             code=self.kwargs['type_code'],
             is_active=True,
         )
 
     def post(self, request, type_code):
         structure_type = self.get_structure_type()
+        if not can_manage_structure_types(request.user):
+            raise PermissionDenied
         form = StructureTypeDisplayColorForm(request.POST, instance=structure_type)
         if form.is_valid():
             form.save()
@@ -165,11 +189,14 @@ class StructureTypeManageView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         structure_type = self.get_structure_type()
+        structure_type_is_readonly = not can_manage_structure_types(self.request.user)
         context['structure_type'] = structure_type
+        context['structure_type_is_readonly'] = structure_type_is_readonly
+        context['can_publish_structure_type'] = False
         context['color_form'] = StructureTypeDisplayColorForm(instance=structure_type)
         context['fields'] = structure_type.fields.all()
-        context['can_create_table'] = not structure_type.is_created
-        context['can_drop_table'] = structure_type.is_created
+        context['can_create_table'] = not structure_type.is_created and not structure_type_is_readonly
+        context['can_drop_table'] = structure_type.is_created and not structure_type_is_readonly
         context['linked_materials_count'] = Material.objects.filter(
             struct_type=structure_type,
         ).count()
@@ -180,13 +207,15 @@ class StructureTypeManageView(TemplateView):
         return context
 
 
-class StructureTypeCreateTableView(View):
+class StructureTypeCreateTableView(AppViewMixin, View):
     def post(self, request, type_code):
         structure_type = get_object_or_404(
-            StructureType.objects.prefetch_related('fields'),
+            structure_types_visible_in(request.active_workspace).prefetch_related('fields'),
             code=type_code,
             is_active=True,
         )
+        if not can_manage_structure_types(request.user):
+            raise PermissionDenied
         if structure_type.is_created:
             messages.warning(request, 'SQL-таблица уже создана.')
             return redirect('structures:type_manage', type_code=type_code)
@@ -210,18 +239,20 @@ class StructureTypeCreateTableView(View):
         return HttpResponseNotAllowed(['POST'])
 
 
-class StructureTypeDropTableView(View):
+class StructureTypeDropTableView(AppViewMixin, View):
     template_name = 'structures/type_drop_table_confirm.html'
 
     def get_structure_type(self, type_code):
         return get_object_or_404(
-            StructureType.objects.prefetch_related('fields'),
+            structure_types_visible_in(self.request.active_workspace).prefetch_related('fields'),
             code=type_code,
             is_active=True,
         )
 
     def get(self, request, type_code):
         structure_type = self.get_structure_type(type_code)
+        if not can_manage_structure_types(request.user):
+            raise PermissionDenied
         if not structure_type.is_created:
             messages.warning(request, 'SQL-таблица ещё не создана.')
             return redirect('structures:type_manage', type_code=type_code)
@@ -239,6 +270,8 @@ class StructureTypeDropTableView(View):
 
     def post(self, request, type_code):
         structure_type = self.get_structure_type(type_code)
+        if not can_manage_structure_types(request.user):
+            raise PermissionDenied
         if not structure_type.is_created:
             messages.warning(request, 'SQL-таблица ещё не создана.')
             return redirect('structures:type_manage', type_code=type_code)
@@ -249,3 +282,30 @@ class StructureTypeDropTableView(View):
         else:
             messages.error(request, f'Ошибка: {result["error"]}')
         return redirect('structures:type_manage', type_code=type_code)
+
+
+class StructureTypeVisibilityView(SystemAdminRequiredMixin, AppViewMixin, UpdateView):
+    model = StructureType
+    form_class = StructureTypeVisibilityForm
+    template_name = 'structures/type_visibility.html'
+    context_object_name = 'structure_type'
+    slug_field = 'code'
+    slug_url_kwarg = 'type_code'
+
+    def get_queryset(self):
+        return structure_types_visible_in(self.request.active_workspace).filter(is_active=True)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['cancel_url'] = reverse(
+            'structures:type_manage',
+            kwargs={'type_code': self.object.code},
+        )
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Настройки видимости типа структуры сохранены.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse('structures:type_manage', kwargs={'type_code': self.object.code})

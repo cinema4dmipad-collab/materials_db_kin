@@ -7,9 +7,10 @@ from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
 from apps.references.forms import PropertyForm
 from apps.references.models import Property, PropertyGroup
+from apps.workspaces.mixins import AppViewMixin
 
 
-class PropertyListView(QuerySetFilterMixin, ListView):
+class PropertyListView(AppViewMixin, QuerySetFilterMixin, ListView):
     model = Property
     template_name = 'references/property_list.html'
     context_object_name = 'properties'
@@ -42,7 +43,7 @@ class PropertyListView(QuerySetFilterMixin, ListView):
         }
 
 
-class PropertyCreateView(CreateView):
+class PropertyCreateView(AppViewMixin, CreateView):
     model = Property
     form_class = PropertyForm
     template_name = 'references/property_form.html'
@@ -80,7 +81,7 @@ class PropertyCreateView(CreateView):
         return super().form_valid(form)
 
 
-class PropertyUpdateView(UpdateView):
+class PropertyUpdateView(AppViewMixin, UpdateView):
     model = Property
     form_class = PropertyForm
     template_name = 'references/property_form.html'
@@ -99,7 +100,7 @@ class PropertyUpdateView(UpdateView):
         return reverse_lazy('references:list')
 
 
-class PropertyDeleteView(DeleteView):
+class PropertyDeleteView(AppViewMixin, DeleteView):
     model = Property
     template_name = 'references/property_confirm_delete.html'
     context_object_name = 'property_obj'

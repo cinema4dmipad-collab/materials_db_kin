@@ -4,6 +4,7 @@ import tempfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from django.db import connection
 from django.test import TestCase, override_settings
 
 from django.urls import reverse
@@ -48,26 +49,19 @@ class SampleModelTests(TestCase):
 
         self.assertFalse(Sample.objects.filter(pk=sample_id).exists())
 
-@override_settings(
-
-    STORAGES={
-
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-
-    },
-
-)
-
 class SampleDeleteRemovesScanFilesTests(TestCase):
 
     def setUp(self):
-
         self.media_root = tempfile.mkdtemp()
-
-        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
-
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
         self.settings_override.enable()
 
         self.material = Material.objects.create(code='MAT-SMP-002', name='Cascade material')
@@ -108,26 +102,19 @@ class SampleDeleteRemovesScanFilesTests(TestCase):
 
         self.assertFalse(self.scan.file.storage.exists(self.file_name))
 
-@override_settings(
-
-    STORAGES={
-
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-
-    },
-
-)
-
 class SampleViewsTests(TestCase):
 
     def setUp(self):
-
         self.media_root = tempfile.mkdtemp()
-
-        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
-
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
         self.settings_override.enable()
 
         self.material = Material.objects.create(code='MAT-SMP-003', name='View material')
@@ -200,26 +187,19 @@ class ScanFileValidationTests(TestCase):
 
         validate_scan_file(make_hdf5_upload('scan.hdf5'))
 
-@override_settings(
-
-    STORAGES={
-
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-
-    },
-
-)
-
 class ScanRecordModelTests(TestCase):
 
     def setUp(self):
-
         self.media_root = tempfile.mkdtemp()
-
-        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
-
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
         self.settings_override.enable()
 
         self.material = Material.objects.create(code='MAT-SCN-001', name='Scan material')
@@ -278,26 +258,20 @@ class ScanRecordModelTests(TestCase):
 
         self.assertFalse(scan.file.storage.exists(file_name))
 
-@override_settings(
-
-    STORAGES={
-
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-
-    },
-
-)
-
 class ScanViewsTests(TestCase):
 
     def setUp(self):
-
+        connection.ensure_connection()
         self.media_root = tempfile.mkdtemp()
-
-        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
-
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
         self.settings_override.enable()
 
         self.material = Material.objects.create(code='MAT-SCN-002', name='Upload material')
@@ -383,10 +357,7 @@ class ScanViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('attachment', response['Content-Disposition'])
         self.assertNotIn('seaweedfs', download_url)
-        try:
-            self.assertTrue(b''.join(response.streaming_content))
-        finally:
-            response.close()
+        self.assertTrue(b''.join(response.streaming_content))
 
     def test_list_page_uses_app_download_url(self):
         scan = ScanRecord.objects.create(

@@ -7,7 +7,8 @@ from apps.core.widgets import TagNamesWidget
 class TagNamesFormMixin:
     tag_field_name = 'tag_names'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, workspace=None, **kwargs):
+        self.tag_workspace = workspace
         super().__init__(*args, **kwargs)
         self._setup_tag_names_field()
 
@@ -16,12 +17,20 @@ class TagNamesFormMixin:
         if getattr(self.instance, 'pk', None):
             initial = format_tags_for_input(self.instance.tags.all())
 
+        widget_kwargs = {}
+        if self.tag_workspace is not None:
+            from apps.workspaces.services import tags_in_workspace
+
+            widget_kwargs['tag_suggestions'] = list(
+                tags_in_workspace(self.tag_workspace).values('name', 'slug')
+            )
+
         self.fields[self.tag_field_name] = forms.CharField(
             required=False,
             label='Теги',
             help_text='Введите название и нажмите Enter, или выберите из списка. Повторный клик по тегу убирает его.',
             initial=initial,
-            widget=TagNamesWidget(),
+            widget=TagNamesWidget(**widget_kwargs),
         )
 
     def clean_tag_names(self):
@@ -33,7 +42,7 @@ class TagNamesFormMixin:
         if not hasattr(instance, 'tags'):
             return
         names = self.cleaned_data.get(self.tag_field_name, [])
-        assign_tags(instance, names)
+        assign_tags(instance, names, workspace=self.tag_workspace)
 
     def save(self, commit=True):
         instance = super().save(commit=commit)

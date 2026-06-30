@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 from apps.materials.models import Material
@@ -17,12 +18,20 @@ class Sample(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=50)
     name = models.CharField(max_length=200)
     material = models.ForeignKey(
         Material,
         on_delete=models.CASCADE,
         related_name='samples',
+    )
+    workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='samples',
+        verbose_name='Пространство',
     )
     object_type = models.CharField(
         max_length=50,
@@ -32,6 +41,14 @@ class Sample(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.CharField(max_length=100, blank=True)
+    created_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_samples',
+        verbose_name='Создал (пользователь)',
+    )
 
     tags = models.ManyToManyField(
         'core.Tag',
@@ -42,6 +59,12 @@ class Sample(models.Model):
 
     class Meta:
         ordering = ['code']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['workspace', 'code'],
+                name='unique_sample_code_per_workspace',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.code} - {self.name}'

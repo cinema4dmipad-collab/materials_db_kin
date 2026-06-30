@@ -8,6 +8,10 @@ _BOOTSTRAP_INPUT = {'class': 'form-control'}
 
 
 class TagForm(forms.ModelForm):
+    def __init__(self, *args, workspace=None, **kwargs):
+        self.workspace = workspace
+        super().__init__(*args, **kwargs)
+
     class Meta:
         model = Tag
         fields = ['name']
@@ -18,7 +22,7 @@ class TagForm(forms.ModelForm):
             'name': 'Название',
         }
         help_texts = {
-            'name': 'Название должно быть уникальным.',
+            'name': 'Название должно быть уникальным в пределах пространства.',
         }
 
     def clean_name(self):
@@ -31,21 +35,23 @@ class TagForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         name = cleaned_data.get('name')
-        if not name:
+        if not name or self.workspace is None:
             return cleaned_data
 
         slug = tag_slug_from_name(name)
-        queryset = Tag.objects.filter(slug=slug)
+        queryset = Tag.objects.filter(slug=slug, workspace=self.workspace)
         if self.instance.pk:
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
             existing = queryset.first()
-            self.add_error('name', f'Тег «{existing.name}» уже существует.')
+            self.add_error('name', f'Тег «{existing.name}» уже существует в этом пространстве.')
         return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.slug = tag_slug_from_name(instance.name)
+        if self.workspace is not None and not instance.workspace_id:
+            instance.workspace = self.workspace
         if commit:
             instance.save()
         return instance

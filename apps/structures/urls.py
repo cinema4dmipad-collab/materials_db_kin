@@ -6,6 +6,7 @@ from apps.structures.type_views import (
     StructureTypeDropTableView,
     StructureTypeManageView,
     StructureTypeUpdateView,
+    StructureTypeVisibilityView,
 )
 from apps.structures.views import (
     StructureRecordCreateView,
@@ -22,6 +23,7 @@ urlpatterns = [
     path('', StructureTypeSelectView.as_view(), name='select_type'),
     path('types/create/', StructureTypeCreateView.as_view(), name='type_create'),
     path('types/<slug:type_code>/', StructureTypeManageView.as_view(), name='type_manage'),
+    path('types/<slug:type_code>/visibility/', StructureTypeVisibilityView.as_view(), name='type_visibility'),
     path('types/<slug:type_code>/edit/', StructureTypeUpdateView.as_view(), name='type_edit'),
     path(
         'types/<slug:type_code>/create-table/',

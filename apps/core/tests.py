@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, TestCase, modify_settings, override_settings
 from django.urls import reverse
 
 from apps.core.list_filters import (
@@ -56,6 +56,8 @@ from apps.core.tag_utils import assign_tags, get_or_create_tags, parse_tag_input
 from apps.materials.models import Material
 from apps.samples.models import Sample
 from apps.structures.models import StructureType
+from apps.workspaces.services import ensure_legacy_workspace
+from apps.workspaces.test_utils import AuthenticatedWorkspaceTestCase, login_test_client
 
 
 class _SampleFilterView(QuerySetFilterMixin):
@@ -78,22 +80,32 @@ class _SampleFilterView(QuerySetFilterMixin):
 
 
 class TagFormTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.workspace = ensure_legacy_workspace()
+
     def test_generates_slug_from_name(self):
-        form = TagForm(data={'name': 'T700 test'})
+        form = TagForm(data={'name': 'T700 test'}, workspace=self.workspace)
         self.assertTrue(form.is_valid(), form.errors)
         tag = form.save()
         self.assertEqual(tag.slug, 't700-test')
+        self.assertEqual(tag.workspace, self.workspace)
 
     def test_rejects_duplicate_slug(self):
-        Tag.objects.create(name='Prepreg', slug='prepreg')
-        form = TagForm(data={'name': 'PREPREG'})
+        Tag.objects.create(name='Prepreg', slug='prepreg', workspace=self.workspace)
+        form = TagForm(data={'name': 'PREPREG'}, workspace=self.workspace)
         self.assertFalse(form.is_valid())
         self.assertIn('name', form.errors)
 
 
-class TagViewsTests(TestCase):
+class TagViewsTests(AuthenticatedWorkspaceTestCase):
     def setUp(self):
-        self.tag = Tag.objects.create(name='Prepreg', slug='prepreg')
+        super().setUp()
+        self.tag = Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            workspace=self.workspace,
+        )
 
     def test_tag_list_renders(self):
         response = self.client.get(reverse('core:tag_list'))
@@ -122,6 +134,10 @@ class TagViewsTests(TestCase):
 
 
 class TagUtilsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.workspace = ensure_legacy_workspace()
+
     def test_parse_tag_input_splits_and_deduplicates(self):
         names = parse_tag_input(' prepreg, T700; prepreg , lab ')
         self.assertEqual(names, ['prepreg', 'T700', 'lab'])
@@ -131,8 +147,8 @@ class TagUtilsTests(TestCase):
         self.assertEqual(slug, 't700-test')
 
     def test_get_or_create_tags_reuses_existing_slug(self):
-        Tag.objects.create(name='Prepreg', slug='prepreg')
-        tags = get_or_create_tags(['prepreg', 'PREPREG'])
+        Tag.objects.create(name='Prepreg', slug='prepreg', workspace=self.workspace)
+        tags = get_or_create_tags(['prepreg', 'PREPREG'], self.workspace)
         self.assertEqual(len(tags), 1)
         self.assertEqual(tags[0].slug, 'prepreg')
 
@@ -152,6 +168,10 @@ class NumberUtilsTests(TestCase):
 
 
 class TagAssignmentTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.workspace = ensure_legacy_workspace()
+
     def setUp(self):
         self.structure_type = StructureType.objects.create(
             name='Composite',
@@ -162,10 +182,11 @@ class TagAssignmentTests(TestCase):
             code='MAT-TAG-001',
             name='Tagged material',
             struct_type=self.structure_type,
+            home_workspace=self.workspace,
         )
 
     def test_assign_tags_to_material(self):
-        assign_tags(self.material, ['prepreg', 'T700'])
+        assign_tags(self.material, ['prepreg', 'T700'], workspace=self.workspace)
         self.assertEqual(self.material.tags.count(), 2)
         self.assertTrue(self.material.tags.filter(slug='prepreg').exists())
 
@@ -185,6 +206,10 @@ class _SampleFilterViewWithObjectType(_SampleFilterView):
 
 
 class QuerySetFilterMixinTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.workspace = ensure_legacy_workspace()
+
     def setUp(self):
         self.structure_type = StructureType.objects.create(
             name='Composite',
@@ -195,21 +220,29 @@ class QuerySetFilterMixinTests(TestCase):
             code='MAT-FILTER-001',
             name='Filter material',
             struct_type=self.structure_type,
+            home_workspace=self.workspace,
         )
         self.sample_a = Sample.objects.create(
             code='SMP-FILTER-A',
             name='Alpha sample',
             material=self.material,
             object_type='test',
+            workspace=self.workspace,
         )
         self.sample_b = Sample.objects.create(
             code='SMP-FILTER-B',
             name='Beta sample',
             material=self.material,
             object_type='control',
+            workspace=self.workspace,
         )
-        assign_tags(self.sample_a, ['lab'])
-        assign_tags(self.sample_b, ['field'])
+        assign_tags(self.sample_a, ['lab'], workspace=self.workspace)
+        assign_tags(self.sample_b, ['field'], workspace=self.workspace)
+
+    def _request(self, path, params=None):
+        request = RequestFactory().get(path, params or {})
+        request.active_workspace = self.workspace
+        return request
 
     def test_filters_samples_by_search_query(self):
         request = RequestFactory().get('/samples/', {'q': 'Alpha'})
@@ -228,8 +261,8 @@ class QuerySetFilterMixinTests(TestCase):
         self.assertEqual(queryset.get().code, 'SMP-FILTER-B')
 
     def test_filters_samples_by_tag_slug(self):
-        lab_tag = Tag.objects.get(slug='lab')
-        request = RequestFactory().get('/samples/', {'tag': lab_tag.slug})
+        lab_tag = Tag.objects.get(slug='lab', workspace=self.workspace)
+        request = self._request('/samples/', {'tag': lab_tag.slug})
         view = _SampleFilterView(request)
         queryset = view.filter_queryset(Sample.objects.all())
 
@@ -237,20 +270,20 @@ class QuerySetFilterMixinTests(TestCase):
         self.assertEqual(queryset.get().code, 'SMP-FILTER-A')
 
     def test_filters_samples_by_multiple_tags(self):
-        assign_tags(self.sample_a, ['lab', 'field'])
-        request = RequestFactory().get('/samples/', [('tag', 'lab'), ('tag', 'field')])
+        assign_tags(self.sample_a, ['lab', 'field'], workspace=self.workspace)
+        request = self._request('/samples/', [('tag', 'lab'), ('tag', 'field')])
         view = _SampleFilterView(request)
         queryset = view.filter_queryset(Sample.objects.all())
 
         self.assertEqual(queryset.count(), 1)
         self.assertEqual(queryset.get().code, 'SMP-FILTER-A')
 
-        request = RequestFactory().get('/samples/', [('tag', 'lab'), ('tag', 'missing-tag')])
+        request = self._request('/samples/', [('tag', 'lab'), ('tag', 'missing-tag')])
         view = _SampleFilterView(request)
         self.assertEqual(view.filter_queryset(Sample.objects.all()).count(), 0)
 
     def test_search_includes_tag_names(self):
-        request = RequestFactory().get('/samples/', {'q': 'field'})
+        request = self._request('/samples/', {'q': 'field'})
         view = _SampleFilterView(request)
         queryset = view.filter_queryset(Sample.objects.all())
 
@@ -412,6 +445,9 @@ class AppVersionTests(TestCase):
 
 class DebugPageTests(TestCase):
     def setUp(self):
+        from apps.workspaces.models import Workspace, WorkspaceMembership, WorkspaceRole
+        from apps.workspaces.services import ensure_legacy_workspace
+
         user_model = get_user_model()
         self.staff_user = user_model.objects.create_user(
             username='diagnostics_staff',
@@ -422,7 +458,15 @@ class DebugPageTests(TestCase):
             username='diagnostics_user',
             password='test-pass',
         )
+        workspace = ensure_legacy_workspace()
+        for user in (self.staff_user, self.regular_user):
+            WorkspaceMembership.objects.get_or_create(
+                workspace=workspace,
+                user=user,
+                defaults={'role': WorkspaceRole.OPERATOR},
+            )
 
+    @modify_settings(MIDDLEWARE={'remove': 'apps.workspaces.middleware.TestAutoLoginMiddleware'})
     def test_debug_page_requires_staff(self):
         response = self.client.get(reverse('core:debug'))
         self.assertEqual(response.status_code, 302)

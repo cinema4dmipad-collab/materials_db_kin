@@ -1,4 +1,7 @@
 <form method="get" class="list-filter-panel">
+    {% for name, value in list_filter_preserve_params %}
+    <input type="hidden" name="{{ name }}" value="{{ value }}">
+    {% endfor %}
     {% for tag in active_tags %}
     <input type="hidden" name="tag" value="{{ tag.slug }}">
     {% endfor %}

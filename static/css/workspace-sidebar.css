@@ -1,0 +1,191 @@
+.workspace-sidebar {
+    width: 260px;
+    min-height: calc(100vh - 120px);
+    background: var(--kx-surface);
+    border: 1px solid var(--kx-border);
+    border-radius: 8px;
+    padding: 1rem 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.workspace-sidebar__header {
+    padding: 0 1rem 1rem;
+    border-bottom: 1px solid var(--kx-border);
+    margin-bottom: 0.75rem;
+}
+
+.workspace-sidebar__label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--kx-text-subtle);
+    margin-bottom: 0.25rem;
+}
+
+.workspace-sidebar__workspace-name {
+    font-weight: 600;
+    color: var(--kx-text);
+    display: block;
+}
+
+.workspace-sidebar__workspace-slug {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--kx-text-muted);
+    font-weight: 400;
+    margin-top: 0.15rem;
+}
+
+.workspace-sidebar__picker {
+    margin: 0;
+}
+
+.workspace-sidebar__picker-toggle {
+    list-style: none;
+    cursor: pointer;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--kx-border);
+    border-radius: 6px;
+    background: var(--kx-bg);
+}
+
+.workspace-sidebar__picker-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.workspace-sidebar__picker-toggle::after {
+    content: '▾';
+    float: right;
+    color: var(--kx-text-muted);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.workspace-sidebar__picker[open] .workspace-sidebar__picker-toggle::after {
+    content: '▴';
+}
+
+.workspace-sidebar__picker-toggle:hover {
+    border-color: var(--kx-brand);
+    background: var(--kx-brand-soft);
+}
+
+.workspace-sidebar__workspace-list {
+    list-style: none;
+    margin: 0.35rem 0 0;
+    padding: 0;
+    border: 1px solid var(--kx-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.workspace-sidebar__workspace-list form {
+    margin: 0;
+}
+
+.workspace-sidebar__workspace-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    border-bottom: 1px solid var(--kx-border);
+    background: var(--kx-surface);
+    padding: 0.55rem 0.65rem;
+    cursor: pointer;
+}
+
+.workspace-sidebar__workspace-list li:last-child .workspace-sidebar__workspace-option {
+    border-bottom: 0;
+}
+
+.workspace-sidebar__workspace-option:hover {
+    background: var(--kx-brand-soft);
+}
+
+.workspace-sidebar__workspace-option.is-current {
+    background: var(--kx-brand-soft);
+    box-shadow: inset 3px 0 0 var(--kx-brand);
+}
+
+.workspace-sidebar__workspace-option-name {
+    display: block;
+    font-weight: 600;
+    color: var(--kx-text);
+}
+
+.workspace-sidebar__workspace-option-slug {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--kx-text-muted);
+    margin-top: 0.1rem;
+}
+
+.workspace-sidebar__empty {
+    font-size: 0.875rem;
+    color: var(--kx-text-muted);
+}
+
+.workspace-sidebar__switch {
+    font-size: 0.875rem;
+}
+
+.workspace-sidebar__section {
+    margin-bottom: 0.75rem;
+}
+
+.workspace-sidebar__section-title {
+    padding: 0.35rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--kx-text-muted);
+}
+
+.workspace-sidebar__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.workspace-sidebar__link {
+    display: block;
+    padding: 0.45rem 1rem;
+    color: var(--kx-text);
+    text-decoration: none;
+    border-left: 3px solid transparent;
+}
+
+.workspace-sidebar__link:hover {
+    background: var(--kx-brand-soft);
+    color: var(--kx-brand-dark);
+}
+
+.workspace-sidebar__link.is-active {
+    background: var(--kx-brand-soft);
+    border-left-color: var(--kx-brand);
+    color: var(--kx-brand-dark);
+    font-weight: 600;
+}
+
+.workspace-sidebar__footer {
+    margin-top: auto;
+    padding: 0.75rem 1rem 0;
+    border-top: 1px solid var(--kx-border);
+}
+
+.workspace-sidebar__role {
+    font-size: 0.875rem;
+    color: var(--kx-text-muted);
+}
+
+.app-layout-with-sidebar {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+}
+
+.app-layout-with-sidebar__content {
+    flex: 1;
+    min-width: 0;
+}
