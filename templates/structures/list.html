@@ -22,6 +22,7 @@
                 <thead>
                     <tr>
                         <th>Название</th>
+                        <th>Создал</th>
                         <th>Создана</th>
                         <th class="text-end">Действия</th>
                     </tr>
@@ -32,11 +33,14 @@
                         <td>
                             <a href="{% url 'structures:detail' structure_type.code item.id %}">{{ item.label }}</a>
                         </td>
+                        <td>{{ item.created_by|default:"—" }}</td>
                         <td>{{ item.created_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end">
                             <div class="table-actions">
-                            <a href="{% url 'structures:detail' structure_type.code item.id %}" class="btn btn-sm btn-outline-secondary btn-action-view">Открыть</a>
-                            <a href="{% url 'structures:edit' structure_type.code item.id %}" class="btn btn-sm btn-outline-primary btn-action-edit">Изменить</a>
+                            {% url 'structures:detail' structure_type.code item.id as structure_detail_url %}
+                            {% include 'includes/table_action_icon.html' with action='open' url=structure_detail_url title='Открыть' %}
+                            {% url 'structures:edit' structure_type.code item.id as structure_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=structure_edit_url title='Изменить' %}
                             </div>
                         </td>
                     </tr>

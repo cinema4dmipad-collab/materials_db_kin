@@ -18,6 +18,7 @@ from apps.scans.models import ScanRecord
 from apps.scans.test_utils import make_hdf5_upload
 
 from apps.scans.validators import MAX_SCAN_FILE_SIZE, validate_scan_file
+from apps.workspaces.services import ensure_legacy_workspace
 
 class SampleModelTests(TestCase):
 
@@ -117,16 +118,18 @@ class SampleViewsTests(TestCase):
         )
         self.settings_override.enable()
 
-        self.material = Material.objects.create(code='MAT-SMP-003', name='View material')
+        self.legacy_workspace = ensure_legacy_workspace()
+        self.material = Material.objects.create(
+            code='MAT-SMP-003',
+            name='View material',
+            home_workspace=self.legacy_workspace,
+        )
 
         self.sample = Sample.objects.create(
-
             code='SMP-VIEW-001',
-
             name='View sample',
-
             material=self.material,
-
+            workspace=self.legacy_workspace,
         )
 
     def tearDown(self):
@@ -274,16 +277,18 @@ class ScanViewsTests(TestCase):
         )
         self.settings_override.enable()
 
-        self.material = Material.objects.create(code='MAT-SCN-002', name='Upload material')
+        self.legacy_workspace = ensure_legacy_workspace()
+        self.material = Material.objects.create(
+            code='MAT-SCN-002',
+            name='Upload material',
+            home_workspace=self.legacy_workspace,
+        )
 
         self.sample = Sample.objects.create(
-
             code='SMP-SCN-002',
-
             name='Upload sample',
-
             material=self.material,
-
+            workspace=self.legacy_workspace,
         )
 
     def tearDown(self):
@@ -346,6 +351,7 @@ class ScanViewsTests(TestCase):
             title='Download scan',
             method='echo',
             file=make_hdf5_upload('download.h5'),
+            workspace=self.legacy_workspace,
         )
         download_url = reverse(
             'scans:download',
@@ -365,6 +371,7 @@ class ScanViewsTests(TestCase):
             title='Listed scan',
             method='echo',
             file=make_hdf5_upload('listed.h5'),
+            workspace=self.legacy_workspace,
         )
         list_url = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
         download_url = reverse(
@@ -384,12 +391,14 @@ class ScanViewsTests(TestCase):
             title='Echo scan',
             method='echo',
             file=make_hdf5_upload('echo.h5'),
+            workspace=self.legacy_workspace,
         )
         ScanRecord.objects.create(
             sample=self.sample,
             title='Shadow scan',
             method='shadow',
             file=make_hdf5_upload('shadow.h5'),
+            workspace=self.legacy_workspace,
         )
 
         response = self.client.get(
@@ -408,12 +417,14 @@ class ScanViewsTests(TestCase):
             title='Echo scan',
             method='echo',
             file=make_hdf5_upload('echo-list.h5'),
+            workspace=self.legacy_workspace,
         )
         ScanRecord.objects.create(
             sample=self.sample,
             title='Shadow scan',
             method='shadow',
             file=make_hdf5_upload('shadow-list.h5'),
+            workspace=self.legacy_workspace,
         )
 
         response = self.client.get(
@@ -478,6 +489,7 @@ class ScanViewsTests(TestCase):
             sample=self.sample,
             title=f'{self.sample.name} #0001',
             method='echo',
+            workspace=self.legacy_workspace,
         )
         create_url = reverse('scans:create', kwargs={'sample_pk': self.sample.pk})
         response = self.client.get(create_url)

@@ -7,12 +7,16 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.core.creator import assign_creator
 from apps.core.file_download import build_file_download_response
 
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
+    DEFAULT_CREATOR_FILTER,
     OBJECT_TYPE_SEARCH_SCOPE,
     TAG_SEARCH_SCOPE,
+    UPLOADED_BY_CREATOR_FILTER,
     QuerySetFilterMixin,
     build_choice_label_filter,
 )
@@ -147,7 +151,7 @@ class SampleFormsetMixin:
             with transaction.atomic():
                 if not is_update:
                     form.instance.workspace = self.request.active_workspace
-                    form.instance.created_by_user = self.request.user
+                    assign_creator(form.instance, self.request.user)
                 self.object = form.save()
                 formset = SamplePropertyFormSet(
                     self.request.POST,
@@ -199,6 +203,7 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
         ('name', 'Название', ('name',)),
         ('material', 'Материал', ('material__code', 'material__name')),
         (OBJECT_TYPE_SEARCH_SCOPE, 'Тип объекта', ()),
+        (CREATOR_SEARCH_SCOPE, 'Создал', ()),
         (TAG_SEARCH_SCOPE, 'Тег', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
@@ -208,7 +213,7 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
     def get_queryset(self):
         return self.filter_queryset(
             samples_in_workspace(self.request.active_workspace)
-            .select_related('material', 'material__struct_type')
+            .select_related('material', 'material__struct_type', 'created_by_user')
             .prefetch_related('tags')
         )
 
@@ -221,6 +226,7 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
                 Sample.OBJECT_TYPES,
                 'object_type',
             ),
+            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
         }
 
 
@@ -233,7 +239,7 @@ class SampleDetailView(AppViewMixin, DetailView):
     def get_queryset(self):
         return (
             samples_in_workspace(self.request.active_workspace)
-            .select_related('material', 'material__struct_type')
+            .select_related('material', 'material__struct_type', 'created_by_user')
             .prefetch_related('tags')
         )
 
@@ -272,7 +278,12 @@ class SampleCreateView(AppViewMixin, SampleFormsetMixin, CreateView):
         initial = super().get_initial()
         material_id = self.request.GET.get('material')
         if material_id:
-            initial['material'] = material_id
+            from apps.materials.picker_data import materials_for_picker_queryset
+
+            if materials_for_picker_queryset(
+                self.request.active_workspace,
+            ).filter(pk=material_id).exists():
+                initial['material'] = material_id
         return initial
 
     def get_success_url(self):
@@ -341,8 +352,14 @@ class AttachmentListView(AppViewMixin, QuerySetFilterMixin, SampleAttachmentMixi
         ('title', 'Название', ('title',)),
         ('description', 'Описание', ('description',)),
         ('file', 'Файл', ('file',)),
+        (CREATOR_SEARCH_SCOPE, 'Загрузил', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
+
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER,
+        }
 
     def get_attachment_form(self):
         if hasattr(self, '_attachment_form'):
@@ -364,6 +381,7 @@ class AttachmentListView(AppViewMixin, QuerySetFilterMixin, SampleAttachmentMixi
         if form.is_valid():
             attachment = form.save(commit=False)
             attachment.sample = self.sample
+            assign_creator(attachment, request.user)
             attachment.save()
             messages.success(request, 'Файл прикреплён к образцу.')
             return redirect('attachments:list', sample_pk=self.sample.pk)

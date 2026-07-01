@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}Сканы — {{ sample.code }}{% endblock %}
 
@@ -20,6 +21,7 @@
                         <th>Метод</th>
                         <th>Теги</th>
                         <th>Файл</th>
+                        <th>Загрузил</th>
                         <th>Загружен</th>
                         <th class="text-end">Действия</th>
                     </tr>
@@ -36,12 +38,16 @@
                             <span class="file-badge file-badge--hdf5">HDF5</span>
                             {{ scan.filename }}
                         </td>
+                        <td>{% include 'includes/creator_filter_link.html' with obj=scan %}</td>
                         <td>{{ scan.uploaded_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end">
                             <div class="table-actions">
-                            <a href="{% url 'scans:download' sample.pk scan.pk %}" class="btn btn-outline-secondary btn-sm btn-action-view file-download-link" data-download-name="{{ scan.filename }}">Скачать</a>
-                            <a href="{% url 'scans:edit' sample.pk scan.pk %}" class="btn btn-outline-primary btn-sm btn-action-edit">Изменить</a>
-                            <a href="{% url 'scans:delete' sample.pk scan.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+                            {% url 'scans:download' sample.pk scan.pk as scan_download_url %}
+                            {% include 'includes/table_action_icon.html' with action='download' url=scan_download_url title='Скачать' extra_class='file-download-link btn-action-download' download_name=scan.filename %}
+                            {% url 'scans:edit' sample.pk scan.pk as scan_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=scan_edit_url title='Изменить' %}
+                            {% url 'scans:delete' sample.pk scan.pk as scan_delete_url %}
+                            {% include 'includes/table_action_icon.html' with action='delete' url=scan_delete_url title='Удалить' %}
                             </div>
                         </td>
                     </tr>

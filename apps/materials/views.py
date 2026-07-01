@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseRedirect, JsonResponse
@@ -8,7 +8,15 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView, View
 
-from apps.core.list_filters import ALL_SEARCH_SCOPE, STRUCT_TYPE_SEARCH_SCOPE, TAG_SEARCH_SCOPE, QuerySetFilterMixin
+from apps.core.list_filters import (
+    ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
+    DEFAULT_CREATOR_FILTER,
+    STRUCT_TYPE_SEARCH_SCOPE,
+    TAG_SEARCH_SCOPE,
+    QuerySetFilterMixin,
+)
+from apps.core.creator import assign_creator
 from apps.materials.form_validation import (
     build_material_form_validation_summary,
     validation_flash_message,
@@ -23,13 +31,20 @@ from apps.materials.forms import (
 from apps.core.property_form_display import enrich_property_form_display
 from apps.core.number_utils import format_decimal_display
 from apps.materials.models import Material
+from apps.materials.services import can_clone_material_to_workspace, clone_material_to_workspace
 from apps.materials.structure_display import get_material_structure_context, serialize_structure_context
 from apps.structures.models import StructureType
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.property_mapping import reference_properties_for_picker
 from apps.structures.picker_data import structure_types_for_picker
 from apps.workspaces.mixins import AppViewMixin, PermissionRequiredMixin
-from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm, is_editable_in_workspace
+from apps.workspaces.permissions import (
+    WorkspacePerm,
+    can_delete_in_workspace,
+    has_workspace_perm,
+    is_editable_in_workspace,
+)
+from apps.workspaces.visibility import VisibilityMode
 from apps.workspaces.services import materials_owned_by, materials_shared_in, materials_visible_in, structure_types_visible_in
 
 
@@ -45,9 +60,20 @@ class MaterialFormsetMixin:
             return material.home_workspace
         return self.request.active_workspace
 
+    def _visibility_form_kwargs(self):
+        return {
+            'show_visibility': isinstance(self, CreateView),
+            'can_publish': has_workspace_perm(
+                self.request.user,
+                self.request.active_workspace,
+                WorkspacePerm.MATERIAL_PUBLISH,
+            ),
+        }
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['workspace'] = self.get_tag_workspace()
+        kwargs.update(self._visibility_form_kwargs())
         return kwargs
 
     def get_initial(self):
@@ -105,6 +131,7 @@ class MaterialFormsetMixin:
             kwargs['data'] = self.request.POST
         if getattr(self, 'object', None):
             kwargs['instance'] = self.object
+        kwargs['workspace'] = self.request.active_workspace
         return formset_class(**kwargs)
 
     def get_context_data(self, **kwargs):
@@ -179,6 +206,7 @@ class MaterialFormsetMixin:
             instance=instance,
             skip_validation=True,
             workspace=self.get_tag_workspace(instance),
+            **self._visibility_form_kwargs(),
         )
         formset = MaterialPropertyFormSet(
             self.request.POST,
@@ -190,6 +218,7 @@ class MaterialFormsetMixin:
             layer_kwargs = {
                 'instance': instance,
                 'prefix': 'layers',
+                'workspace': self.request.active_workspace,
             }
             if self._has_formset_management_data('layers'):
                 layer_kwargs['data'] = self.request.POST
@@ -213,7 +242,9 @@ class MaterialFormsetMixin:
             with transaction.atomic():
                 if not is_update:
                     form.instance.home_workspace = self.request.active_workspace
-                    form.instance.created_by_user = self.request.user
+                    assign_creator(form.instance, self.request.user)
+                    if not form.show_visibility:
+                        form.instance.visibility_mode = VisibilityMode.PRIVATE
                 self.object = form.save()
                 formset = MaterialPropertyFormSet(
                     self.request.POST,
@@ -224,6 +255,7 @@ class MaterialFormsetMixin:
                     layer_kwargs = {
                         'instance': self.object,
                         'prefix': 'layers',
+                        'workspace': self.request.active_workspace,
                     }
                     if self._has_formset_management_data('layers'):
                         layer_kwargs['data'] = self.request.POST
@@ -277,6 +309,7 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
         ('name', 'Название', ('name',)),
         ('description', 'Описание', ('description',)),
         (STRUCT_TYPE_SEARCH_SCOPE, 'Тип структуры', ('struct_type__name',)),
+        (CREATOR_SEARCH_SCOPE, 'Создал', ()),
         (TAG_SEARCH_SCOPE, 'Тег', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
@@ -307,7 +340,8 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
         else:
             base_qs = materials_owned_by(workspace)
         return self.filter_queryset(
-            base_qs.select_related('struct_type', 'home_workspace').prefetch_related('tags')
+            base_qs.select_related('struct_type', 'home_workspace', 'created_by_user')
+            .prefetch_related('tags')
         )
 
     def get_context_data(self, **kwargs):
@@ -338,7 +372,30 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
             params['scope'] = scope
         context['pagination_query'] = params.urlencode()
         context['filter_reset_url'] = self.get_scope_url(scope)
+        materials = context.get('materials') or context.get('object_list') or []
+        user = self.request.user
+        workspace = self.request.active_workspace
+        context['material_editable_pks'] = {
+            material.pk
+            for material in materials
+            if is_editable_in_workspace(user, material, workspace)
+        }
+        context['material_deletable_pks'] = {
+            material.pk
+            for material in materials
+            if can_delete_in_workspace(user, material, workspace)
+        }
+        context['material_cloneable_pks'] = {
+            material.pk
+            for material in materials
+            if can_clone_material_to_workspace(user, material, workspace)
+        }
         return context
+
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
+        }
 
     def get_choice_filter_options(self):
         return {
@@ -384,6 +441,16 @@ class MaterialDetailView(AppViewMixin, DetailView):
             not context['material_is_readonly']
             and has_workspace_perm(self.request.user, active_ws, WorkspacePerm.MATERIAL_PUBLISH)
         )
+        context['can_delete_material'] = can_delete_in_workspace(
+            self.request.user,
+            self.object,
+            active_ws,
+        )
+        context['can_clone_material'] = can_clone_material_to_workspace(
+            self.request.user,
+            self.object,
+            active_ws,
+        )
         context['active_tab'] = self.active_tab
         context['attachment_count'] = self.object.attachments.count()
         context['sample_count'] = self.object.samples.count()
@@ -411,14 +478,22 @@ class MaterialDetailView(AppViewMixin, DetailView):
         return self.object.composite_layers.select_related('material').order_by('layer_number')
 
 
-class MaterialCreateView(AppViewMixin, MaterialFormsetMixin, CreateView):
+class MaterialCreateView(AppViewMixin, PermissionRequiredMixin, MaterialFormsetMixin, CreateView):
+    permission_codename = WorkspacePerm.MATERIAL_CREATE
     model = Material
     form_class = MaterialForm
     template_name = 'materials/material_form.html'
     success_url = reverse_lazy('materials:list')
 
 
-class MaterialUpdateView(AppViewMixin, MaterialEditableMixin, MaterialFormsetMixin, UpdateView):
+class MaterialUpdateView(
+    AppViewMixin,
+    PermissionRequiredMixin,
+    MaterialEditableMixin,
+    MaterialFormsetMixin,
+    UpdateView,
+):
+    permission_codename = WorkspacePerm.MATERIAL_EDIT
     model = Material
     form_class = MaterialForm
     template_name = 'materials/material_form.html'
@@ -428,7 +503,32 @@ class MaterialUpdateView(AppViewMixin, MaterialEditableMixin, MaterialFormsetMix
         return reverse_lazy('materials:detail', kwargs={'pk': self.object.pk})
 
 
-class MaterialDeleteView(AppViewMixin, MaterialEditableMixin, DeleteView):
+class MaterialCloneView(AppViewMixin, PermissionRequiredMixin, View):
+    permission_codename = WorkspacePerm.MATERIAL_CREATE
+    http_method_names = ['post']
+
+    def post(self, request, pk):
+        source = get_object_or_404(
+            materials_visible_in(request.active_workspace).select_related('struct_type'),
+            pk=pk,
+        )
+        try:
+            clone = clone_material_to_workspace(source, request.active_workspace, request.user)
+        except PermissionError:
+            raise PermissionDenied
+        except ValidationError as exc:
+            messages.error(request, str(exc))
+            return redirect('materials:detail', pk=source.pk)
+
+        messages.success(
+            request,
+            f'Материал «{source.code}» скопирован в пространство как «{clone.code}».',
+        )
+        return redirect('materials:detail', pk=clone.pk)
+
+
+class MaterialDeleteView(AppViewMixin, PermissionRequiredMixin, MaterialEditableMixin, DeleteView):
+    permission_codename = WorkspacePerm.MATERIAL_DELETE
     model = Material
     template_name = 'materials/material_confirm_delete.html'
     context_object_name = 'material'

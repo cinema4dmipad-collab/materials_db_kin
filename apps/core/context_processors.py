@@ -1,5 +1,6 @@
 from django.core.cache import cache
 
+from apps.workspaces.models import Workspace
 from apps.workspaces.services import tags_in_workspace
 
 TAG_SUGGESTIONS_CACHE_KEY = 'core:tag_suggestions'
@@ -10,6 +11,11 @@ def invalidate_tag_suggestions_cache(workspace_id=None) -> None:
     if workspace_id is None:
         return
     cache.delete(f'{TAG_SUGGESTIONS_CACHE_KEY}:{workspace_id}')
+
+
+def invalidate_all_tag_suggestions_cache() -> None:
+    for workspace_id in Workspace.objects.filter(is_active=True).values_list('pk', flat=True):
+        invalidate_tag_suggestions_cache(workspace_id)
 
 
 def tag_suggestions(request):

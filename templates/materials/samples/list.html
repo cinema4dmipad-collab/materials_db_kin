@@ -34,8 +34,12 @@
                         <td>{% url 'material_samples:list' material.pk as material_samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=material_samples_list_url %}</td>
                         <td>{{ sample.scan_count }}</td>
                         <td class="text-end text-nowrap">
-                            <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-sm btn-outline-secondary">Просмотр</a>
-                            <a href="{% url 'scans:create' sample.pk %}" class="btn btn-sm btn-outline-primary">Создать</a>
+                            <div class="table-actions">
+                            {% url 'samples:detail' sample.pk as sample_detail_url %}
+                            {% include 'includes/table_action_icon.html' with action='view' url=sample_detail_url title='Просмотр' %}
+                            {% url 'scans:create' sample.pk as scan_create_url %}
+                            {% include 'includes/table_action_icon.html' with action='create' url=scan_create_url title='Создать скан' %}
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

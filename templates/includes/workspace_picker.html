@@ -1,0 +1,67 @@
+{% if user.is_authenticated %}
+<div class="dropdown app-topbar__workspace-picker">
+    <button type="button"
+            class="app-topbar__workspace-btn dropdown-toggle"
+            id="workspacePickerToggle"
+            data-bs-toggle="dropdown"
+            data-bs-auto-close="true"
+            aria-expanded="false"
+            aria-label="Выбор рабочего пространства">
+        <span class="app-topbar__workspace-badge" aria-hidden="true">
+            {% if active_workspace %}
+            {{ active_workspace.name|slice:":2"|upper }}
+            {% else %}
+            ?
+            {% endif %}
+        </span>
+        <span class="app-topbar__workspace-meta">
+            {% if active_workspace %}
+            <span class="app-topbar__workspace-name">{{ active_workspace.name }}</span>
+            <span class="app-topbar__workspace-slug">{{ active_workspace.slug }}</span>
+            {% else %}
+            <span class="app-topbar__workspace-name">Выберите пространство</span>
+            <span class="app-topbar__workspace-slug">Нажмите для списка</span>
+            {% endif %}
+        </span>
+    </button>
+    <div class="dropdown-menu app-topbar__workspace-menu shadow" aria-labelledby="workspacePickerToggle">
+        <div class="app-topbar__workspace-menu-header">Рабочие пространства</div>
+        {% if user_workspaces %}
+        <ul class="app-topbar__workspace-list list-unstyled mb-0">
+            {% for workspace in user_workspaces %}
+            <li>
+                <form method="post" action="{% url 'workspaces:switch' workspace.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit"
+                            class="app-topbar__workspace-option{% if active_workspace and workspace.pk == active_workspace.pk %} is-current{% endif %}">
+                        <span class="app-topbar__workspace-option-badge" aria-hidden="true">
+                            {{ workspace.name|slice:":2"|upper }}
+                        </span>
+                        <span class="app-topbar__workspace-option-text">
+                            <span class="app-topbar__workspace-option-name">{{ workspace.name }}</span>
+                            <span class="app-topbar__workspace-option-slug">{{ workspace.slug }}</span>
+                        </span>
+                        {% if active_workspace and workspace.pk == active_workspace.pk %}
+                        <span class="app-topbar__workspace-option-check" aria-hidden="true">✓</span>
+                        {% endif %}
+                    </button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="app-topbar__workspace-empty">Нет доступных пространств.</p>
+        {% endif %}
+        <div class="dropdown-divider"></div>
+        <a class="dropdown-item app-topbar__workspace-menu-link" href="{% url 'workspaces:select' %}">
+            Все пространства…
+        </a>
+        {% if is_system_admin %}
+        <a class="dropdown-item app-topbar__workspace-menu-link" href="{% url 'workspaces:create' %}">
+            Создать пространство
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

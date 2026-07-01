@@ -5,12 +5,15 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.core.creator import assign_creator
 from apps.core.file_download import build_file_download_response
 
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
     SCAN_METHOD_SEARCH_SCOPE,
     TAG_SEARCH_SCOPE,
+    UPLOADED_BY_CREATOR_FILTER,
     QuerySetFilterMixin,
     build_choice_label_filter,
 )
@@ -28,6 +31,7 @@ class ScanMethodFilterMixin:
                 ScanRecord.METHODS,
                 'method',
             ),
+            CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER,
         }
 
 
@@ -59,6 +63,7 @@ class AllScansListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin,
         ('material', 'Материал', ('sample__material__code', 'sample__material__name')),
         ('description', 'Описание', ('description',)),
         (SCAN_METHOD_SEARCH_SCOPE, 'Метод', ()),
+        (CREATOR_SEARCH_SCOPE, 'Загрузил', ()),
         (TAG_SEARCH_SCOPE, 'Тег', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
@@ -69,7 +74,7 @@ class AllScansListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin,
         return self.filter_queryset(
             scans_in_workspace(self.request.active_workspace)
             .select_related(
-                'sample', 'sample__material', 'sample__material__struct_type'
+                'sample', 'sample__material', 'sample__material__struct_type', 'uploaded_by_user'
             )
             .prefetch_related('tags')
         )
@@ -109,6 +114,7 @@ class ScanListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin, Sam
         ('description', 'Описание', ('description',)),
         ('file', 'Файл', ('file',)),
         (SCAN_METHOD_SEARCH_SCOPE, 'Метод', ()),
+        (CREATOR_SEARCH_SCOPE, 'Загрузил', ()),
         (TAG_SEARCH_SCOPE, 'Тег', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
@@ -139,6 +145,7 @@ class ScanListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin, Sam
             scan = form.save(commit=False)
             scan.sample = self.sample
             scan.workspace = self.sample.workspace
+            assign_creator(scan, request.user)
             scan.save()
             form.save_tags(scan)
             messages.success(request, 'Скан прикреплён к образцу.')
@@ -185,6 +192,7 @@ class ScanCreateView(AppViewMixin, SampleScanMixin, CreateView):
     def form_valid(self, form):
         form.instance.sample = self.sample
         form.instance.workspace = self.sample.workspace
+        assign_creator(form.instance, self.request.user)
         messages.success(self.request, 'Скан успешно загружен.')
         return super().form_valid(form)
 

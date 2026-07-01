@@ -49,14 +49,20 @@
                         <td>{{ membership.get_role_display }}</td>
                         <td class="text-end">
                             {% if is_system_admin or membership.role == 'operator' %}
-                            <a href="{% url 'workspaces:member_edit' workspace.pk membership.pk %}"
-                               class="btn btn-sm btn-outline-primary">Изменить</a>
-                            <form method="post" action="{% url 'workspaces:member_delete' workspace.pk membership.pk %}"
-                                  class="d-inline">
+                            <div class="table-actions">
+                            {% url 'workspaces:member_edit' workspace.pk membership.pk as member_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=member_edit_url title='Изменить' %}
+                            <form method="post" action="{% url 'workspaces:member_delete' workspace.pk membership.pk %}" class="table-action-form d-inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-danger"
-                                        onclick="return confirm('Удалить участника?');">Удалить</button>
+                                <button type="submit"
+                                        class="btn btn-sm table-action-btn btn-action-delete"
+                                        title="Удалить"
+                                        aria-label="Удалить"
+                                        onclick="return confirm('Удалить участника?');">
+                                    {% include 'includes/table_action_icon_svg.html' with action='delete' %}
+                                </button>
                             </form>
+                            </div>
                             {% else %}
                             <span class="text-muted small">Назначен администратором</span>
                             {% endif %}

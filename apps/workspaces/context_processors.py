@@ -32,7 +32,7 @@ def workspace_navigation(request):
         {
             'label': 'Теги',
             'url': reverse('core:tag_list'),
-            'visible': can(WorkspacePerm.PROPERTY_VIEW),
+            'visible': can(WorkspacePerm.TAG_VIEW),
             'is_active': lambda n, u: n == 'core' and u.startswith('tag_'),
         },
         {
@@ -106,7 +106,7 @@ def workspace_navigation(request):
         )
 
     if management_items:
-        nav_sections.append({'title': 'Пространство', 'items': management_items})
+        nav_sections.append({'title': 'Администрирование', 'items': management_items})
 
     return {
         'active_workspace': active_workspace,

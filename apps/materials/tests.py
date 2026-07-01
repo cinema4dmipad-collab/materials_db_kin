@@ -19,12 +19,14 @@ from apps.references.models import Property, PropertyGroup
 from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 from apps.workspaces.services import ensure_legacy_workspace
+from apps.workspaces.visibility import VisibilityMode
 
 urlpatterns = []
 
 
 class MaterialStructureLinkTests(TransactionTestCase):
     def setUp(self):
+        self.legacy_workspace = ensure_legacy_workspace()
         self.structure_type = StructureType.objects.create(
             name='Test Panel',
             code='material_panel',
@@ -57,6 +59,16 @@ class MaterialStructureLinkTests(TransactionTestCase):
         create_result = SQLExecutor.create_table(self.structure_type)
         self.assertTrue(create_result['success'], create_result.get('error'))
         self.created_structure_types = [self.structure_type]
+
+    def create_material(self, **kwargs):
+        kwargs.setdefault('home_workspace', self.legacy_workspace)
+        return Material.objects.create(**kwargs)
+
+    def create_sample(self, **kwargs):
+        from apps.samples.models import Sample
+
+        kwargs.setdefault('workspace', self.legacy_workspace)
+        return Sample.objects.create(**kwargs)
 
     def tearDown(self):
         for structure_type in reversed(self.created_structure_types):
@@ -111,7 +123,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
 
     def test_get_structure_params_returns_dynamic_row(self):
         row_id = self.insert_structure_row(title='Laminate')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-001',
             name='Material with structure',
             struct_type=self.structure_type,
@@ -125,7 +137,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertEqual(params['title'], 'Laminate')
 
     def test_get_structure_params_returns_none_for_missing_link_or_row(self):
-        material = Material.objects.create(code='MAT-002', name='Plain material')
+        material = self.create_material(code='MAT-002', name='Plain material')
         self.assertIsNone(material.get_structure_params())
 
         material.struct_type = self.structure_type
@@ -133,20 +145,20 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertIsNone(material.get_structure_params())
 
     def test_material_type_proxy_flags_reflect_structure_and_layers(self):
-        plain_material = Material.objects.create(code='MAT-TYPE-001', name='Plain material')
+        plain_material = self.create_material(code='MAT-TYPE-001', name='Plain material')
         simple_material = Material(
             code='MAT-TYPE-002',
             name='Simple material',
             struct_type=self.structure_type,
         )
-        composite_material = Material.objects.create(
+        composite_material = self.create_material(
             code='MAT-TYPE-003',
             name='Composite material',
             struct_type=self.structure_type,
         )
         self.structure_type.allow_layers = True
         self.structure_type.save(update_fields=['allow_layers'])
-        layer_material = Material.objects.create(
+        layer_material = self.create_material(
             code='MAT-TYPE-LAYER-001',
             name='Layer material',
         )
@@ -249,7 +261,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
             group=density_group,
         )
         row_id = self.insert_structure_row(title='Laminate panel', thickness='18.75')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-DETAIL-001',
             name='Detailed material',
             struct_type=self.structure_type,
@@ -278,13 +290,13 @@ class MaterialStructureLinkTests(TransactionTestCase):
         from apps.samples.models import Sample
 
         row_id = self.insert_structure_row(title='Inherited panel', thickness='12.50')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-SAMPLE-STRUCT',
             name='Material for sample structure inheritance',
             struct_type=self.structure_type,
             struct_props_id=row_id,
         )
-        sample = Sample.objects.create(
+        sample = self.create_sample(
             code='SMP-STRUCT-001',
             name='Sample with inherited structure',
             material=material,
@@ -300,7 +312,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
 
     def test_material_properties_json_includes_structure_properties(self):
         row_id = self.insert_structure_row(title='JSON panel', thickness='9.25')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-JSON-STRUCT',
             name='Material for JSON structure properties',
             struct_type=self.structure_type,
@@ -345,7 +357,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
                     'materials.Material',
                 ],
             )
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-DETAIL-002',
             name='Detail ignores stale fields',
             struct_type=self.structure_type,
@@ -363,7 +375,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertNotContains(response, '<td>created_by</td>', html=True)
 
     def test_detail_page_without_linked_structure_shows_empty_state(self):
-        material = Material.objects.create(code='MAT-DETAIL-003', name='Plain detail material')
+        material = self.create_material(code='MAT-DETAIL-003', name='Plain detail material')
 
         response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
 
@@ -372,7 +384,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Структура не выбрана.')
 
     def test_detail_page_missing_structure_row_shows_helpful_message(self):
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-DETAIL-004',
             name='Missing row detail material',
             struct_type=self.structure_type,
@@ -386,7 +398,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
 
     def test_detail_page_shows_zero_structure_values(self):
         row_id = self.insert_structure_row(title='Zero thickness panel', thickness='0.00')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-DETAIL-005',
             name='Zero value detail material',
             struct_type=self.structure_type,
@@ -399,8 +411,8 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, '0,00')
 
     def test_material_list_displays_structure_type(self):
-        Material.objects.create(code='MAT-LIST-001', name='Plain material')
-        Material.objects.create(
+        self.create_material(code='MAT-LIST-001', name='Plain material')
+        self.create_material(
             code='MAT-LIST-002',
             name='Structured material',
             struct_type=self.structure_type,
@@ -415,8 +427,8 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'MAT-LIST-002')
 
     def test_material_list_filters_by_structure_type_search(self):
-        Material.objects.create(code='MAT-LIST-001', name='Plain material')
-        Material.objects.create(
+        self.create_material(code='MAT-LIST-001', name='Plain material')
+        self.create_material(
             code='MAT-LIST-002',
             name='Structured material',
             struct_type=self.structure_type,
@@ -434,24 +446,20 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Test Panel')
 
     def test_material_list_combines_structure_type_search_with_multiple_tags(self):
-        legacy = ensure_legacy_workspace()
-        tagged = Material.objects.create(
+        tagged = self.create_material(
             code='MAT-LIST-TAGGED',
             name='Tagged structured material',
             struct_type=self.structure_type,
-            home_workspace=legacy,
         )
-        assign_tags(tagged, ['prepreg', 'lab'], workspace=legacy)
-        Material.objects.create(
+        assign_tags(tagged, ['prepreg', 'lab'], workspace=self.legacy_workspace)
+        self.create_material(
             code='MAT-LIST-001',
             name='Plain material',
-            home_workspace=legacy,
         )
-        Material.objects.create(
+        self.create_material(
             code='MAT-LIST-002',
             name='Structured material without tags',
             struct_type=self.structure_type,
-            home_workspace=legacy,
         )
 
         response = self.client.get(
@@ -474,7 +482,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
 class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
     def test_material_admin_uses_composite_layer_inline_without_material_type_column(self):
         inline = CompositeLayerInline(Material, AdminSite())
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-ADMIN-LAYERS-001',
             name='Material with layers',
             struct_type=self.structure_type,
@@ -516,7 +524,7 @@ class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
         selected_row_id = self.insert_structure_row(title='Selected row')
         for index in range(105):
             self.insert_structure_row(title=f'Visible row {index:03d}')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-006',
             name='Material with selected structure',
             struct_type=self.structure_type,
@@ -630,6 +638,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             'description': 'Created from public form',
             'struct_type': str(self.structure_type.pk),
             'created_by': 'tester',
+            'visibility_mode': VisibilityMode.PRIVATE,
         }
         data.update(self.structure_field_data(self.structure_type))
         data.update(self._formset_management_data())
@@ -638,7 +647,12 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         return data
 
     def test_public_material_form_includes_structure_fields_not_props_id(self):
-        form = PublicMaterialForm(data={'struct_type': str(self.structure_type.pk)})
+        from apps.materials.picker_data import materials_for_picker_queryset
+
+        form = PublicMaterialForm(
+            data={'struct_type': str(self.structure_type.pk)},
+            workspace=self.legacy_workspace,
+        )
 
         self.assertIn('struct_type', form.fields)
         self.assertNotIn('struct_props_id', form.fields)
@@ -659,7 +673,10 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         )
         material_field = form.fields[f'structure_field_{self.skin_material_field.pk}']
         self.assertIsInstance(material_field, forms.ModelChoiceField)
-        self.assertEqual(list(material_field.queryset), list(Material.objects.order_by('code')))
+        self.assertEqual(
+            list(material_field.queryset),
+            list(materials_for_picker_queryset(self.legacy_workspace).order_by('code')),
+        )
         self.assertFalse(material_field.required)
         self.assertIn('data-material-picker', material_field.widget.attrs)
 
@@ -767,7 +784,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertNotIn('data-load-url', rendered)
 
     def test_public_material_create_view_saves_dynamic_row_and_detail_shows_values(self):
-        linked_material = Material.objects.create(
+        linked_material = self.create_material(
             code='MAT-LINKED-001',
             name='Linked material',
         )
@@ -822,7 +839,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             data_type='number',
         )
         row_id = self.insert_structure_row(title='Panel', thickness='10.00')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-READONLY-PROP',
             name='Material with property',
             struct_type=self.structure_type,
@@ -849,7 +866,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             data_type='number',
         )
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-PROP-001',
             name='Public material without properties',
             struct_type=self.structure_type,
@@ -892,7 +909,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         )
 
     def test_public_material_create_view_saves_layer_formset_and_detail_shows_layers(self):
-        layer_material = Material.objects.create(
+        layer_material = self.create_material(
             code='MAT-LAYER-001',
             name='Layer material',
         )
@@ -929,7 +946,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(detail_response, '45')
 
     def test_public_material_create_accepts_comma_in_layer_thickness(self):
-        layer_material = Material.objects.create(
+        layer_material = self.create_material(
             code='MAT-LAYER-COMMA',
             name='Layer material comma',
         )
@@ -965,11 +982,11 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(detail_response, '12,50')
 
     def test_public_material_create_view_auto_numbers_multiple_layers(self):
-        first_layer_material = Material.objects.create(
+        first_layer_material = self.create_material(
             code='MAT-LAYER-AUTO-001',
             name='First layer material',
         )
-        second_layer_material = Material.objects.create(
+        second_layer_material = self.create_material(
             code='MAT-LAYER-AUTO-002',
             name='Second layer material',
         )
@@ -1009,7 +1026,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
     def test_public_material_create_view_hides_layers_when_structure_type_disallows(self):
         self.structure_type.allow_layers = False
         self.structure_type.save(update_fields=['allow_layers'])
-        layer_material = Material.objects.create(
+        layer_material = self.create_material(
             code='MAT-LAYER-HIDDEN-001',
             name='Layer material',
         )
@@ -1044,7 +1061,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_prefills_and_updates_existing_dynamic_row(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
-        linked_material = Material.objects.create(
+        linked_material = self.create_material(
             code='MAT-LINKED-002',
             name='Prefilled material',
         )
@@ -1053,7 +1070,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             row_id,
             {'skin_material': linked_material.pk},
         )
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-002',
             name='Public material with existing structure',
             struct_type=self.structure_type,
@@ -1092,15 +1109,15 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_view_saves_layer_formset(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
-        original_layer_material = Material.objects.create(
+        original_layer_material = self.create_material(
             code='MAT-LAYER-ORIGINAL-001',
             name='Original layer material',
         )
-        updated_layer_material = Material.objects.create(
+        updated_layer_material = self.create_material(
             code='MAT-LAYER-UPDATED-001',
             name='Updated layer material',
         )
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-LAYER-001',
             name='Public material with layers',
             struct_type=self.structure_type,
@@ -1139,11 +1156,11 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_accepts_duplicated_layers_with_same_posted_layer_number(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
-        layer_material = Material.objects.create(
+        layer_material = self.create_material(
             code='MAT-LAYER-DUP-SOURCE',
             name='Layer material',
         )
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-LAYER-DUP',
             name='Material with duplicated layers',
             struct_type=self.structure_type,
@@ -1198,13 +1215,13 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_shared_row_creates_new_dynamic_row(self):
         row_id = self.insert_structure_row(title='Shared panel', thickness='8.25')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-SHARED-001',
             name='Public material with shared structure',
             struct_type=self.structure_type,
             struct_props_id=row_id,
         )
-        other_material = Material.objects.create(
+        other_material = self.create_material(
             code='MAT-PUBLIC-SHARED-002',
             name='Other material with shared structure',
             struct_type=self.structure_type,
@@ -1241,7 +1258,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_can_clear_structure_and_deletes_dynamic_row(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-003',
             name='Public material with clearable structure',
             struct_type=self.structure_type,
@@ -1265,13 +1282,13 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_clear_shared_row_keeps_old_dynamic_row(self):
         row_id = self.insert_structure_row(title='Shared panel', thickness='8.25')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-SHARED-003',
             name='Public material with clearable shared structure',
             struct_type=self.structure_type,
             struct_props_id=row_id,
         )
-        other_material = Material.objects.create(
+        other_material = self.create_material(
             code='MAT-PUBLIC-SHARED-004',
             name='Other material with clearable shared structure',
             struct_type=self.structure_type,
@@ -1300,7 +1317,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_can_change_structure_and_deletes_old_dynamic_row(self):
         old_row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-004',
             name='Public material with replaceable structure',
             struct_type=self.structure_type,
@@ -1333,13 +1350,13 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_change_shared_row_keeps_old_dynamic_row(self):
         old_row_id = self.insert_structure_row(title='Shared panel', thickness='8.25')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-SHARED-005',
             name='Public material with replaceable shared structure',
             struct_type=self.structure_type,
             struct_props_id=old_row_id,
         )
-        other_material = Material.objects.create(
+        other_material = self.create_material(
             code='MAT-PUBLIC-SHARED-006',
             name='Other material with replaceable shared structure',
             struct_type=self.structure_type,
@@ -1389,7 +1406,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(response, 'Параметры структуры:')
 
     def test_public_material_create_shows_layer_validation_for_incomplete_row(self):
-        layer_material = Material.objects.create(
+        layer_material = self.create_material(
             code='MAT-LAYER-INCOMPLETE',
             name='Layer material',
         )
@@ -1455,7 +1472,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
     def test_public_material_update_missing_existing_dynamic_row_returns_form_error(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
-        material = Material.objects.create(
+        material = self.create_material(
             code='MAT-PUBLIC-005',
             name='Public material with missing dynamic row',
             struct_type=self.structure_type,
@@ -1595,10 +1612,15 @@ class MaterialAttachmentViewsTests(TestCase):
         import shutil
         import tempfile
 
+        self.legacy_workspace = ensure_legacy_workspace()
         self.media_root = tempfile.mkdtemp()
         self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
         self.settings_override.enable()
-        self.material = Material.objects.create(code='MAT-ATT-001', name='Attachment material')
+        self.material = Material.objects.create(
+            code='MAT-ATT-001',
+            name='Attachment material',
+            home_workspace=self.legacy_workspace,
+        )
 
     def tearDown(self):
         import shutil
@@ -1621,6 +1643,7 @@ class MaterialAttachmentViewsTests(TestCase):
             code='SMP-001',
             name='Test sample',
             object_type='plate',
+            workspace=self.legacy_workspace,
         )
         samples_url = reverse('material_samples:list', kwargs={'material_pk': self.material.pk})
         response = self.client.get(samples_url)

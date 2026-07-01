@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -31,6 +32,14 @@ class Property(models.Model):
     data_type = models.CharField(max_length=20, choices=DATA_TYPES, default='number')
     group = models.ForeignKey(PropertyGroup, on_delete=models.SET_NULL, null=True, blank=True)
     description = models.TextField(blank=True)
+    created_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_properties',
+        verbose_name='Создал',
+    )
 
     def __str__(self):
         return f"{self.display_name} ({self.unit})" if self.unit else self.display_name

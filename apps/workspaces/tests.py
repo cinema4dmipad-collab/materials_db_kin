@@ -31,6 +31,38 @@ class AnonymousRedirectTests(TestCase):
         self.assertIn('/accounts/login/', response.url)
 
 
+class UserProfileTests(AuthenticatedWorkspaceTestCase):
+    def test_profile_page_shows_username(self):
+        response = self.client.get(reverse('accounts:profile'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.user.username)
+        self.assertContains(response, self.workspace.name)
+
+    def test_profile_link_in_topbar(self):
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertContains(response, reverse('accounts:profile'))
+        self.assertContains(response, 'app-topbar__user-btn')
+
+
+    def test_profile_accessible_without_active_workspace(self):
+        other = Workspace.objects.create(slug='ws-b-profile', name='Space B')
+        WorkspaceMembership.objects.create(
+            workspace=other,
+            user=self.user,
+            role=WorkspaceRole.OPERATOR,
+        )
+        session = self.client.session
+        session.pop(ACTIVE_WORKSPACE_SESSION_KEY, None)
+        session.save()
+
+        response = self.client.get(reverse('accounts:profile'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.user.username)
+
+        help_response = self.client.get(reverse('core:help'))
+        self.assertEqual(help_response.status_code, 200)
+
+
 class WorkspaceSelectTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('select-user', password='pass-123')
@@ -122,6 +154,148 @@ class PermissionTests(TestCase):
         )
         self.assertFalse(material.is_editable_in(self.workspace))
         self.assertTrue(is_editable_in_workspace(admin, material, self.workspace))
+
+    def test_material_without_home_workspace_is_not_editable(self):
+        from apps.workspaces.permissions import is_editable_in_workspace
+
+        material = Material.objects.create(
+            code='MAT-LEGACY',
+            name='Legacy material',
+            home_workspace=None,
+        )
+        self.assertFalse(material.is_editable_in(self.workspace))
+        self.assertFalse(
+            is_editable_in_workspace(self.operator, material, self.workspace)
+        )
+
+
+@modify_settings(MIDDLEWARE={'remove': 'apps.workspaces.middleware.TestAutoLoginMiddleware'})
+class MaterialEditAccessTests(TestCase):
+    def setUp(self):
+        self.password = 'pass-123'
+        self.workspace = Workspace.objects.create(slug='ws-home', name='Home WS')
+        self.other_workspace = Workspace.objects.create(slug='ws-other', name='Other WS')
+        self.operator = User.objects.create_user('material-operator', password=self.password)
+        WorkspaceMembership.objects.create(
+            workspace=self.workspace,
+            user=self.operator,
+            role=WorkspaceRole.OPERATOR,
+        )
+        self.own_material = Material.objects.create(
+            code='MAT-OWN',
+            name='Own material',
+            home_workspace=self.workspace,
+        )
+        self.shared_material = Material.objects.create(
+            code='MAT-SHARED',
+            name='Shared material',
+            home_workspace=self.other_workspace,
+            visibility_mode='all_workspaces',
+        )
+        self.client = Client()
+        self.client.login(username=self.operator.username, password=self.password)
+        session = self.client.session
+        session[ACTIVE_WORKSPACE_SESSION_KEY] = str(self.workspace.pk)
+        session.save()
+
+    def test_operator_can_edit_own_workspace_material(self):
+        response = self.client.get(
+            reverse('materials:edit', kwargs={'pk': self.own_material.pk}),
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_operator_cannot_edit_shared_material(self):
+        response = self.client.get(
+            reverse('materials:edit', kwargs={'pk': self.shared_material.pk}),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_operator_sees_readonly_shared_material_detail(self):
+        response = self.client.get(
+            reverse('materials:detail', kwargs={'pk': self.shared_material.pk}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Редактирование недоступно')
+        self.assertNotContains(response, reverse('materials:edit', kwargs={'pk': self.shared_material.pk}))
+
+    def test_shared_material_list_has_no_edit_button(self):
+        response = self.client.get(reverse('materials:list'), {'scope': 'shared'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.shared_material.code)
+        self.assertNotContains(
+            response,
+            reverse('materials:edit', kwargs={'pk': self.shared_material.pk}),
+        )
+
+    def test_own_published_material_appears_in_shared_tab(self):
+        own_published = Material.objects.create(
+            code='MAT-PUB',
+            name='Own published material',
+            home_workspace=self.workspace,
+            visibility_mode='all_workspaces',
+        )
+        response = self.client.get(reverse('materials:list'), {'scope': 'shared'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, own_published.code)
+        response = self.client.get(reverse('materials:edit', kwargs={'pk': own_published.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_operator_can_clone_shared_material_to_workspace(self):
+        response = self.client.post(
+            reverse('materials:clone', kwargs={'pk': self.shared_material.pk}),
+        )
+        self.assertEqual(response.status_code, 302)
+        clone = Material.objects.get(home_workspace=self.workspace, code='MAT-SHARED')
+        self.assertEqual(clone.name, self.shared_material.name)
+        self.assertEqual(clone.visibility_mode, 'private')
+        self.assertRedirects(response, reverse('materials:detail', kwargs={'pk': clone.pk}))
+
+    def test_shared_material_list_shows_clone_action(self):
+        response = self.client.get(reverse('materials:list'), {'scope': 'shared'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse('materials:clone', kwargs={'pk': self.shared_material.pk}))
+
+
+class MaterialsPickerDataTests(TestCase):
+    def setUp(self):
+        self.workspace = Workspace.objects.create(slug='ws-picker', name='Picker WS')
+        self.other_workspace = Workspace.objects.create(slug='ws-other-picker', name='Other WS')
+
+    def test_materials_for_picker_assigns_scopes(self):
+        from apps.materials.picker_data import (
+            MATERIAL_PICKER_SCOPE_SHARED,
+            MATERIAL_PICKER_SCOPE_WORKSPACE,
+            materials_for_picker,
+        )
+
+        Material.objects.create(
+            code='OWN-PICKER',
+            name='Own material',
+            home_workspace=self.workspace,
+            visibility_mode='private',
+        )
+        Material.objects.create(
+            code='SHR-PICKER',
+            name='Shared material',
+            home_workspace=self.other_workspace,
+            visibility_mode='all_workspaces',
+        )
+        Material.objects.create(
+            code='PUB-PICKER',
+            name='Published own',
+            home_workspace=self.workspace,
+            visibility_mode='all_workspaces',
+        )
+
+        picker = materials_for_picker(self.workspace)
+        by_code = {item['code']: item['scopes'] for item in picker}
+
+        self.assertEqual(by_code['OWN-PICKER'], [MATERIAL_PICKER_SCOPE_WORKSPACE])
+        self.assertEqual(by_code['SHR-PICKER'], [MATERIAL_PICKER_SCOPE_SHARED])
+        self.assertEqual(
+            by_code['PUB-PICKER'],
+            [MATERIAL_PICKER_SCOPE_WORKSPACE, MATERIAL_PICKER_SCOPE_SHARED],
+        )
 
 
 class AuthenticatedAccessTests(AuthenticatedWorkspaceTestCase):

@@ -8,7 +8,8 @@ from django.views.generic import DeleteView, ListView
 
 from apps.core.file_download import build_file_download_response
 
-from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
+from apps.core.creator import assign_creator
+from apps.core.list_filters import ALL_SEARCH_SCOPE, CREATOR_SEARCH_SCOPE, UPLOADED_BY_CREATOR_FILTER, QuerySetFilterMixin
 from apps.materials.forms_attachments import MaterialAttachmentForm
 from apps.materials.models import MaterialAttachment
 from apps.materials.tab_mixins import MaterialTabMixin
@@ -29,8 +30,14 @@ class MaterialAttachmentListView(AppViewMixin, QuerySetFilterMixin, MaterialAtta
         ('title', 'Название', ('title',)),
         ('description', 'Описание', ('description',)),
         ('file', 'Файл', ('file',)),
+        (CREATOR_SEARCH_SCOPE, 'Загрузил', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
+
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER,
+        }
 
     def get_attachment_form(self):
         if hasattr(self, '_attachment_form'):
@@ -54,6 +61,7 @@ class MaterialAttachmentListView(AppViewMixin, QuerySetFilterMixin, MaterialAtta
             attachment = form.save(commit=False)
             attachment.material = self.material
             attachment.workspace = request.active_workspace
+            assign_creator(attachment, request.user)
             attachment.save()
             messages.success(request, 'Файл прикреплён к материалу.')
             return redirect('material_attachments:list', material_pk=self.material.pk)

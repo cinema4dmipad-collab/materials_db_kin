@@ -12,10 +12,16 @@
             <div class="modal-body">
                 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
                     <input type="search" class="form-control form-control-sm flex-grow-1" id="reference-properties-search" placeholder="Поиск по названию, коду или группе..." autocomplete="off">
+                    {% if is_system_admin %}
                     <a href="{{ property_create_url }}?next={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary btn-sm text-nowrap" id="create-reference-property-btn">Создать</a>
+                    {% endif %}
                 </div>
                 <div id="reference-properties-empty" class="alert alert-info mb-0">
+                    {% if is_system_admin %}
                     В справочнике пока нет свойств. Создайте первое свойство кнопкой выше.
+                    {% else %}
+                    В справочнике пока нет свойств. Обратитесь к администратору.
+                    {% endif %}
                 </div>
                 <div id="reference-properties-list"></div>
             </div>

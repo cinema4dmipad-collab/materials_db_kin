@@ -4,6 +4,7 @@ from pathlib import Path
 from django import get_version
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import login_required
 from django.db import connection
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
@@ -42,7 +43,7 @@ def dashboard(request):
     return render(request, 'core/dashboard.html', context)
 
 
-@workspace_login_required
+@login_required
 def help_page(request):
     return render(request, 'core/help.html')
 

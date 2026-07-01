@@ -31,10 +31,12 @@
                         <td>{% if user.is_active %}Да{% else %}Нет{% endif %}</td>
                         <td>{% if user.is_superuser %}Да{% else %}Нет{% endif %}</td>
                         <td class="text-end">
-                            <a href="{% url 'administration:admin_user_edit' user.pk %}"
-                               class="btn btn-sm btn-outline-primary">Изменить</a>
-                            <a href="{% url 'administration:admin_user_memberships' user.pk %}"
-                               class="btn btn-sm btn-outline-secondary">Пространства</a>
+                            <div class="table-actions">
+                            {% url 'administration:admin_user_edit' user.pk as user_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=user_edit_url title='Изменить' %}
+                            {% url 'administration:admin_user_memberships' user.pk as user_memberships_url %}
+                            {% include 'includes/table_action_icon.html' with action='members' url=user_memberships_url title='Пространства' %}
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

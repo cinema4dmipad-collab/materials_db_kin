@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic import CreateView, TemplateView, UpdateView, View
 
+from apps.core.creator import assign_creator, creator_label
 from apps.materials.models import Material
 from apps.structures.identifiers import validate_table_name
 from apps.structures.models import StructureType
@@ -104,6 +105,7 @@ class StructureTypeCreateView(SystemAdminRequiredMixin, AppViewMixin, StructureT
             with transaction.atomic():
                 self.object = form.save(commit=False)
                 self.object.visibility_mode = 'all_workspaces'
+                assign_creator(self.object, self.request.user)
                 self.object.save()
                 field_formset.instance = self.object
                 field_formset.save()

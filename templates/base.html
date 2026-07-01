@@ -16,36 +16,41 @@
     <link href="{% static 'css/workspace-sidebar.css' %}" rel="stylesheet">
     {% block extra_head %}{% endblock %}
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-keenetica">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{% url 'core:dashboard' %}" aria-label="На главную">
+<body class="{% if user.is_authenticated %}app-body--shell{% endif %}">
+    <header class="app-topbar navbar navbar-dark navbar-keenetica">
+        <div class="container-fluid app-topbar__inner">
+            {% if user.is_authenticated %}
+            <button type="button"
+                    class="app-topbar__sidebar-toggle btn btn-link text-light"
+                    id="appSidebarToggle"
+                    aria-label="Показать или скрыть боковую панель"
+                    aria-expanded="true"
+                    aria-controls="appWorkspaceSidebar">
+                <span class="app-topbar__toggle-icon" aria-hidden="true"></span>
+            </button>
+            {% endif %}
+            <a class="navbar-brand app-topbar__brand" href="{% url 'core:dashboard' %}" aria-label="На главную">
                 <img src="{% static 'img/keenetica-logo.png' %}" alt="KEENETICA" class="brand-logo" width="160" height="48">
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-                    aria-controls="navbarNav" aria-expanded="false" aria-label="Меню">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                {% if user.is_authenticated and main_nav_items %}
-                <ul class="navbar-nav mx-lg-auto navbar-nav--main">
-                    {% for item in main_nav_items %}
-                    {% if item.visible %}
-                    <li class="nav-item">
-                        <a class="nav-link{% if item.active %} active{% endif %}" href="{{ item.url }}">{{ item.label }}</a>
-                    </li>
-                    {% endif %}
-                    {% endfor %}
-                </ul>
-                {% endif %}
-                <ul class="navbar-nav navbar-nav--secondary{% if user.is_authenticated and main_nav_items %} ms-lg-auto{% else %} ms-auto{% endif %} align-items-lg-center">
+            {% include 'includes/workspace_picker.html' %}
+            <div class="app-topbar__actions ms-auto">
+                <ul class="navbar-nav flex-row align-items-center gap-1">
                     {% if user.is_authenticated %}
-                    <li class="nav-item">
-                        <span class="navbar-text text-light me-lg-3">{{ user.get_username }}</span>
+                    <li class="nav-item d-none d-sm-block">
+                        <a href="{% url 'accounts:profile' %}"
+                           class="app-topbar__user-btn"
+                           title="Профиль пользователя">
+                            <span class="app-topbar__user-icon" aria-hidden="true">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 1.5c-2.33 0-7 1.17-7 3.5V14h14v-1c0-2.33-4.67-3.5-7-3.5Z"/>
+                                </svg>
+                            </span>
+                            <span class="app-topbar__user-name">{{ user.get_username }}</span>
+                        </a>
                     </li>
                     {% if user.is_staff %}
                     <li class="nav-item">
-                        <a class="nav-link nav-link--external" href="/admin/">Админка</a>
+                        <a class="nav-link nav-link--external py-2" href="/admin/">Админка</a>
                     </li>
                     {% endif %}
                     <li class="nav-item">
@@ -53,22 +58,23 @@
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'accounts:login' %}">Войти</a>
+                        <a class="nav-link py-2" href="{% url 'accounts:login' %}">Войти</a>
                     </li>
                     {% endif %}
                 </ul>
             </div>
         </div>
-    </nav>
+    </header>
 
-    <div class="container-fluid app-main">
-        {% if user.is_authenticated %}
-        <div class="app-layout-with-sidebar">
-            {% include 'includes/workspace_sidebar.html' %}
-            <main class="app-layout-with-sidebar__content">
-        {% else %}
-        <main>
-        {% endif %}
+    {% if user.is_authenticated %}
+    <div class="app-shell" id="appShell">
+        {% include 'includes/workspace_sidebar.html' %}
+        <div class="app-shell__main">
+            <main class="app-shell__content app-layout-with-sidebar__content">
+    {% else %}
+    <div class="app-main app-main--guest">
+        <main class="container-fluid">
+    {% endif %}
                 {% if messages %}
                     {% for message in messages %}
                         <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
@@ -78,33 +84,17 @@
                     {% endfor %}
                 {% endif %}
                 {% block content %}{% endblock %}
-        {% if user.is_authenticated %}
+    {% if user.is_authenticated %}
             </main>
+            {% include 'includes/app_footer.html' with in_shell=True %}
         </div>
-        {% else %}
-        </main>
-        {% endif %}
+        <div class="app-shell__backdrop" id="appShellBackdrop" hidden></div>
     </div>
-
-    <footer class="app-footer">
-        <div class="container-fluid">
-            <div class="row g-3 align-items-center">
-                <div class="col-md-5">
-                    <p class="app-footer__brand mb-1">ООО «КИНЕТИКА»</p>
-                    <p class="app-footer__tagline mb-0">Лазерно-ультразвуковая структуроскопия LUSid waves</p>
-                    <p class="app-footer__version mb-0">База композитов v{{ app_version }}</p>
-                </div>
-                <div class="col-md-7">
-                    <div class="app-footer__contacts">
-                        <a href="tel:+79250004443">+7 (925) 000-444-3</a>
-                        <a href="mailto:info@keenetica.ru">info@keenetica.ru</a>
-                        <a href="https://keenetica.ru/" target="_blank" rel="noopener noreferrer">keenetica.ru</a>
-                    </div>
-                    <p class="app-footer__address mb-0">г. Москва, ул. Лефортовский вал, д. 26</p>
-                </div>
-            </div>
-        </div>
-    </footer>
+    {% else %}
+        </main>
+    </div>
+    {% include 'includes/app_footer.html' %}
+    {% endif %}
 
     {% include 'includes/file_transfer_progress.html' %}
 
@@ -112,6 +102,9 @@
     <script src="{% static 'js/file_transfer_progress.js' %}"></script>
     <script src="{% static 'js/list_filter_client.js' %}"></script>
     <script src="{% static 'js/tag_input.js' %}"></script>
+    {% if user.is_authenticated %}
+    <script src="{% static 'js/app-shell.js' %}"></script>
+    {% endif %}
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -21,9 +21,11 @@ _EXEMPT_URL_NAMES = frozenset(
     {
         'accounts:login',
         'accounts:logout',
+        'accounts:profile',
         'workspaces:select',
         'workspaces:switch',
         'core:debug',
+        'core:help',
     }
 )
 _EXEMPT_PATH_PREFIXES = ('/admin/',)

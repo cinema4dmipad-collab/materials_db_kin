@@ -4,7 +4,7 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
-from django.views.generic import CreateView, DeleteView, ListView, UpdateView, View
+from django.views.generic import CreateView, DeleteView, ListView, TemplateView, UpdateView, View
 
 from apps.workspaces.forms import (
     UserCreateForm,
@@ -37,6 +37,21 @@ class WorkspaceLoginView(LoginView):
 
 class WorkspaceLogoutView(LogoutView):
     next_page = '/accounts/login/'
+
+
+class UserProfileView(LoginRequiredMixin, TemplateView):
+    template_name = 'accounts/profile.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        context['profile_user'] = user
+        context['workspace_memberships'] = (
+            WorkspaceMembership.objects.filter(user=user)
+            .select_related('workspace')
+            .order_by('workspace__name')
+        )
+        return context
 
 
 class WorkspaceSelectView(LoginRequiredMixin, ListView):

@@ -16,8 +16,10 @@ from apps.structures.models import StructureType
 from apps.structures.forms import _build_dynamic_field, material_from_value
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
 from apps.structures.sql_executor import SQLExecutor
+from apps.workspaces.visibility import VisibilityMode
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
+_VISIBILITY_FIELD_NAMES = frozenset({'visibility_mode', 'published_workspaces'})
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
 STRUCTURE_SERVICE_FIELDS = {'id', 'created_at', 'updated_at', 'created_by'}
 STRUCTURE_FIELD_PREFIX = 'structure_field_'
@@ -88,10 +90,17 @@ MaterialPropertyFormSet = inlineformset_factory(
 
 
 class CompositeLayerFormSet(forms.BaseInlineFormSet):
+    def __init__(self, *args, workspace=None, **kwargs):
+        self.workspace = workspace
+        super().__init__(*args, **kwargs)
+
     def _construct_form(self, i, **kwargs):
         form = super()._construct_form(i, **kwargs)
         form.parent_material = self.instance
         form.layer_formset = self
+        from apps.materials.picker_data import materials_for_picker_queryset
+
+        form.fields['material'].queryset = materials_for_picker_queryset(self.workspace)
         return form
 
     def full_clean(self):
@@ -290,18 +299,26 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             'name',
             'description',
             'struct_type',
-            'created_by',
         ]
         widgets = {
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'description': forms.Textarea(attrs={**_BOOTSTRAP_INPUT, 'rows': 3}),
             'struct_type': forms.Select(attrs=structure_type_select_widget_attrs()),
-            'created_by': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
         }
 
-    def __init__(self, *args, skip_validation=False, workspace=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        skip_validation=False,
+        workspace=None,
+        show_visibility=False,
+        can_publish=False,
+        **kwargs,
+    ):
         self.skip_validation = skip_validation
+        self.show_visibility = show_visibility and can_publish
+        self._active_workspace = workspace
         super().__init__(*args, workspace=workspace, **kwargs)
         self._initial_struct_type_id = self.instance.struct_type_id if self.instance else None
         self._initial_struct_type = self.instance.struct_type if self.instance else None
@@ -314,6 +331,34 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         self.structure_fields = []
         self.structure_empty_message = ''
         self._add_structure_fields()
+        if self.show_visibility:
+            self._add_visibility_fields()
+
+    def _add_visibility_fields(self):
+        from apps.workspaces.models import Workspace
+
+        self.fields['visibility_mode'] = forms.ChoiceField(
+            choices=VisibilityMode.ui_choices(),
+            initial=VisibilityMode.PRIVATE,
+            label='Режим видимости',
+            widget=forms.Select(attrs={**_BOOTSTRAP_SELECT, 'id': 'id_visibility_mode'}),
+            help_text=(
+                '«Только домашнее пространство» — материал виден только в текущем пространстве. '
+                '«Все пространства» — материал доступен во всех активных пространствах.'
+            ),
+        )
+        queryset = Workspace.objects.filter(is_active=True).order_by('name')
+        if self._active_workspace:
+            queryset = queryset.exclude(pk=self._active_workspace.pk)
+        self.fields['published_workspaces'] = forms.ModelMultipleChoiceField(
+            queryset=queryset,
+            required=False,
+            label='Опубликовано в пространствах',
+            widget=forms.SelectMultiple(
+                attrs={**_BOOTSTRAP_SELECT, 'size': 6, 'id': 'id_published_workspaces'},
+            ),
+            help_text='Только для режима «Выбранные пространства». Домашнее пространство добавляется автоматически.',
+        )
 
     def _selected_structure_type_id(self):
         if self.is_bound and 'struct_type' in self.data:
@@ -359,7 +404,10 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         existing_values = self._existing_structure_values()
         for structure_field in self.structure_fields:
             field_name = self.structure_form_field_name(structure_field)
-            self.fields[field_name] = _build_dynamic_field(structure_field)
+            self.fields[field_name] = _build_dynamic_field(
+                structure_field,
+                workspace=self._active_workspace,
+            )
             if structure_field.name in existing_values:
                 value = existing_values[structure_field.name]
                 if structure_field.field_type == MATERIAL_LINK_FIELD_TYPE:
@@ -394,15 +442,22 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         return [self[self.structure_form_field_name(field)] for field in self.structure_fields]
 
     @property
+    def visibility_bound_fields(self):
+        if not self.show_visibility:
+            return []
+        return [self['visibility_mode']]
+
+    @property
     def base_bound_fields(self):
         structure_field_names = {
             self.structure_form_field_name(field)
             for field in self.structure_fields
         }
+        excluded_names = structure_field_names | _VISIBILITY_FIELD_NAMES
         return [
             bound_field
             for bound_field in self.visible_fields()
-            if bound_field.name not in structure_field_names
+            if bound_field.name not in excluded_names
         ]
 
     def full_clean(self):
@@ -423,6 +478,17 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         self.instance.struct_props_id = None
         if not structure_type.is_created:
             self.add_error('struct_type', 'SQL-таблица для выбранного типа структуры еще не создана.')
+
+        if self.show_visibility:
+            mode = cleaned_data.get('visibility_mode')
+            if mode == VisibilityMode.SELECTED_WORKSPACES:
+                if not cleaned_data.get('published_workspaces'):
+                    self.add_error(
+                        'published_workspaces',
+                        'Выберите хотя бы одно пространство.',
+                    )
+            elif mode != VisibilityMode.SELECTED_WORKSPACES:
+                cleaned_data['published_workspaces'] = []
 
         return cleaned_data
 
@@ -492,10 +558,22 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
 
     def save(self, commit=True):
         material = super().save(commit=False)
+        if self.show_visibility:
+            material.visibility_mode = self.cleaned_data.get(
+                'visibility_mode',
+                VisibilityMode.PRIVATE,
+            )
         if commit:
             self._save_structure_row(material)
             material.save()
             self.save_tags(material)
+            if self.show_visibility:
+                if material.visibility_mode == VisibilityMode.SELECTED_WORKSPACES:
+                    material.published_workspaces.set(
+                        self.cleaned_data.get('published_workspaces', []),
+                    )
+                else:
+                    material.published_workspaces.clear()
             self.save_m2m()
         return material
 
@@ -503,21 +581,15 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
 class MaterialVisibilityForm(forms.ModelForm):
     class Meta:
         model = Material
-        fields = ('visibility_mode', 'published_workspaces')
+        fields = ('visibility_mode',)
         labels = {
             'visibility_mode': 'Режим видимости',
-            'published_workspaces': 'Опубликовано в пространствах',
         }
         widgets = {
-            'published_workspaces': forms.SelectMultiple(attrs={'class': 'form-select', 'size': 8}),
             'visibility_mode': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from apps.workspaces.models import Workspace
-
-        self.fields['published_workspaces'].queryset = Workspace.objects.filter(
-            is_active=True,
-        ).order_by('name')
+        self.fields['visibility_mode'].choices = VisibilityMode.ui_choices()
 

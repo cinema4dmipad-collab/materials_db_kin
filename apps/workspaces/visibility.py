@@ -6,6 +6,15 @@ class VisibilityMode(models.TextChoices):
     SELECTED_WORKSPACES = 'selected_workspaces', 'Выбранные пространства'
     ALL_WORKSPACES = 'all_workspaces', 'Все пространства'
 
+    @classmethod
+    def ui_choices(cls):
+        """Choices shown in UI; selected workspaces hidden until the feature is enabled."""
+        return [
+            choice
+            for choice in cls.choices
+            if choice[0] != cls.SELECTED_WORKSPACES
+        ]
+
 
 class WorkspaceVisibilityMixin:
     def is_visible_in(self, workspace):
@@ -23,5 +32,5 @@ class WorkspaceVisibilityMixin:
         if workspace is None:
             return False
         if self.home_workspace_id is None:
-            return True
+            return False
         return self.home_workspace_id == workspace.pk

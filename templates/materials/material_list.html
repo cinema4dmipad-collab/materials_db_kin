@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}Материалы — База композитов{% endblock %}
 
@@ -26,7 +27,7 @@
     <div class="card-body p-0">
         {% if material_scope == 'shared' %}
         <p class="text-muted small px-3 pt-3 mb-0">
-            Материалы из других пространств, опубликованные для просмотра. Редактирование — только после клонирования в ваше пространство.
+            Опубликованные материалы, доступные в этом пространстве — с общей видимостью или из других пространств. Чужие материалы доступны только для просмотра.
         </p>
         {% endif %}
         {% include 'includes/list_filter_bar.html' %}
@@ -42,6 +43,7 @@
                         {% endif %}
                         <th>Тип структуры</th>
                         <th>Теги</th>
+                        <th>Создал</th>
                         <th>Дата создания</th>
                         <th class="text-end">Действия</th>
                     </tr>
@@ -71,13 +73,22 @@
                             {% endif %}
                         </td>
                         <td>{% url 'materials:list' as materials_list_url %}{% include 'includes/tag_badges.html' with tags=material.tags.all filter_url=materials_list_url %}</td>
+                        <td>{% include 'includes/creator_filter_link.html' with obj=material %}</td>
                         <td>{{ material.created_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end">
                             <div class="table-actions">
-                            <a href="{% url 'materials:detail' material.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view">Просмотр</a>
-                            {% if material_scope == 'workspace' or is_system_admin %}
-                            <a href="{% url 'materials:edit' material.pk %}" class="btn btn-sm btn-outline-primary btn-action-edit">Изменить</a>
-                            <a href="{% url 'materials:delete' material.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                            {% include 'includes/table_action_icon.html' with action='view' url=material_detail_url title='Просмотр' %}
+                            {% if material.pk in material_editable_pks %}
+                            {% url 'materials:edit' material.pk as material_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=material_edit_url title='Изменить' %}
+                            {% endif %}
+                            {% if material.pk in material_cloneable_pks %}
+                            {% url 'materials:clone' material.pk as material_clone_url %}
+                            {% include 'includes/table_action_icon.html' with action='clone' url=material_clone_url title='Клонировать в пространство' method='post' %}
+                            {% endif %}
+                            {% if material.pk in material_deletable_pks %}
+                            {% url 'materials:delete' material.pk as material_delete_url %}
+                            {% include 'includes/table_action_icon.html' with action='delete' url=material_delete_url title='Удалить' %}
                             {% endif %}
                             </div>
                         </td>
@@ -96,7 +107,7 @@
             {% if has_active_filters %}
             По вашему запросу материалов не найдено. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
             {% elif material_scope == 'shared' %}
-            Опубликованных материалов из других пространств пока нет.
+            Опубликованных материалов пока нет.
             {% else %}
             Материалов в этом пространстве пока нет. <a href="{% url 'materials:create' %}">Создать</a>.
             {% endif %}

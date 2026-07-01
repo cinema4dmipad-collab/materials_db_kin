@@ -3,6 +3,7 @@ from django.utils.html import json_script
 
 from apps.core.number_utils import format_decimal_display
 from apps.core.property_form_display import property_label_with_unit as format_property_label_with_unit
+from apps.core.creator import get_creator_display
 
 register = template.Library()
 
@@ -67,6 +68,11 @@ def ui_category_tone(value):
 def property_label_with_unit(property_obj):
     """Название свойства с единицей измерения через запятую."""
     return format_property_label_with_unit(property_obj)
+
+
+@register.filter
+def creator_display(obj):
+    return get_creator_display(obj)
 
 
 @register.filter

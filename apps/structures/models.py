@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -36,6 +37,14 @@ class StructureType(WorkspaceVisibilityMixin, models.Model):
     is_active = models.BooleanField(default=True)
     is_created = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    created_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_structure_types',
+        verbose_name='Создал',
+    )
     home_workspace = models.ForeignKey(
         'workspaces.Workspace',
         on_delete=models.PROTECT,

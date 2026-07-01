@@ -32,7 +32,7 @@
             <dt class="col-sm-3">Теги</dt>
             <dd class="col-sm-9">{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</dd>
             <dt class="col-sm-3">Создал</dt>
-            <dd class="col-sm-9">{{ sample.created_by|default:"—" }}</dd>
+            <dd class="col-sm-9">{{ sample|creator_display }}</dd>
             <dt class="col-sm-3">Создан</dt>
             <dd class="col-sm-9">{{ sample.created_at|date:"d.m.Y H:i" }}</dd>
             <dt class="col-sm-3">Сканы (HDF5)</dt>

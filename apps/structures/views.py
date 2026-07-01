@@ -4,8 +4,9 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
 
-from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
+from apps.core.list_filters import ALL_SEARCH_SCOPE, CREATOR_SEARCH_SCOPE, DEFAULT_CREATOR_FILTER, QuerySetFilterMixin
 
+from apps.core.creator import creator_label
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.forms import StructureRecordForm
 from apps.structures.models import StructureType
@@ -60,13 +61,20 @@ class StructureTypeSelectView(AppViewMixin, QuerySetFilterMixin, ListView):
         ('name', 'Название', ('name',)),
         ('code', 'Код', ('code',)),
         ('description', 'Описание', ('description',)),
+        (CREATOR_SEARCH_SCOPE, 'Создал', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
+
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
+        }
 
     def get_queryset(self):
         return self.filter_queryset(
             structure_types_visible_in(self.request.active_workspace)
             .prefetch_related('fields')
+            .select_related('created_by_user')
             .order_by('name')
         )
 
@@ -85,6 +93,7 @@ class StructureRecordListView(AppViewMixin, CreatedTableRequiredMixin, QuerySetF
             {
                 'id': record['id'],
                 'created_at': record.get('created_at'),
+                'created_by': record.get('created_by') or '',
                 'label': structure_record_label(record, self.structure_type),
             }
             for record in raw_records
@@ -148,6 +157,7 @@ class StructureRecordCreateView(AppViewMixin, CreatedTableRequiredMixin, FormVie
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['structure_type'] = self.structure_type
+        kwargs['workspace'] = self.request.active_workspace
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -161,7 +171,7 @@ class StructureRecordCreateView(AppViewMixin, CreatedTableRequiredMixin, FormVie
             self.request.user, self.structure_type, self.request.active_workspace
         ):
             raise PermissionDenied
-        row_id = form.save()
+        row_id = form.save(created_by=creator_label(self.request.user))
         messages.success(self.request, 'Запись структуры создана.')
         return redirect(
             'structures:detail',
@@ -200,6 +210,7 @@ class StructureRecordUpdateView(AppViewMixin, CreatedTableRequiredMixin, FormVie
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['structure_type'] = self.structure_type
+        kwargs['workspace'] = self.request.active_workspace
         record = get_row(self.structure_type, self.kwargs['pk'])
         if record is None:
             raise Http404('Запись не найдена.')

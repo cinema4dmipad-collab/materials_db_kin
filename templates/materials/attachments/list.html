@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}Файлы — {{ material.code }}{% endblock %}
 
@@ -19,6 +20,7 @@
                         <th>Название</th>
                         <th>Файл</th>
                         <th>Описание</th>
+                        <th>Загрузил</th>
                         <th>Загружен</th>
                         <th class="text-end">Действия</th>
                     </tr>
@@ -31,10 +33,15 @@
                             <a href="{% url 'material_attachments:download' material.pk attachment.pk %}" class="file-download-link" data-download-name="{{ attachment.filename }}">{{ attachment.filename }}</a>
                         </td>
                         <td>{{ attachment.description|default:"—"|truncatewords:12 }}</td>
+                        <td>{% include 'includes/creator_filter_link.html' with obj=attachment %}</td>
                         <td>{{ attachment.uploaded_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end text-nowrap">
-                            <a href="{% url 'material_attachments:download' material.pk attachment.pk %}" class="btn btn-sm btn-outline-secondary file-download-link" data-download-name="{{ attachment.filename }}">Скачать</a>
-                            <a href="{% url 'material_attachments:delete' material.pk attachment.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                            <div class="table-actions">
+                            {% url 'material_attachments:download' material.pk attachment.pk as attachment_download_url %}
+                            {% include 'includes/table_action_icon.html' with action='download' url=attachment_download_url title='Скачать' extra_class='file-download-link btn-action-download' download_name=attachment.filename %}
+                            {% url 'material_attachments:delete' material.pk attachment.pk as attachment_delete_url %}
+                            {% include 'includes/table_action_icon.html' with action='delete' url=attachment_delete_url title='Удалить' %}
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

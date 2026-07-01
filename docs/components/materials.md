@@ -6,7 +6,7 @@ Central catalog of composite materials.
 
 ## Model
 
-**Material** — code, name, description, `struct_type` (FK to StructureType), tags, timestamps.
+**Material** — code, name, description, `struct_type` (FK to StructureType), tags, `home_workspace`, `visibility_mode`, creator (`created_by_user`), timestamps.
 
 Related data:
 
@@ -19,13 +19,32 @@ Related data:
 
 | URL | Action |
 |-----|--------|
-| `/materials/` | List |
-| `/materials/create/` | Create |
+| `/materials/` | List — tabs **Пространство** / **Общие** |
+| `/materials/create/` | Create (own workspace only) |
 | `/materials/<pk>/` | Detail — properties, layers, structure params, samples |
 | `/materials/<pk>/edit/` | Edit form |
 | `/materials/<pk>/delete/` | Delete |
 
 Sub-routes: attachments, samples tab (`materials/sample_urls.py`, `attachment_urls.py`).
+
+### List scopes
+
+* **Пространство** — `materials_owned_by(active_workspace)`
+* **Общие** — `materials_shared_in(active_workspace)` (published materials visible in workspace, including own published)
+
+Shared materials from other workspaces are read-only in the active workspace.
+
+## Material picker
+
+Shared modal (`includes/reference_materials_modal.html`, `reference_materials_picker.js`):
+
+* Tabs **Пространство** / **Общие** (same logic as list)
+* Search and grouping by structure type
+* **Создать** link on workspace tab only
+
+Data: `apps/materials/picker_data.py` — each item includes `scopes: ['workspace']`, `['shared']`, or both.
+
+Used in: sample form, composite layers, structure dynamic fields.
 
 ## Material Form
 

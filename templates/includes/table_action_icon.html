@@ -1,0 +1,20 @@
+{% if method == 'post' %}
+<form method="post" action="{{ url }}" class="table-action-form d-inline">
+    {% csrf_token %}
+    <button type="submit"
+            class="btn btn-sm table-action-btn btn-action-{{ action|default:'link' }}{% if extra_class %} {{ extra_class }}{% endif %}"
+            title="{{ title }}"
+            aria-label="{{ title }}"
+            {% if confirm %}onclick="return confirm('{{ confirm|escapejs }}');"{% endif %}>
+        {% include 'includes/table_action_icon_svg.html' with action=action %}
+    </button>
+</form>
+{% else %}
+<a href="{{ url }}"
+   class="btn btn-sm table-action-btn btn-action-{{ action|default:'link' }}{% if extra_class %} {{ extra_class }}{% endif %}"
+   title="{{ title }}"
+   aria-label="{{ title }}"
+   {% if download_name %}data-download-name="{{ download_name }}"{% endif %}>
+    {% include 'includes/table_action_icon_svg.html' with action=action %}
+</a>
+{% endif %}

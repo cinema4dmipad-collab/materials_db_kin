@@ -24,15 +24,24 @@
             <h1 class="h4 mb-1">{{ material.name }}</h1>
             <p class="text-muted mb-0 small">Код: <strong>{{ material.code }}</strong></p>
         </div>
-        <div class="text-nowrap">
+        <div class="text-nowrap d-inline-flex align-items-center gap-1">
             {% if not material_is_readonly %}
-            <a href="{% url 'materials:edit' material.pk %}" class="btn btn-primary btn-sm">Изменить</a>
-            <a href="{% url 'materials:delete' material.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            {% url 'materials:edit' material.pk as material_edit_url %}
+            {% include 'includes/table_action_icon.html' with action='edit' url=material_edit_url title='Изменить' %}
+            {% endif %}
+            {% if can_clone_material %}
+            {% url 'materials:clone' material.pk as material_clone_url %}
+            {% include 'includes/table_action_icon.html' with action='clone' url=material_clone_url title='Клонировать в пространство' method='post' %}
+            {% endif %}
+            {% if can_delete_material %}
+            {% url 'materials:delete' material.pk as material_delete_url %}
+            {% include 'includes/table_action_icon.html' with action='delete' url=material_delete_url title='Удалить' %}
             {% endif %}
             {% if can_publish_material %}
-            <a href="{% url 'materials:visibility' material.pk %}" class="btn btn-outline-secondary btn-sm">Видимость</a>
+            {% url 'materials:visibility' material.pk as material_visibility_url %}
+            {% include 'includes/table_action_icon.html' with action='link' url=material_visibility_url title='Видимость' %}
             {% endif %}
-            <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
+            <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm ms-1">К списку</a>
         </div>
     </div>
     <div class="card-body">
@@ -40,7 +49,7 @@
             <dt class="col-sm-3">Описание</dt>
             <dd class="col-sm-9">{{ material.description|default:"—" }}</dd>
             <dt class="col-sm-3">Создал</dt>
-            <dd class="col-sm-9">{{ material.created_by|default:"—" }}</dd>
+            <dd class="col-sm-9">{{ material|creator_display }}</dd>
             <dt class="col-sm-3">Создан</dt>
             <dd class="col-sm-9">{{ material.created_at|date:"d.m.Y H:i" }}</dd>
             <dt class="col-sm-3">Обновлён</dt>

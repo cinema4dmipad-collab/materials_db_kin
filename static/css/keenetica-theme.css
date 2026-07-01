@@ -531,7 +531,62 @@ a:hover {
     display: inline-flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 0.35rem;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.table-action-form {
+    margin: 0;
+}
+
+.table-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    line-height: 1;
+}
+
+.table-action-btn svg {
+    width: 1rem;
+    height: 1rem;
+    pointer-events: none;
+}
+
+.btn-action-clone {
+    --bs-btn-color: var(--kx-brand);
+    --bs-btn-border-color: rgba(0, 118, 121, 0.35);
+    --bs-btn-hover-bg: var(--kx-brand-soft);
+    --bs-btn-hover-border-color: rgba(0, 118, 121, 0.45);
+    --bs-btn-hover-color: var(--kx-brand-dark);
+}
+
+.btn-action-download {
+    --bs-btn-color: var(--kx-text-muted);
+    --bs-btn-border-color: var(--kx-border-strong);
+    --bs-btn-hover-bg: var(--kx-surface-muted);
+    --bs-btn-hover-border-color: var(--kx-border-strong);
+    --bs-btn-hover-color: var(--kx-text);
+}
+
+.btn-action-delete {
+    --bs-btn-color: #b42318;
+    --bs-btn-border-color: rgba(180, 35, 24, 0.35);
+    --bs-btn-hover-bg: rgba(180, 35, 24, 0.08);
+    --bs-btn-hover-border-color: rgba(180, 35, 24, 0.45);
+    --bs-btn-hover-color: #912018;
+}
+
+.btn-action-sample,
+.btn-action-create,
+.btn-action-members {
+    --bs-btn-color: var(--kx-brand);
+    --bs-btn-border-color: rgba(0, 118, 121, 0.35);
+    --bs-btn-hover-bg: var(--kx-brand-soft);
+    --bs-btn-hover-border-color: rgba(0, 118, 121, 0.45);
+    --bs-btn-hover-color: var(--kx-brand-dark);
 }
 
 /* ——— Tabs ——— */
@@ -654,6 +709,29 @@ a:hover {
     height: 0.45rem;
     border-radius: 0.12rem;
     flex-shrink: 0;
+}
+
+.type-pill__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+    background: var(--tone-slate-dot);
+    color: #fff;
+}
+
+.type-pill__icon svg {
+    width: 0.7rem;
+    height: 0.7rem;
+    display: block;
+}
+
+.tone-slate .type-pill__icon {
+    background: var(--tone-slate-dot);
+    color: #fff;
 }
 
 .entity-tag::before {

@@ -62,13 +62,12 @@ SamplePropertyFormSet = inlineformset_factory(
 class SampleForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = Sample
-        fields = ['code', 'name', 'material', 'object_type', 'created_by']
+        fields = ['code', 'name', 'material', 'object_type']
         labels = {
             'code': 'Код',
             'name': 'Название',
             'material': 'Материал',
             'object_type': 'Тип объекта',
-            'created_by': 'Создал',
         }
         widgets = {
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
@@ -77,8 +76,14 @@ class SampleForm(TagNamesFormMixin, forms.ModelForm):
                 **{'data-sample-material-select': 'true'},
             )),
             'object_type': forms.Select(attrs=_BOOTSTRAP_SELECT),
-            'created_by': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
         }
+
+    def __init__(self, *args, workspace=None, **kwargs):
+        super().__init__(*args, workspace=workspace, **kwargs)
+        from apps.materials.picker_data import materials_for_picker_queryset
+
+        self.fields['material'].queryset = materials_for_picker_queryset(workspace)
+        self.fields['material'].empty_label = '— не выбран —'
 
 
 class SampleAttachmentForm(forms.ModelForm):

@@ -33,6 +33,11 @@ class WorkspacePerm:
     PROPERTY_EDIT = 'property.edit'
     PROPERTY_DELETE = 'property.delete'
 
+    TAG_VIEW = 'tag.view'
+    TAG_CREATE = 'tag.create'
+    TAG_EDIT = 'tag.edit'
+    TAG_DELETE = 'tag.delete'
+
     USER_MANAGE = 'user.manage'
 
 
@@ -62,6 +67,10 @@ ALL_WORKSPACE_PERMISSIONS = (
     WorkspacePerm.PROPERTY_CREATE,
     WorkspacePerm.PROPERTY_EDIT,
     WorkspacePerm.PROPERTY_DELETE,
+    WorkspacePerm.TAG_VIEW,
+    WorkspacePerm.TAG_CREATE,
+    WorkspacePerm.TAG_EDIT,
+    WorkspacePerm.TAG_DELETE,
     WorkspacePerm.USER_MANAGE,
 )
 
@@ -86,9 +95,10 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             WorkspacePerm.SCAN_EDIT,
             WorkspacePerm.SCAN_DELETE,
             WorkspacePerm.PROPERTY_VIEW,
-            WorkspacePerm.PROPERTY_CREATE,
-            WorkspacePerm.PROPERTY_EDIT,
-            WorkspacePerm.PROPERTY_DELETE,
+            WorkspacePerm.TAG_VIEW,
+            WorkspacePerm.TAG_CREATE,
+            WorkspacePerm.TAG_EDIT,
+            WorkspacePerm.TAG_DELETE,
         }
     ),
     WorkspaceRole.OPERATOR: frozenset(
@@ -105,12 +115,34 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             WorkspacePerm.SCAN_CREATE,
             WorkspacePerm.SCAN_EDIT,
             WorkspacePerm.PROPERTY_VIEW,
-            WorkspacePerm.PROPERTY_CREATE,
-            WorkspacePerm.PROPERTY_EDIT,
-            WorkspacePerm.PROPERTY_DELETE,
+            WorkspacePerm.TAG_VIEW,
+            WorkspacePerm.TAG_CREATE,
+            WorkspacePerm.TAG_EDIT,
+            WorkspacePerm.TAG_DELETE,
         }
     ),
 }
+
+
+def can_manage_properties(user) -> bool:
+    """Справочник свойств — общий каталог; управление только у admin."""
+    return is_system_admin(user)
+
+
+def can_manage_global_tags(user) -> bool:
+    """Общие теги — глобальный справочник; управление только у admin."""
+    return is_system_admin(user)
+
+
+def can_manage_tag(user, tag, workspace) -> bool:
+    """Admin — любой тег; остальные — только теги своего пространства."""
+    if not user or not user.is_authenticated or tag is None:
+        return False
+    if tag.is_global:
+        return is_system_admin(user)
+    if workspace is None or tag.workspace_id != workspace.pk:
+        return False
+    return has_workspace_perm(user, workspace, WorkspacePerm.TAG_EDIT)
 
 
 def is_system_admin(user) -> bool:
@@ -144,12 +176,20 @@ def has_workspace_perm(user, workspace, codename: str) -> bool:
 
 
 def is_editable_in_workspace(user, obj, workspace) -> bool:
-    """Admin может редактировать объект в любом пространстве."""
+    """Admin — любой материал; остальные — только home_workspace активного WS."""
     if is_system_admin(user):
         return True
     if obj is None or workspace is None:
         return False
+    if not has_workspace_perm(user, workspace, WorkspacePerm.MATERIAL_EDIT):
+        return False
     return obj.is_editable_in(workspace)
+
+
+def can_delete_in_workspace(user, obj, workspace) -> bool:
+    if not is_editable_in_workspace(user, obj, workspace):
+        return False
+    return has_workspace_perm(user, workspace, WorkspacePerm.MATERIAL_DELETE)
 
 
 def can_manage_structure_types(user) -> bool:

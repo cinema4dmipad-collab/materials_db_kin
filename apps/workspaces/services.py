@@ -74,14 +74,23 @@ def materials_owned_by(workspace):
 
 
 def materials_shared_in(workspace):
-    if workspace is None:
-        from apps.materials.models import Material
+    """Опубликованные материалы, доступные в пространстве (свои и из других WS)."""
+    from apps.materials.models import Material
+    from apps.workspaces.visibility import VisibilityMode
 
+    if workspace is None:
         return Material.objects.none()
+    published_filter = (
+        Q(visibility_mode=VisibilityMode.ALL_WORKSPACES)
+        | Q(
+            visibility_mode=VisibilityMode.SELECTED_WORKSPACES,
+            published_workspaces=workspace,
+        )
+    )
     return (
-        materials_visible_in(workspace)
-        .exclude(home_workspace=workspace)
+        Material.objects.filter(published_filter)
         .select_related('home_workspace')
+        .distinct()
     )
 
 
@@ -96,10 +105,10 @@ def tags_in_workspace(workspace):
     from apps.core.models import Tag
 
     if workspace is None:
-        return Tag.objects.none()
+        return Tag.objects.filter(workspace__isnull=True)
     if not _model_has_field(Tag, 'workspace'):
         return Tag.objects.all()
-    return Tag.objects.filter(workspace=workspace)
+    return Tag.objects.filter(Q(workspace=workspace) | Q(workspace__isnull=True))
 
 
 def samples_in_workspace(workspace):

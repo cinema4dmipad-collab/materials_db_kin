@@ -9,12 +9,15 @@ from django.urls import reverse
 
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
+    DEFAULT_CREATOR_FILTER,
     OBJECT_TYPE_SEARCH_SCOPE,
     SCAN_METHOD_SEARCH_SCOPE,
     TAG_SEARCH_SCOPE,
     QuerySetFilterMixin,
     build_choice_label_filter,
 )
+from apps.core.tag_utils import assign_tags, get_or_create_tags, parse_tag_input, tag_slug_from_name
 from apps.core.templatetags.ui_tags import category_tone, semantic_tone, ui_category_tone, ui_tone
 from apps.core.models import Tag
 from apps.core.forms import TagForm
@@ -52,7 +55,7 @@ def isolated_git_commit(*, build_commit_path=None, **env):
             if value is not None:
                 os.environ[name] = value
         get_git_commit_hash.cache_clear()
-from apps.core.tag_utils import assign_tags, get_or_create_tags, parse_tag_input, tag_slug_from_name
+from apps.core.creator import assign_creator, creator_label, get_creator_display
 from apps.materials.models import Material
 from apps.samples.models import Sample
 from apps.structures.models import StructureType
@@ -79,6 +82,20 @@ class _SampleFilterView(QuerySetFilterMixin):
         return {'object_type': Sample.OBJECT_TYPES}
 
 
+class CreatorUtilsTests(TestCase):
+    def test_assign_creator_sets_user_and_label(self):
+        user = get_user_model().objects.create_user('creator-user', password='pass')
+        material = Material(code='M-CR', name='Creator test')
+        assign_creator(material, user)
+        self.assertEqual(material.created_by_user, user)
+        self.assertEqual(material.created_by, 'creator-user')
+
+    def test_get_creator_display_prefers_user(self):
+        user = get_user_model().objects.create_user('display-user', password='pass')
+        material = Material(code='M-DSP', name='Display test', created_by='legacy', created_by_user=user)
+        self.assertEqual(get_creator_display(material), 'display-user')
+
+
 class TagFormTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -91,46 +108,137 @@ class TagFormTests(TestCase):
         self.assertEqual(tag.slug, 't700-test')
         self.assertEqual(tag.workspace, self.workspace)
 
-    def test_rejects_duplicate_slug(self):
+    def test_rejects_duplicate_slug_in_workspace(self):
         Tag.objects.create(name='Prepreg', slug='prepreg', workspace=self.workspace)
         form = TagForm(data={'name': 'PREPREG'}, workspace=self.workspace)
         self.assertFalse(form.is_valid())
         self.assertIn('name', form.errors)
 
+    def test_global_and_workspace_tags_may_share_slug(self):
+        Tag.objects.create(name='Prepreg', slug='prepreg', workspace=None)
+        form = TagForm(data={'name': 'PREPREG'}, workspace=self.workspace)
+        self.assertTrue(form.is_valid(), form.errors)
+        tag = form.save()
+        self.assertEqual(tag.slug, 'prepreg')
+        self.assertEqual(tag.workspace, self.workspace)
+
+    def test_global_tag_requires_unique_slug_globally(self):
+        Tag.objects.create(name='Prepreg', slug='prepreg', workspace=None)
+        form = TagForm(
+            data={'name': 'PREPREG', 'is_global': True},
+            workspace=self.workspace,
+            allow_global=True,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('name', form.errors)
+
 
 class TagViewsTests(AuthenticatedWorkspaceTestCase):
-    def setUp(self):
-        super().setUp()
-        self.tag = Tag.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin = get_user_model().objects.create_superuser('tag-admin', password=cls.password)
+        cls.operator = get_user_model().objects.create_user('tag-operator', password=cls.password)
+        from apps.workspaces.models import WorkspaceMembership, WorkspaceRole
+
+        WorkspaceMembership.objects.create(
+            workspace=cls.workspace,
+            user=cls.operator,
+            role=WorkspaceRole.OPERATOR,
+        )
+        cls.workspace_tag = Tag.objects.create(
             name='Prepreg',
             slug='prepreg',
-            workspace=self.workspace,
+            workspace=cls.workspace,
+        )
+        cls.global_tag = Tag.objects.create(
+            name='Composite',
+            slug='composite',
+            workspace=None,
         )
 
-    def test_tag_list_renders(self):
+    def test_tag_list_renders_workspace_tags_by_default(self):
         response = self.client.get(reverse('core:tag_list'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Prepreg')
+        self.assertNotContains(response, 'Composite')
+        self.assertContains(response, 'Пространство')
+        self.assertContains(response, 'Общие')
 
-    def test_tag_create_view(self):
+    def test_tag_list_global_scope_shows_global_tags(self):
+        response = self.client.get(reverse('core:tag_list'), {'scope': 'global'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Composite')
+        self.assertNotContains(response, 'Prepreg')
+
+    def test_manager_can_create_workspace_tag(self):
         response = self.client.post(reverse('core:tag_create'), {'name': 'T700'})
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(Tag.objects.filter(slug='t700').exists())
+        tag = Tag.objects.get(slug='t700')
+        self.assertEqual(tag.workspace, self.workspace)
+
+    def test_operator_cannot_edit_global_tag(self):
+        login_test_client(
+            self.client,
+            user=self.operator,
+            workspace=self.workspace,
+            password=self.password,
+        )
+        response = self.client.post(
+            reverse('core:tag_edit', kwargs={'pk': self.global_tag.pk}),
+            {'name': 'Composite updated', 'is_global': True},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.global_tag.refresh_from_db()
+        self.assertEqual(self.global_tag.name, 'Composite')
+
+    def test_admin_can_create_global_tag(self):
+        login_test_client(
+            self.client,
+            user=self.admin,
+            workspace=self.workspace,
+            password=self.password,
+        )
+        response = self.client.post(
+            reverse('core:tag_create'),
+            {'name': 'Shared tag', 'is_global': True},
+        )
+        self.assertEqual(response.status_code, 302)
+        tag = Tag.objects.get(slug='shared-tag')
+        self.assertIsNone(tag.workspace_id)
+
+    def test_operator_cannot_forge_global_tag(self):
+        login_test_client(
+            self.client,
+            user=self.operator,
+            workspace=self.workspace,
+            password=self.password,
+        )
+        response = self.client.post(
+            reverse('core:tag_create'),
+            {'name': 'Fake global', 'is_global': True},
+        )
+        self.assertEqual(response.status_code, 302)
+        tag = Tag.objects.get(slug='fake-global')
+        self.assertEqual(tag.workspace, self.workspace)
 
     def test_tag_update_view(self):
         response = self.client.post(
-            reverse('core:tag_edit', kwargs={'pk': self.tag.pk}),
+            reverse('core:tag_edit', kwargs={'pk': self.workspace_tag.pk}),
             {'name': 'Pre-preg'},
         )
         self.assertEqual(response.status_code, 302)
-        self.tag.refresh_from_db()
-        self.assertEqual(self.tag.name, 'Pre-preg')
-        self.assertEqual(self.tag.slug, 'pre-preg')
+        self.workspace_tag.refresh_from_db()
+        self.assertEqual(self.workspace_tag.name, 'Pre-preg')
+        self.assertEqual(self.workspace_tag.slug, 'pre-preg')
+        self.assertEqual(self.workspace_tag.workspace, self.workspace)
 
     def test_tag_delete_view(self):
-        response = self.client.post(reverse('core:tag_delete', kwargs={'pk': self.tag.pk}))
+        response = self.client.post(
+            reverse('core:tag_delete', kwargs={'pk': self.workspace_tag.pk})
+        )
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(Tag.objects.filter(pk=self.tag.pk).exists())
+        self.assertFalse(Tag.objects.filter(pk=self.workspace_tag.pk).exists())
 
 
 class TagUtilsTests(TestCase):
@@ -151,6 +259,12 @@ class TagUtilsTests(TestCase):
         tags = get_or_create_tags(['prepreg', 'PREPREG'], self.workspace)
         self.assertEqual(len(tags), 1)
         self.assertEqual(tags[0].slug, 'prepreg')
+
+    def test_get_or_create_tags_creates_workspace_tag_not_global(self):
+        Tag.objects.create(name='Prepreg', slug='prepreg', workspace=None)
+        tags = get_or_create_tags(['prepreg'], self.workspace)
+        self.assertEqual(len(tags), 1)
+        self.assertEqual(tags[0].workspace, self.workspace)
 
 
 class NumberUtilsTests(TestCase):
@@ -202,6 +316,17 @@ class _SampleFilterViewWithObjectType(_SampleFilterView):
                 Sample.OBJECT_TYPES,
                 'object_type',
             ),
+        }
+
+
+class _SampleFilterViewWithCreator(_SampleFilterView):
+    search_scopes = _SampleFilterView.search_scopes + (
+        (CREATOR_SEARCH_SCOPE, 'Создал', ()),
+    )
+
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
         }
 
 
@@ -322,7 +447,7 @@ class QuerySetFilterMixinTests(TestCase):
         ))
 
     def test_tag_search_scope(self):
-        request = RequestFactory().get('/samples/', {'q': 'lab', 'q_in': TAG_SEARCH_SCOPE})
+        request = self._request('/samples/', {'q': 'lab', 'q_in': TAG_SEARCH_SCOPE})
         view = _SampleFilterView(request)
         queryset = view.filter_queryset(Sample.objects.all())
         self.assertEqual(queryset.count(), 1)
@@ -334,6 +459,19 @@ class QuerySetFilterMixinTests(TestCase):
             {'q': 'Испытательный', 'q_in': OBJECT_TYPE_SEARCH_SCOPE},
         )
         view = _SampleFilterViewWithObjectType(request)
+        queryset = view.filter_queryset(Sample.objects.all())
+        self.assertEqual(queryset.count(), 1)
+        self.assertEqual(queryset.get().code, 'SMP-FILTER-A')
+
+    def test_creator_search_scope(self):
+        user = get_user_model().objects.create_user('filter-creator', password='pass')
+        assign_creator(self.sample_a, user)
+        self.sample_a.save()
+        request = RequestFactory().get(
+            '/samples/',
+            {'q': 'filter-creator', 'q_in': CREATOR_SEARCH_SCOPE},
+        )
+        view = _SampleFilterViewWithCreator(request)
         queryset = view.filter_queryset(Sample.objects.all())
         self.assertEqual(queryset.count(), 1)
         self.assertEqual(queryset.get().code, 'SMP-FILTER-A')
@@ -363,6 +501,8 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Справка по работе с базой')
         self.assertContains(response, 'Справочник свойств')
         self.assertContains(response, 'Образцы')
+        self.assertContains(response, 'id="interface"')
+        self.assertContains(response, 'Пространство')
 
 
 class AppVersionTests(TestCase):

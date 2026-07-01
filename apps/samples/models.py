@@ -117,6 +117,14 @@ class SampleAttachment(models.Model):
     description = models.TextField(blank=True, verbose_name='Описание')
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Загружен')
     uploaded_by = models.CharField(max_length=100, blank=True, verbose_name='Загрузил')
+    uploaded_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_sample_attachments',
+        verbose_name='Загрузил (пользователь)',
+    )
 
     class Meta:
         ordering = ['-uploaded_at']
