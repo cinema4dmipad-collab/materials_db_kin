@@ -1,15 +1,26 @@
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
-from apps.workspaces.models import Workspace, WorkspaceMembership, WorkspaceRole
-from apps.workspaces.services import ACTIVE_WORKSPACE_SESSION_KEY, ensure_legacy_workspace
+from apps.workspaces.models import BUILTIN_GROUP_MANAGER, Workspace
+from apps.workspaces.services import (
+    ACTIVE_WORKSPACE_SESSION_KEY,
+    assign_user_to_groups,
+    ensure_default_groups,
+    ensure_legacy_workspace,
+)
 
 User = get_user_model()
 DEFAULT_TEST_PASSWORD = 'test-pass-123'
 
 
 def legacy_workspace():
-    return ensure_legacy_workspace()
+    workspace = ensure_legacy_workspace()
+    ensure_default_groups(workspace)
+    return workspace
+
+
+def assign_user_to_groups_by_name(user, workspace, *group_names):
+    assign_user_to_groups(user, workspace, group_names)
 
 
 def create_test_material(**kwargs):
@@ -54,11 +65,8 @@ class AuthenticatedWorkspaceTestCase(TestCase):
             name='Тестовое пространство',
             description='Для автотестов',
         )
-        cls.membership = WorkspaceMembership.objects.create(
-            workspace=cls.workspace,
-            user=cls.user,
-            role=WorkspaceRole.MANAGER,
-        )
+        ensure_default_groups(cls.workspace)
+        assign_user_to_groups(cls.user, cls.workspace, [BUILTIN_GROUP_MANAGER])
 
     def setUp(self):
         self.client = Client()

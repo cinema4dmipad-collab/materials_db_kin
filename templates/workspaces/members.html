@@ -1,111 +1,352 @@
 {% extends 'base.html' %}
 
+{% load static %}
+
+
+
 {% block title %}Участники — {{ workspace.name }}{% endblock %}
 
+
+
+{% block extra_head %}
+
+<link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
+
+<link href="{% static 'css/user_picker.css' %}" rel="stylesheet">
+
+{% endblock %}
+
+
+
 {% block content %}
+
 {% if form %}
+
 <div class="card mb-4">
+
     <div class="card-header">
-        <h2 class="h5 mb-0">Изменение роли</h2>
+
+        <h2 class="h5 mb-0">Группы участника {{ edit_user.username }}</h2>
+
     </div>
+
     <div class="card-body">
+
         <form method="post" novalidate>
+
             {% csrf_token %}
+
             {% for field in form %}
+
             <div class="mb-3">
+
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
+
+                {% include 'includes/form_field_widget.html' with field=field %}
+
                 {% for error in field.errors %}
+
                 <div class="invalid-feedback d-block">{{ error }}</div>
+
                 {% endfor %}
+
             </div>
+
             {% endfor %}
+
             <button type="submit" class="btn btn-primary">Сохранить</button>
+
             <a href="{% url 'workspaces:members' workspace.pk %}" class="btn btn-outline-secondary">Отмена</a>
+
         </form>
+
     </div>
-</div>
-{% endif %}
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h1 class="h4 mb-0">Участники: {{ workspace.name }}</h1>
-        <a href="{% url 'core:dashboard' %}" class="btn btn-sm btn-outline-secondary">На главную</a>
-    </div>
-    <div class="card-body p-0">
-        {% if memberships %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Пользователь</th>
-                        <th>Роль</th>
-                        <th class="text-end">Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for membership in memberships %}
-                    <tr>
-                        <td>{{ membership.user.username }}</td>
-                        <td>{{ membership.get_role_display }}</td>
-                        <td class="text-end">
-                            {% if is_system_admin or membership.role == 'operator' %}
-                            <div class="table-actions">
-                            {% url 'workspaces:member_edit' workspace.pk membership.pk as member_edit_url %}
-                            {% include 'includes/table_action_icon.html' with action='edit' url=member_edit_url title='Изменить' %}
-                            <form method="post" action="{% url 'workspaces:member_delete' workspace.pk membership.pk %}" class="table-action-form d-inline">
-                                {% csrf_token %}
-                                <button type="submit"
-                                        class="btn btn-sm table-action-btn btn-action-delete"
-                                        title="Удалить"
-                                        aria-label="Удалить"
-                                        onclick="return confirm('Удалить участника?');">
-                                    {% include 'includes/table_action_icon_svg.html' with action='delete' %}
-                                </button>
-                            </form>
-                            </div>
-                            {% else %}
-                            <span class="text-muted small">Назначен администратором</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="text-muted p-3 mb-0">Участников пока нет.</p>
-        {% endif %}
-    </div>
+
 </div>
 
-<div class="card">
-    <div class="card-header">
-        <h2 class="h5 mb-0">Добавить участника</h2>
+{% endif %}
+
+
+
+<div class="card mb-4">
+
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+        <h1 class="h4 mb-0">Участники: {{ workspace.name }}</h1>
+
+        <div class="d-flex gap-2">
+
+            {% if is_system_admin %}
+
+            <a href="{{ admin_workspaces_url }}" class="btn btn-sm btn-outline-secondary">К пространствам</a>
+
+            {% endif %}
+
+            <a href="{% url 'core:dashboard' %}" class="btn btn-sm btn-outline-secondary">На главную</a>
+
+        </div>
+
     </div>
-    <div class="card-body">
-        {% if not can_assign_manager_role %}
-        <p class="text-muted small">Менеджер может добавлять только операторов. Роль менеджера назначает системный администратор.</p>
+
+    <div class="card-body p-0">
+
+        {% if members %}
+
+        <div class="table-responsive">
+
+            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Пользователь</th>
+
+                        <th>Группы</th>
+
+                        <th class="text-end">Действия</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    {% for member in members %}
+
+                    <tr>
+
+                        <td>{{ member.user.username }}</td>
+
+                        <td>
+
+                            {% for group in member.groups %}
+
+                            <span class="badge text-bg-light border me-1 mb-1">{{ group.name }}</span>
+
+                            {% empty %}
+
+                            <span class="text-muted">—</span>
+
+                            {% endfor %}
+
+                        </td>
+
+                        <td class="text-end">
+
+                            {% if member.can_manage %}
+
+                            <div class="table-actions">
+
+                            {% url 'workspaces:member_edit' workspace.pk member.user.pk as member_edit_url %}
+
+                            {% include 'includes/table_action_icon.html' with action='edit' url=member_edit_url title='Изменить' %}
+
+                            <form method="post" action="{% url 'workspaces:member_delete' workspace.pk member.user.pk %}" class="table-action-form d-inline">
+
+                                {% csrf_token %}
+
+                                <button type="submit"
+
+                                        class="btn btn-sm table-action-btn btn-action-delete"
+
+                                        title="Удалить"
+
+                                        aria-label="Удалить"
+
+                                        onclick="return confirm('Удалить участника из пространства?');">
+
+                                    {% include 'includes/table_action_icon_svg.html' with action='delete' %}
+
+                                </button>
+
+                            </form>
+
+                            </div>
+
+                            {% else %}
+
+                            <span class="text-muted small">Недостаточно прав</span>
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+        {% else %}
+
+        <p class="text-muted p-3 mb-0">Участников пока нет.</p>
+
         {% endif %}
-        <form method="post" action="{% url 'workspaces:members' workspace.pk %}" novalidate>
-            {% csrf_token %}
-            {% if membership_form.non_field_errors %}
-            <div class="alert alert-danger">{{ membership_form.non_field_errors }}</div>
-            {% endif %}
-            {% for field in membership_form %}
-            <div class="mb-3">
-                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% for error in field.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            {% endfor %}
-            {% if can_add_members %}
-            <button type="submit" class="btn btn-primary">Добавить</button>
-            {% else %}
-            <p class="text-muted small mb-0">Все пользователи уже добавлены в это пространство.</p>
-            {% endif %}
-        </form>
+
     </div>
+
 </div>
+
+
+
+<div class="card">
+
+    <div class="card-header d-flex justify-content-between align-items-center">
+
+        <h2 class="h5 mb-0">Добавить участников</h2>
+
+        {% if can_add_members %}
+
+        <button type="button" id="add-members-btn" class="btn btn-sm btn-outline-primary">Добавить</button>
+
+        {% endif %}
+
+    </div>
+
+    <div class="card-body p-0">
+
+        {% if can_add_members %}
+
+        <form method="post" action="{% url 'workspaces:members' workspace.pk %}" id="members-add-form" novalidate>
+
+            {% csrf_token %}
+
+            <div id="members-add-client-error" class="alert alert-danger m-3 mb-0{% if not member_add_formset.non_form_errors %} d-none{% endif %}" role="alert">{% for error in member_add_formset.non_form_errors %}{{ error }}{% endfor %}</div>
+
+            {{ member_add_formset.management_form }}
+
+            <div class="table-responsive">
+
+                <table class="table table-striped align-middle mb-0 app-data-table">
+
+                    <thead>
+
+                        <tr>
+
+                            <th scope="col">Пользователь</th>
+
+                            <th scope="col">Группы</th>
+
+                            <th scope="col" class="text-end">Действия</th>
+
+                        </tr>
+
+                    </thead>
+
+                    <tbody id="member-add-forms-container">
+
+                        {% for member_form in member_add_formset %}
+
+                        {% include 'workspaces/includes/member_add_row.html' with member_form=member_form member_add_formset=member_add_formset %}
+
+                        {% endfor %}
+
+                    </tbody>
+
+                    <tbody>
+
+                        <tr id="members-add-empty-row" class="members-add-empty-row{% if member_add_formset.forms %} d-none{% endif %}{% if member_add_formset.non_form_errors and not member_add_formset.forms %} members-add-empty-row--invalid{% endif %}">
+
+                            <td colspan="3" class="text-muted p-3">
+
+                                Участников в списке пока нет — нажмите «Добавить», чтобы выбрать пользователей.
+
+                            </td>
+
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <template id="empty-member-form-template">
+
+                {% with member_form=member_add_formset.empty_form %}
+
+                <tr class="member-add-row">
+
+                    {% for hidden in member_form.hidden_fields %}{{ hidden }}{% endfor %}
+
+                    <td class="member-add-row__user">
+
+                        <div class="member-add-row__user-card text-muted">—</div>
+
+                    </td>
+
+                    <td class="member-add-row__groups">
+
+                        <div class="member-add-row__groups-list">
+
+                            {% for option in member_form.groups %}
+
+                            <div class="form-check form-check-inline">
+
+                                {{ option.tag }}
+
+                                <label class="form-check-label" for="{{ option.id_for_label }}">{{ option.choice_label }}</label>
+
+                            </div>
+
+                            {% endfor %}
+
+                        </div>
+
+                    </td>
+
+                    <td class="text-end text-nowrap">
+
+                        {% if member_add_formset.can_delete %}
+
+                        <span class="visually-hidden">{{ member_form.DELETE }}</span>
+
+                        {% endif %}
+
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-member-row-btn" title="Убрать из списка">✖</button>
+
+                    </td>
+
+                </tr>
+
+                {% endwith %}
+
+            </template>
+
+            {% include 'includes/workspace_users_modal.html' %}
+
+            <div class="p-3 border-top">
+
+                <button type="submit" class="btn btn-primary" id="members-add-submit-btn">Сохранить участников</button>
+
+            </div>
+
+        </form>
+
+        {% else %}
+
+        <p class="text-muted p-3 mb-0">Все пользователи уже добавлены в это пространство.</p>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
 {% endblock %}
+
+
+
+{% block extra_scripts %}
+
+<script src="{% static 'js/workspace_users_picker.js' %}"></script>
+
+<script src="{% static 'js/workspace_members_formset.js' %}"></script>
+
+{% endblock %}
+

@@ -10,7 +10,7 @@ def workspace_navigation(request):
         return {}
 
     active_workspace = getattr(request, 'active_workspace', None) or get_active_workspace(request)
-    membership = getattr(request, 'workspace_membership', None)
+    workspace_user_groups = getattr(request, 'workspace_user_groups', [])
     user_workspaces = get_user_workspaces(user)
 
     def can(codename):
@@ -64,53 +64,84 @@ def workspace_navigation(request):
     match = getattr(request, 'resolver_match', None)
     nav_namespace = getattr(match, 'namespace', '') or ''
     nav_url_name = getattr(match, 'url_name', '') or ''
+
+    def _admin_active(*url_names):
+        return nav_namespace == 'administration' and nav_url_name in url_names
+
     for item in main_nav_items:
         item['active'] = item.pop('is_active')(nav_namespace, nav_url_name)
 
     nav_sections = []
-    management_items = []
+    workspace_items = []
     if can(WorkspacePerm.MANAGE_SETTINGS) and active_workspace:
-        management_items.append(
+        workspace_items.append(
             {
-                'label': 'Настройки пространства',
+                'label': 'Настройки',
                 'url': reverse('workspaces:settings', kwargs={'pk': active_workspace.pk}),
-                'active_url_name': 'settings',
+                'active': nav_namespace == 'workspaces' and nav_url_name == 'settings',
                 'visible': True,
             }
         )
     if can(WorkspacePerm.MANAGE_MEMBERS) and active_workspace:
-        management_items.append(
+        workspace_items.append(
             {
                 'label': 'Участники',
                 'url': reverse('workspaces:members', kwargs={'pk': active_workspace.pk}),
-                'active_url_name': 'members',
+                'active': nav_namespace == 'workspaces' and nav_url_name in (
+                    'members',
+                    'member_edit',
+                    'member_delete',
+                    'member_add',
+                ),
                 'visible': True,
             }
         )
+    if workspace_items:
+        nav_sections.append({'title': 'Пространство', 'items': workspace_items})
+
+    admin_items = []
     if is_system_admin(user):
-        management_items.append(
+        admin_items.append(
             {
                 'label': 'Пользователи',
                 'url': reverse('administration:admin_users'),
-                'active_url_name': 'admin_users',
+                'active': _admin_active('admin_users', 'admin_user_create', 'admin_user_edit', 'admin_user_memberships'),
                 'visible': True,
             }
         )
-        management_items.append(
+        admin_items.append(
             {
                 'label': 'Пространства',
-                'url': reverse('workspaces:create'),
-                'active_url_name': 'create',
+                'url': reverse('administration:admin_workspaces'),
+                'active': _admin_active(
+                    'admin_workspaces',
+                    'admin_workspace_create',
+                    'admin_workspace_edit',
+                    'admin_workspace_delete',
+                ),
                 'visible': True,
             }
         )
-
-    if management_items:
-        nav_sections.append({'title': 'Администрирование', 'items': management_items})
+    if can(WorkspacePerm.MANAGE_SETTINGS) and active_workspace:
+        admin_items.append(
+            {
+                'label': 'Группы',
+                'url': reverse('workspaces:groups', kwargs={'pk': active_workspace.pk}),
+                'active': nav_namespace == 'workspaces' and nav_url_name in (
+                    'groups',
+                    'group_create',
+                    'group_edit',
+                    'group_delete',
+                ),
+                'visible': True,
+            }
+        )
+    if admin_items:
+        nav_sections.append({'title': 'Администрирование', 'items': admin_items})
 
     return {
         'active_workspace': active_workspace,
-        'workspace_membership': membership,
+        'workspace_user_groups': workspace_user_groups,
         'user_workspaces': user_workspaces,
         'main_nav_items': main_nav_items,
         'workspace_nav_sections': nav_sections,

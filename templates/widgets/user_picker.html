@@ -1,0 +1,53 @@
+{% with widget=widget|default:field.field.widget %}
+<div class="user-picker" data-user-picker>
+    <select name="{{ field.html_name }}"
+            id="{{ field.id_for_label }}"
+            class="user-picker__native"
+            {% if field.field.required %}required{% endif %}
+            tabindex="-1"
+            aria-hidden="true">
+        {% for option_value, option_label in field.field.choices %}
+        <option value="{{ option_value|stringformat:'s' }}"{% if field.value|stringformat:'s' == option_value|stringformat:'s' %} selected{% endif %}>{{ option_label }}</option>
+        {% endfor %}
+    </select>
+
+    <div class="user-picker__search-wrap">
+        <input type="search"
+               class="form-control user-picker__search"
+               id="{{ field.id_for_label }}_search"
+               placeholder="Поиск по логину, имени или e-mail…"
+               autocomplete="off"
+               aria-controls="{{ field.id_for_label }}_list"
+               aria-label="Поиск пользователя">
+    </div>
+
+    <div class="user-picker__list" id="{{ field.id_for_label }}_list" role="listbox" aria-label="{{ field.label }}">
+        {% for user in widget.users %}
+        <button type="button"
+                class="user-picker__option{% if field.value|stringformat:'s' == user.pk|stringformat:'s' %} is-selected{% endif %}"
+                role="option"
+                data-value="{{ user.pk }}"
+                data-search="{{ user.username|lower }} {% if user.first_name %}{{ user.first_name|lower }} {% endif %}{% if user.last_name %}{{ user.last_name|lower }} {% endif %}{% if user.email %}{{ user.email|lower }}{% endif %}"
+                aria-selected="{% if field.value|stringformat:'s' == user.pk|stringformat:'s' %}true{% else %}false{% endif %}">
+            <span class="user-picker__badge" aria-hidden="true">{{ user.username|slice:":2"|upper }}</span>
+            <span class="user-picker__text">
+                <span class="user-picker__username">{{ user.username }}</span>
+                {% if user.get_full_name %}
+                <span class="user-picker__meta">{{ user.get_full_name }}</span>
+                {% endif %}
+                {% if user.email %}
+                <span class="user-picker__meta">{{ user.email }}</span>
+                {% endif %}
+            </span>
+            <span class="user-picker__check" aria-hidden="true">✓</span>
+        </button>
+        {% empty %}
+        <p class="user-picker__empty text-muted small mb-0">Нет пользователей для добавления.</p>
+        {% endfor %}
+    </div>
+
+    <p class="user-picker__no-results text-muted small mb-0 d-none" data-user-picker-empty>
+        Ничего не найдено. Измените запрос.
+    </p>
+</div>
+{% endwith %}

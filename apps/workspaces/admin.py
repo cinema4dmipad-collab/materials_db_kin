@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.workspaces.models import Workspace, WorkspaceMembership
+from apps.workspaces.models import Workspace, WorkspaceGroup, WorkspaceGroupMembership
 
 
 @admin.register(Workspace)
@@ -11,9 +11,20 @@ class WorkspaceAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('name',)}
 
 
-@admin.register(WorkspaceMembership)
-class WorkspaceMembershipAdmin(admin.ModelAdmin):
-    list_display = ('user', 'workspace', 'role')
-    list_filter = ('role', 'workspace')
-    search_fields = ('user__username', 'workspace__name', 'workspace__slug')
-    autocomplete_fields = ('user', 'workspace')
+@admin.register(WorkspaceGroup)
+class WorkspaceGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'workspace', 'is_builtin')
+    list_filter = ('is_builtin', 'workspace')
+    search_fields = ('name', 'workspace__name', 'workspace__slug')
+
+
+@admin.register(WorkspaceGroupMembership)
+class WorkspaceGroupMembershipAdmin(admin.ModelAdmin):
+    list_display = ('user', 'group', 'workspace')
+    list_filter = ('group__workspace',)
+    search_fields = ('user__username', 'group__name', 'group__workspace__name')
+    autocomplete_fields = ('user', 'group')
+
+    @admin.display(description='Пространство')
+    def workspace(self, obj):
+        return obj.group.workspace

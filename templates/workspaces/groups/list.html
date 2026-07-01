@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Группы — {{ workspace.name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h1 class="h4 mb-0">Группы: {{ workspace.name }}</h1>
+        <div class="d-flex gap-2">
+            <a href="{% url 'workspaces:group_create' workspace.pk %}" class="btn btn-sm btn-primary">Создать группу</a>
+            <a href="{% url 'core:dashboard' %}" class="btn btn-sm btn-outline-secondary">На главную</a>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if groups %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Участников</th>
+                        <th>Прав</th>
+                        <th></th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in groups %}
+                    <tr>
+                        <td>
+                            {{ group.name }}
+                            {% if group.is_builtin %}
+                            <span class="badge text-bg-secondary ms-1">встроенная</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ group.member_count }}</td>
+                        <td>{{ group.permissions|length }}</td>
+                        <td class="text-muted small">{{ group.description|truncatechars:60 }}</td>
+                        <td class="text-end">
+                            <div class="table-actions">
+                            {% url 'workspaces:group_edit' workspace.pk group.pk as group_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=group_edit_url title='Изменить' %}
+                            {% if not group.is_builtin %}
+                            {% url 'workspaces:group_delete' workspace.pk group.pk as group_delete_url %}
+                            {% include 'includes/table_action_icon.html' with action='delete' url=group_delete_url title='Удалить' %}
+                            {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted p-3 mb-0">Групп пока нет.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

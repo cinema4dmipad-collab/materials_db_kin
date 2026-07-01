@@ -4,15 +4,18 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponseRedirect
 from django.urls import Resolver404, resolve, reverse
 
-from apps.workspaces.models import Workspace, WorkspaceMembership, WorkspaceRole
+from apps.workspaces.models import BUILTIN_GROUP_MANAGER, Workspace
 from apps.workspaces.services import (
     ACTIVE_WORKSPACE_SESSION_KEY,
     LEGACY_WORKSPACE_SLUG,
+    assign_user_to_groups,
+    ensure_default_groups,
     ensure_legacy_workspace,
     get_active_workspace,
+    get_user_groups,
     get_user_workspaces,
-    get_workspace_membership,
     set_active_workspace,
+    user_has_workspace_access,
 )
 
 TEST_AUTOMATION_USERNAME = 'test-automation'
@@ -60,7 +63,7 @@ class WorkspaceMiddleware:
 
     def __call__(self, request):
         request.active_workspace = None
-        request.workspace_membership = None
+        request.workspace_user_groups = []
 
         if _is_exempt_request(request):
             return self.get_response(request)
@@ -90,12 +93,11 @@ class WorkspaceMiddleware:
                 return HttpResponseRedirect(reverse('workspaces:select'))
 
         if active_workspace is not None:
-            membership = get_workspace_membership(user, active_workspace)
-            if membership is None and not user.is_superuser:
+            if not user_has_workspace_access(user, active_workspace):
                 request.session.pop(ACTIVE_WORKSPACE_SESSION_KEY, None)
                 return HttpResponseRedirect(reverse('workspaces:select'))
             request.active_workspace = active_workspace
-            request.workspace_membership = membership
+            request.workspace_user_groups = list(get_user_groups(user, active_workspace))
 
         return self.get_response(request)
 
@@ -114,11 +116,8 @@ class TestAutoLoginMiddleware:
                 defaults={'is_staff': True},
             )
             workspace = ensure_legacy_workspace()
-            WorkspaceMembership.objects.get_or_create(
-                workspace=workspace,
-                user=user,
-                defaults={'role': WorkspaceRole.MANAGER},
-            )
+            ensure_default_groups(workspace)
+            assign_user_to_groups(user, workspace, [BUILTIN_GROUP_MANAGER])
             login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             request.session[ACTIVE_WORKSPACE_SESSION_KEY] = str(workspace.pk)
         return self.get_response(request)

@@ -1,0 +1,52 @@
+{% if field.name == 'groups' %}
+{% regroup field.field.queryset by workspace as workspace_sections %}
+<div class="vstack gap-3">
+    {% for section in workspace_sections %}
+    <div>
+        <div class="fw-semibold small text-uppercase text-muted mb-2">{{ section.grouper.name }}</div>
+        <div class="vstack gap-2">
+            {% for group in section.list %}
+            <div class="form-check">
+                <input type="checkbox"
+                       name="{{ field.html_name }}"
+                       value="{{ group.pk }}"
+                       class="form-check-input"
+                       id="id_{{ field.html_name }}_{{ group.pk }}"
+                       {% if field.value and group.pk|stringformat:"s" in field.value %}checked{% endif %}>
+                <label class="form-check-label" for="id_{{ field.html_name }}_{{ group.pk }}">{{ group.name }}</label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% empty %}
+    <p class="text-muted small mb-0">Нет доступных групп для назначения.</p>
+    {% endfor %}
+</div>
+{% elif field.name == 'user' and field.field.disabled %}
+<div class="user-picker user-picker--readonly">
+    {% with user=field.field.queryset.first %}
+    {% if user %}
+    <div class="user-picker__option is-selected">
+        <span class="user-picker__badge" aria-hidden="true">{{ user.username|slice:":2"|upper }}</span>
+        <span class="user-picker__text">
+            <span class="user-picker__username">{{ user.username }}</span>
+            {% if user.get_full_name %}
+            <span class="user-picker__meta">{{ user.get_full_name }}</span>
+            {% endif %}
+            {% if user.email %}
+            <span class="user-picker__meta">{{ user.email }}</span>
+            {% endif %}
+        </span>
+    </div>
+    {{ field.as_hidden }}
+    {% else %}
+    {{ field }}
+    {% endif %}
+    {% endwith %}
+</div>
+{% elif field.name == 'user' %}
+{% include 'widgets/user_picker.html' with field=field widget=field.field.widget %}
+{% else %}
+{{ field }}
+{% endif %}
+

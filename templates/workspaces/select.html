@@ -9,7 +9,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h1 class="h4 mb-0">Выбор рабочего пространства</h1>
                 {% if is_system_admin %}
-                <a href="{% url 'workspaces:create' %}" class="btn btn-sm btn-outline-primary">Создать</a>
+                <a href="{% url 'administration:admin_workspace_create' %}" class="btn btn-sm btn-outline-primary">Создать</a>
                 {% endif %}
             </div>
             <div class="card-body">

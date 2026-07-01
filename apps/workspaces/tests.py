@@ -2,13 +2,38 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, modify_settings
 from django.urls import reverse
 
-from apps.workspaces.models import Workspace, WorkspaceMembership, WorkspaceRole
+from apps.workspaces.models import (
+    BUILTIN_GROUP_MANAGER,
+    BUILTIN_GROUP_OPERATOR,
+    Workspace,
+    WorkspaceGroup,
+    WorkspaceGroupMembership,
+)
 from apps.workspaces.permissions import WorkspacePerm, can_manage_membership, has_workspace_perm
-from apps.workspaces.services import ACTIVE_WORKSPACE_SESSION_KEY
+from apps.workspaces.forms import WorkspaceMemberAddFormSet
+from apps.workspaces.services import ACTIVE_WORKSPACE_SESSION_KEY, assign_user_to_groups, ensure_default_groups
 from apps.workspaces.test_utils import AuthenticatedWorkspaceTestCase
 from apps.materials.models import Material
 
 User = get_user_model()
+
+
+def _assign_manager(user, workspace):
+    ensure_default_groups(workspace)
+    assign_user_to_groups(user, workspace, [BUILTIN_GROUP_MANAGER])
+
+
+def _assign_operator(user, workspace):
+    ensure_default_groups(workspace)
+    assign_user_to_groups(user, workspace, [BUILTIN_GROUP_OPERATOR])
+
+
+def _operator_group(workspace):
+    return WorkspaceGroup.objects.get(workspace=workspace, name=BUILTIN_GROUP_OPERATOR)
+
+
+def _manager_group(workspace):
+    return WorkspaceGroup.objects.get(workspace=workspace, name=BUILTIN_GROUP_MANAGER)
 
 
 @modify_settings(MIDDLEWARE={'remove': 'apps.workspaces.middleware.TestAutoLoginMiddleware'})
@@ -43,14 +68,9 @@ class UserProfileTests(AuthenticatedWorkspaceTestCase):
         self.assertContains(response, reverse('accounts:profile'))
         self.assertContains(response, 'app-topbar__user-btn')
 
-
     def test_profile_accessible_without_active_workspace(self):
         other = Workspace.objects.create(slug='ws-b-profile', name='Space B')
-        WorkspaceMembership.objects.create(
-            workspace=other,
-            user=self.user,
-            role=WorkspaceRole.OPERATOR,
-        )
+        _assign_operator(self.user, other)
         session = self.client.session
         session.pop(ACTIVE_WORKSPACE_SESSION_KEY, None)
         session.save()
@@ -67,21 +87,13 @@ class WorkspaceSelectTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('select-user', password='pass-123')
         self.workspace = Workspace.objects.create(slug='ws-a', name='Пространство A')
-        WorkspaceMembership.objects.create(
-            workspace=self.workspace,
-            user=self.user,
-            role=WorkspaceRole.MANAGER,
-        )
+        _assign_manager(self.user, self.workspace)
         self.client = Client()
         self.client.login(username='select-user', password='pass-123')
 
     def test_authenticated_user_without_workspace_redirects_to_select(self):
         other = Workspace.objects.create(slug='ws-b', name='Пространство B')
-        WorkspaceMembership.objects.create(
-            workspace=other,
-            user=self.user,
-            role=WorkspaceRole.OPERATOR,
-        )
+        _assign_operator(self.user, other)
         response = self.client.get(reverse('core:dashboard'))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('workspaces:select'))
@@ -102,16 +114,8 @@ class PermissionTests(TestCase):
         self.workspace = Workspace.objects.create(slug='perm-ws', name='Perm')
         self.manager = User.objects.create_user('manager', password='pass')
         self.operator = User.objects.create_user('operator', password='pass')
-        WorkspaceMembership.objects.create(
-            workspace=self.workspace,
-            user=self.manager,
-            role=WorkspaceRole.MANAGER,
-        )
-        WorkspaceMembership.objects.create(
-            workspace=self.workspace,
-            user=self.operator,
-            role=WorkspaceRole.OPERATOR,
-        )
+        _assign_manager(self.manager, self.workspace)
+        _assign_operator(self.operator, self.workspace)
 
     def test_manager_can_manage_settings(self):
         self.assertTrue(
@@ -168,6 +172,17 @@ class PermissionTests(TestCase):
             is_editable_in_workspace(self.operator, material, self.workspace)
         )
 
+    def test_union_permissions_from_two_groups(self):
+        custom = WorkspaceGroup.objects.create(
+            workspace=self.workspace,
+            name='Редактор материалов',
+            permissions=['workspace.view', 'material.delete'],
+        )
+        assign_user_to_groups(self.operator, self.workspace, [BUILTIN_GROUP_OPERATOR, custom.name])
+        self.assertTrue(
+            has_workspace_perm(self.operator, self.workspace, WorkspacePerm.MATERIAL_DELETE)
+        )
+
 
 @modify_settings(MIDDLEWARE={'remove': 'apps.workspaces.middleware.TestAutoLoginMiddleware'})
 class MaterialEditAccessTests(TestCase):
@@ -176,11 +191,7 @@ class MaterialEditAccessTests(TestCase):
         self.workspace = Workspace.objects.create(slug='ws-home', name='Home WS')
         self.other_workspace = Workspace.objects.create(slug='ws-other', name='Other WS')
         self.operator = User.objects.create_user('material-operator', password=self.password)
-        WorkspaceMembership.objects.create(
-            workspace=self.workspace,
-            user=self.operator,
-            role=WorkspaceRole.OPERATOR,
-        )
+        _assign_operator(self.operator, self.workspace)
         self.own_material = Material.objects.create(
             code='MAT-OWN',
             name='Own material',
@@ -305,12 +316,7 @@ class AuthenticatedAccessTests(AuthenticatedWorkspaceTestCase):
 
     def test_switch_workspace(self):
         other = Workspace.objects.create(slug='ws-b', name='Пространство B')
-        WorkspaceMembership.objects.create(
-            workspace=other,
-            user=self.user,
-            role=WorkspaceRole.OPERATOR,
-        )
-        # Без активного WS middleware раньше блокировал POST /workspaces/switch/.
+        _assign_operator(self.user, other)
         session = self.client.session
         session.pop(ACTIVE_WORKSPACE_SESSION_KEY, None)
         session.save()
@@ -330,28 +336,238 @@ class WorkspaceMemberAccessTests(AuthenticatedWorkspaceTestCase):
             reverse('workspaces:members', kwargs={'pk': self.workspace.pk})
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Добавить участника')
+        self.assertContains(response, 'Добавить участников')
+
+    def test_manager_cannot_save_empty_member_list(self):
+        User.objects.create_user('spare-for-empty-test', password='pass')
+        response = self.client.post(
+            reverse('workspaces:members', kwargs={'pk': self.workspace.pk}),
+            {
+                'members-TOTAL_FORMS': '0',
+                'members-INITIAL_FORMS': '0',
+                'members-MIN_NUM_FORMS': '0',
+                'members-MAX_NUM_FORMS': '1000',
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Добавьте хотя бы одного участника')
 
     def test_manager_can_add_operator(self):
         operator = User.objects.create_user('new-operator', password='pass')
+        operator_group = _operator_group(self.workspace)
         response = self.client.post(
             reverse('workspaces:members', kwargs={'pk': self.workspace.pk}),
-            {'user': operator.pk, 'role': WorkspaceRole.OPERATOR},
+            {
+                'members-TOTAL_FORMS': '1',
+                'members-INITIAL_FORMS': '0',
+                'members-MIN_NUM_FORMS': '0',
+                'members-MAX_NUM_FORMS': '1000',
+                'members-0-user': str(operator.pk),
+                'members-0-groups': str(operator_group.pk),
+            },
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
-            WorkspaceMembership.objects.filter(
-                workspace=self.workspace,
+            WorkspaceGroupMembership.objects.filter(
+                group=operator_group,
                 user=operator,
-                role=WorkspaceRole.OPERATOR,
             ).exists()
         )
 
+    def test_member_add_empty_form_includes_assignable_groups(self):
+        User.objects.create_user('spare-for-groups-test', password='pass')
+        formset = WorkspaceMemberAddFormSet(
+            workspace=self.workspace,
+            acting_user=self.user,
+            prefix='members',
+        )
+        group_names = list(
+            formset.empty_form.fields['groups'].queryset.values_list('name', flat=True)
+        )
+        self.assertIn(BUILTIN_GROUP_OPERATOR, group_names)
+
+    def test_members_page_includes_group_choices_in_add_template(self):
+        User.objects.create_user('spare-for-template-test', password='pass')
+        response = self.client.get(
+            reverse('workspaces:members', kwargs={'pk': self.workspace.pk}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, BUILTIN_GROUP_OPERATOR)
+        self.assertContains(response, 'members-__prefix__-groups')
+
     def test_manager_cannot_manage_manager_membership(self):
         other_manager = User.objects.create_user('other-manager', password='pass')
-        membership = WorkspaceMembership.objects.create(
-            workspace=self.workspace,
-            user=other_manager,
-            role=WorkspaceRole.MANAGER,
+        _assign_manager(other_manager, self.workspace)
+        self.assertFalse(can_manage_membership(self.user, other_manager, self.workspace))
+
+
+class WorkspaceGroupAccessTests(AuthenticatedWorkspaceTestCase):
+    def test_manager_can_open_groups_page(self):
+        response = self.client.get(reverse('workspaces:groups', kwargs={'pk': self.workspace.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, BUILTIN_GROUP_MANAGER)
+
+    def test_manager_can_create_custom_group(self):
+        response = self.client.post(
+            reverse('workspaces:group_create', kwargs={'pk': self.workspace.pk}),
+            {
+                'name': 'Аналитики',
+                'description': 'Только просмотр',
+                'permissions': ['workspace.view', 'material.view'],
+            },
         )
-        self.assertFalse(can_manage_membership(self.user, membership))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            WorkspaceGroup.objects.filter(workspace=self.workspace, name='Аналитики').exists()
+        )
+
+
+@modify_settings(MIDDLEWARE={'remove': 'apps.workspaces.middleware.TestAutoLoginMiddleware'})
+class AdminWorkspaceManagementTests(TestCase):
+    def setUp(self):
+        self.password = 'admin-pass'
+        self.admin = User.objects.create_superuser('sysadmin', password=self.password)
+        self.workspace = Workspace.objects.create(
+            slug='ws-admin-test',
+            name='Admin test workspace',
+        )
+        ensure_default_groups(self.workspace)
+        self.client = Client()
+        self.client.login(username=self.admin.username, password=self.password)
+        session = self.client.session
+        session[ACTIVE_WORKSPACE_SESSION_KEY] = str(self.workspace.pk)
+        session.save()
+
+    def test_admin_workspace_list(self):
+        response = self.client.get(reverse('administration:admin_workspaces'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ws-admin-test')
+        self.assertContains(response, reverse('administration:admin_workspace_create'))
+
+    def test_operator_cannot_access_admin_workspace_list(self):
+        operator = User.objects.create_user('plain-user', password=self.password)
+        _assign_operator(operator, self.workspace)
+        self.client.login(username=operator.username, password=self.password)
+        response = self.client.get(reverse('administration:admin_workspaces'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_create_edit_and_manage_members(self):
+        create_response = self.client.post(
+            reverse('administration:admin_workspace_create'),
+            {
+                'slug': 'ws-new',
+                'name': 'New workspace',
+                'description': 'Test',
+            },
+        )
+        self.assertEqual(create_response.status_code, 302)
+        created = Workspace.objects.get(slug='ws-new')
+
+        edit_response = self.client.post(
+            reverse('administration:admin_workspace_edit', kwargs={'pk': created.pk}),
+            {
+                'slug': 'ws-new',
+                'name': 'Renamed workspace',
+                'description': 'Updated',
+                'is_active': 'on',
+            },
+        )
+        self.assertEqual(edit_response.status_code, 302)
+        created.refresh_from_db()
+        self.assertEqual(created.name, 'Renamed workspace')
+
+        operator = User.objects.create_user('ws-operator', password=self.password)
+        manager_group = _manager_group(created)
+        members_response = self.client.post(
+            reverse('workspaces:members', kwargs={'pk': created.pk}),
+            {
+                'members-TOTAL_FORMS': '1',
+                'members-INITIAL_FORMS': '0',
+                'members-MIN_NUM_FORMS': '0',
+                'members-MAX_NUM_FORMS': '1000',
+                'members-0-user': str(operator.pk),
+                'members-0-groups': str(manager_group.pk),
+            },
+        )
+        self.assertEqual(members_response.status_code, 302)
+        self.assertTrue(
+            WorkspaceGroupMembership.objects.filter(
+                group=manager_group,
+                user=operator,
+            ).exists()
+        )
+
+    def test_admin_can_create_user(self):
+        response = self.client.post(
+            reverse('administration:admin_user_create'),
+            {
+                'username': 'created-user',
+                'email': 'created-user@example.com',
+                'first_name': 'Created',
+                'last_name': 'User',
+                'password1': self.password,
+                'password2': self.password,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username='created-user').exists())
+
+    def test_admin_user_create_form_has_no_groups_section(self):
+        response = self.client.get(reverse('administration:admin_user_create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Назначить группы')
+        self.assertNotContains(response, 'name="groups"')
+
+    def test_admin_can_assign_groups_to_user_without_prior_membership(self):
+        target = User.objects.create_user('global-assign-user', password=self.password)
+        operator_group = _operator_group(self.workspace)
+        page_response = self.client.get(
+            reverse('administration:admin_user_memberships', kwargs={'pk': target.pk}),
+        )
+        self.assertEqual(page_response.status_code, 200)
+        self.assertContains(page_response, 'Назначить группы')
+        self.assertContains(page_response, BUILTIN_GROUP_OPERATOR)
+
+        assign_response = self.client.post(
+            reverse('administration:admin_user_memberships', kwargs={'pk': target.pk}),
+            {
+                'groups': [str(operator_group.pk)],
+            },
+        )
+        self.assertEqual(assign_response.status_code, 302)
+        self.assertTrue(
+            WorkspaceGroupMembership.objects.filter(
+                group=operator_group,
+                user=target,
+            ).exists()
+        )
+
+    def test_admin_can_add_more_groups_to_existing_member(self):
+        target = User.objects.create_user('existing-member', password=self.password)
+        operator_group = _operator_group(self.workspace)
+        custom_group = WorkspaceGroup.objects.create(
+            workspace=self.workspace,
+            name='Аналитики',
+            permissions=['workspace.view', 'material.view'],
+        )
+        assign_user_to_groups(target, self.workspace, [BUILTIN_GROUP_OPERATOR])
+
+        response = self.client.post(
+            reverse('administration:admin_user_memberships', kwargs={'pk': target.pk}),
+            {'groups': [str(custom_group.pk)]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            WorkspaceGroupMembership.objects.filter(group=operator_group, user=target).exists()
+        )
+        self.assertTrue(
+            WorkspaceGroupMembership.objects.filter(group=custom_group, user=target).exists()
+        )
+
+    def test_admin_can_delete_empty_workspace(self):
+        empty = Workspace.objects.create(slug='ws-empty', name='Empty workspace')
+        response = self.client.post(
+            reverse('administration:admin_workspace_delete', kwargs={'pk': empty.pk}),
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Workspace.objects.filter(pk=empty.pk).exists())

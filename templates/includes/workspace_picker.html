@@ -58,7 +58,7 @@
             Все пространства…
         </a>
         {% if is_system_admin %}
-        <a class="dropdown-item app-topbar__workspace-menu-link" href="{% url 'workspaces:create' %}">
+        <a class="dropdown-item app-topbar__workspace-menu-link" href="{% url 'administration:admin_workspace_create' %}">
             Создать пространство
         </a>
         {% endif %}

@@ -91,6 +91,13 @@ def reference_properties_json_script(properties=None):
 
 
 @register.simple_tag
+def workspace_users_json_script(users=None):
+    if not isinstance(users, list):
+        users = []
+    return json_script(users, 'workspace-users-data')
+
+
+@register.simple_tag
 def reference_materials_json_script(materials=None):
     if not isinstance(materials, list):
         materials = []

@@ -38,7 +38,7 @@
     </div>
 </div>
 
-{% if workspace_memberships %}
+{% if workspace_rows %}
 <div class="card">
     <div class="card-header">
         <h2 class="h5 mb-0">Рабочие пространства</h2>
@@ -50,15 +50,19 @@
                     <tr>
                         <th>Название</th>
                         <th>Код</th>
-                        <th>Роль</th>
+                        <th>Группы</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for membership in workspace_memberships %}
+                    {% for row in workspace_rows %}
                     <tr>
-                        <td>{{ membership.workspace.name }}</td>
-                        <td><code>{{ membership.workspace.slug }}</code></td>
-                        <td>{{ membership.get_role_display }}</td>
+                        <td>{{ row.workspace.name }}</td>
+                        <td><code>{{ row.workspace.slug }}</code></td>
+                        <td>
+                            {% for group in row.groups %}
+                            <span class="badge text-bg-light border">{{ group.name }}</span>
+                            {% empty %}—{% endfor %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

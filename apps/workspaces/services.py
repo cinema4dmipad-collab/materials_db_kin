@@ -1,6 +1,13 @@
 from django.db.models import Q
 
-from apps.workspaces.models import Workspace, WorkspaceMembership
+from apps.workspaces.models import (
+    BUILTIN_GROUP_MANAGER,
+    BUILTIN_GROUP_OPERATOR,
+    Workspace,
+    WorkspaceGroup,
+    WorkspaceGroupMembership,
+)
+from apps.workspaces.permissions import DEFAULT_GROUP_PERMISSIONS
 
 ACTIVE_WORKSPACE_SESSION_KEY = 'active_workspace_id'
 LEGACY_WORKSPACE_SLUG = 'legacy'
@@ -33,19 +40,82 @@ def get_user_workspaces(user):
     if user.is_superuser:
         return Workspace.objects.filter(is_active=True).order_by('name')
     return (
-        Workspace.objects.filter(is_active=True, memberships__user=user)
+        Workspace.objects.filter(
+            is_active=True,
+            groups__memberships__user=user,
+        )
         .distinct()
         .order_by('name')
     )
 
 
-def get_workspace_membership(user, workspace):
-    if not user or not user.is_authenticated or workspace is None:
-        return None
-    try:
-        return WorkspaceMembership.objects.get(user=user, workspace=workspace)
-    except WorkspaceMembership.DoesNotExist:
-        return None
+def get_user_groups(user, workspace):
+    from apps.workspaces.permissions import get_user_groups as _get_user_groups
+
+    return _get_user_groups(user, workspace)
+
+
+def user_has_workspace_access(user, workspace) -> bool:
+    from apps.workspaces.permissions import user_has_workspace_access as _user_has_workspace_access
+
+    return _user_has_workspace_access(user, workspace)
+
+
+def ensure_default_groups(workspace):
+    manager_group, _ = WorkspaceGroup.objects.get_or_create(
+        workspace=workspace,
+        name=BUILTIN_GROUP_MANAGER,
+        defaults={
+            'description': 'Полный доступ к управлению пространством и данными.',
+            'permissions': sorted(DEFAULT_GROUP_PERMISSIONS['manager']),
+            'is_builtin': True,
+        },
+    )
+    operator_group, _ = WorkspaceGroup.objects.get_or_create(
+        workspace=workspace,
+        name=BUILTIN_GROUP_OPERATOR,
+        defaults={
+            'description': 'Работа с материалами, образцами и сканами без администрирования.',
+            'permissions': sorted(DEFAULT_GROUP_PERMISSIONS['operator']),
+            'is_builtin': True,
+        },
+    )
+    return manager_group, operator_group
+
+
+def assign_user_to_groups(user, workspace, group_names):
+    groups = WorkspaceGroup.objects.filter(workspace=workspace, name__in=group_names)
+    for group in groups:
+        WorkspaceGroupMembership.objects.get_or_create(group=group, user=user)
+
+
+def assign_user_to_selected_groups(user, groups):
+    by_workspace = {}
+    for group in groups:
+        by_workspace.setdefault(group.workspace_id, []).append(group.name)
+    for workspace_id, group_names in by_workspace.items():
+        assign_user_to_groups(user, Workspace.objects.get(pk=workspace_id), group_names)
+
+
+def set_user_groups(user, workspace, group_names):
+    WorkspaceGroupMembership.objects.filter(
+        group__workspace=workspace,
+        user=user,
+    ).delete()
+    assign_user_to_groups(user, workspace, group_names)
+
+
+def ensure_legacy_workspace():
+    workspace, _created = Workspace.objects.get_or_create(
+        slug=LEGACY_WORKSPACE_SLUG,
+        defaults={
+            'name': 'Legacy',
+            'description': 'Пространство по умолчанию для данных до миграции на workspaces.',
+            'is_active': True,
+        },
+    )
+    ensure_default_groups(workspace)
+    return workspace
 
 
 def materials_visible_in(workspace):
@@ -74,7 +144,6 @@ def materials_owned_by(workspace):
 
 
 def materials_shared_in(workspace):
-    """Опубликованные материалы, доступные в пространстве (свои и из других WS)."""
     from apps.materials.models import Material
     from apps.workspaces.visibility import VisibilityMode
 
@@ -95,9 +164,10 @@ def materials_shared_in(workspace):
 
 
 def structure_types_visible_in(workspace):
-    """Общий каталог типов структур — видны во всех пространствах."""
     from apps.structures.models import StructureType
 
+    if workspace is None:
+        return StructureType.objects.none()
     return StructureType.objects.filter(is_active=True)
 
 
@@ -132,15 +202,3 @@ def scans_in_workspace(workspace):
     if _model_has_field(Sample, 'workspace'):
         return ScanRecord.objects.filter(sample__workspace=workspace)
     return ScanRecord.objects.all()
-
-
-def ensure_legacy_workspace():
-    workspace, _created = Workspace.objects.get_or_create(
-        slug=LEGACY_WORKSPACE_SLUG,
-        defaults={
-            'name': 'Legacy',
-            'description': 'Пространство по умолчанию для данных до миграции на workspaces.',
-            'is_active': True,
-        },
-    )
-    return workspace

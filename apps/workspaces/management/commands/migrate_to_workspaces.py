@@ -2,8 +2,8 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.workspaces.models import WorkspaceMembership, WorkspaceRole
-from apps.workspaces.services import ensure_legacy_workspace
+from apps.workspaces.models import BUILTIN_GROUP_MANAGER
+from apps.workspaces.services import assign_user_to_groups, ensure_default_groups
 
 User = get_user_model()
 
@@ -107,16 +107,14 @@ class Command(BaseCommand):
             self.stdout.write(f'{label}: обновлено {updated} записей.')
 
     def _assign_memberships(self, legacy):
+        ensure_default_groups(legacy)
         created = 0
         for user in User.objects.all():
-            _, was_created = WorkspaceMembership.objects.get_or_create(
-                workspace=legacy,
-                user=user,
-                defaults={'role': WorkspaceRole.MANAGER},
-            )
-            if was_created:
+            before = legacy.groups.filter(memberships__user=user).exists()
+            if not before:
+                assign_user_to_groups(user, legacy, [BUILTIN_GROUP_MANAGER])
                 created += 1
-        self.stdout.write(f'WorkspaceMembership: создано {created} записей.')
+        self.stdout.write(f'WorkspaceGroupMembership: создано {created} записей.')
 
     def _assign_tags(self, legacy):
         try:

@@ -139,13 +139,11 @@ class TagViewsTests(AuthenticatedWorkspaceTestCase):
         super().setUpTestData()
         cls.admin = get_user_model().objects.create_superuser('tag-admin', password=cls.password)
         cls.operator = get_user_model().objects.create_user('tag-operator', password=cls.password)
-        from apps.workspaces.models import WorkspaceMembership, WorkspaceRole
+        from apps.workspaces.models import BUILTIN_GROUP_OPERATOR
+        from apps.workspaces.services import assign_user_to_groups, ensure_default_groups
 
-        WorkspaceMembership.objects.create(
-            workspace=cls.workspace,
-            user=cls.operator,
-            role=WorkspaceRole.OPERATOR,
-        )
+        ensure_default_groups(cls.workspace)
+        assign_user_to_groups(cls.operator, cls.workspace, [BUILTIN_GROUP_OPERATOR])
         cls.workspace_tag = Tag.objects.create(
             name='Prepreg',
             slug='prepreg',
@@ -585,8 +583,8 @@ class AppVersionTests(TestCase):
 
 class DebugPageTests(TestCase):
     def setUp(self):
-        from apps.workspaces.models import Workspace, WorkspaceMembership, WorkspaceRole
-        from apps.workspaces.services import ensure_legacy_workspace
+        from apps.workspaces.models import BUILTIN_GROUP_OPERATOR
+        from apps.workspaces.services import assign_user_to_groups, ensure_default_groups, ensure_legacy_workspace
 
         user_model = get_user_model()
         self.staff_user = user_model.objects.create_user(
@@ -599,12 +597,9 @@ class DebugPageTests(TestCase):
             password='test-pass',
         )
         workspace = ensure_legacy_workspace()
+        ensure_default_groups(workspace)
         for user in (self.staff_user, self.regular_user):
-            WorkspaceMembership.objects.get_or_create(
-                workspace=workspace,
-                user=user,
-                defaults={'role': WorkspaceRole.OPERATOR},
-            )
+            assign_user_to_groups(user, workspace, [BUILTIN_GROUP_OPERATOR])
 
     @modify_settings(MIDDLEWARE={'remove': 'apps.workspaces.middleware.TestAutoLoginMiddleware'})
     def test_debug_page_requires_staff(self):

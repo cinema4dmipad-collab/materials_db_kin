@@ -4,7 +4,8 @@ from django.urls import reverse
 
 from apps.references.forms import PropertyForm
 from apps.references.models import Property, PropertyGroup
-from apps.workspaces.models import Workspace, WorkspaceMembership, WorkspaceRole
+from apps.workspaces.models import BUILTIN_GROUP_OPERATOR, Workspace
+from apps.workspaces.services import assign_user_to_groups, ensure_default_groups
 from apps.workspaces.test_utils import login_test_client
 
 User = get_user_model()
@@ -41,11 +42,8 @@ class PropertyViewsTests(TestCase):
         cls.workspace = Workspace.objects.create(slug='prop-ws', name='Prop WS')
         cls.admin = User.objects.create_superuser('prop-admin', password='pass-123')
         cls.operator = User.objects.create_user('prop-operator', password='pass-123')
-        WorkspaceMembership.objects.create(
-            workspace=cls.workspace,
-            user=cls.operator,
-            role=WorkspaceRole.OPERATOR,
-        )
+        ensure_default_groups(cls.workspace)
+        assign_user_to_groups(cls.operator, cls.workspace, [BUILTIN_GROUP_OPERATOR])
 
     def setUp(self):
         self.client = Client()

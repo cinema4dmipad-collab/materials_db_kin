@@ -31,7 +31,7 @@
                 {% if item.visible %}
                 <li>
                     <a href="{{ item.url }}"
-                       class="workspace-sidebar__link{% if item.active_namespace and request.resolver_match.namespace == item.active_namespace %} is-active{% elif item.active_url_name and request.resolver_match.url_name == item.active_url_name %} is-active{% endif %}">
+                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}">
                         <span class="workspace-sidebar__link-text">{{ item.label }}</span>
                     </a>
                 </li>
@@ -42,13 +42,15 @@
         {% endfor %}
     </nav>
 
-    {% if workspace_membership or active_workspace %}
+    {% if workspace_user_groups or active_workspace %}
     <div class="workspace-sidebar__footer">
         {% if active_workspace %}
         <span class="workspace-sidebar__footer-workspace">{{ active_workspace.name }}</span>
         {% endif %}
-        {% if workspace_membership %}
-        <span class="workspace-sidebar__role">{{ workspace_membership.get_role_display }}</span>
+        {% if workspace_user_groups %}
+        <span class="workspace-sidebar__role">
+            {% for group in workspace_user_groups %}{{ group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </span>
         {% endif %}
     </div>
     {% endif %}

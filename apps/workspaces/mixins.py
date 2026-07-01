@@ -6,8 +6,8 @@ from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 
-from apps.workspaces.models import Workspace, WorkspaceRole
-from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm, is_system_admin
+from apps.workspaces.models import Workspace
+from apps.workspaces.permissions import WorkspacePerm, can_manage_groups, has_workspace_perm, is_system_admin
 from apps.workspaces.services import get_active_workspace
 
 
@@ -56,6 +56,20 @@ class WorkspaceMemberManageMixin(LoginRequiredMixin):
     def dispatch(self, request, *args, **kwargs):
         self.workspace = get_object_or_404(Workspace, pk=kwargs['pk'])
         if not has_workspace_perm(request.user, self.workspace, WorkspacePerm.MANAGE_MEMBERS):
+            raise PermissionDenied
+        if not is_system_admin(request.user):
+            active_workspace = getattr(request, 'active_workspace', None) or get_active_workspace(
+                request
+            )
+            if active_workspace is None or active_workspace.pk != self.workspace.pk:
+                raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
+
+
+class WorkspaceGroupManageMixin(LoginRequiredMixin):
+    def dispatch(self, request, *args, **kwargs):
+        self.workspace = get_object_or_404(Workspace, pk=kwargs['pk'])
+        if not can_manage_groups(request.user, self.workspace):
             raise PermissionDenied
         if not is_system_admin(request.user):
             active_workspace = getattr(request, 'active_workspace', None) or get_active_workspace(

@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}Пространства — Администрирование{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-0">Пространства</h1>
+        <a href="{% url 'administration:admin_workspace_create' %}" class="btn btn-sm btn-primary">Создать</a>
+    </div>
+    <div class="card-body p-0">
+        {% if workspaces %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                <thead>
+                    <tr>
+                        <th>Код</th>
+                        <th>Название</th>
+                        <th>Участников</th>
+                        <th>Активно</th>
+                        <th>Создано</th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for workspace in workspaces %}
+                    <tr>
+                        <td><code>{{ workspace.slug }}</code></td>
+                        <td>{{ workspace.name }}</td>
+                        <td>{{ workspace.member_count }}</td>
+                        <td>{% if workspace.is_active %}Да{% else %}<span class="text-muted">Нет</span>{% endif %}</td>
+                        <td>{{ workspace.created_at|date:"d.m.Y" }}</td>
+                        <td class="text-end">
+                            <div class="table-actions">
+                            {% url 'workspaces:members' workspace.pk as workspace_members_url %}
+                            {% include 'includes/table_action_icon.html' with action='members' url=workspace_members_url title='Участники' %}
+                            {% url 'administration:admin_workspace_edit' workspace.pk as workspace_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=workspace_edit_url title='Изменить' %}
+                            {% url 'administration:admin_workspace_delete' workspace.pk as workspace_delete_url %}
+                            {% include 'includes/table_action_icon.html' with action='delete' url=workspace_delete_url title='Удалить' %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="p-3">
+            {% include 'includes/pagination.html' %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p class="text-muted p-3 mb-0">
+            Пространств пока нет.
+            <a href="{% url 'administration:admin_workspace_create' %}">Создать</a>.
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

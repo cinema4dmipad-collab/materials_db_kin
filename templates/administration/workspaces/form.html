@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 
-{% block title %}Создание пространства — База композитов{% endblock %}
+{% block title %}{{ page_title|default:'Пространство' }} — Администрирование{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-lg-7">
         <div class="card">
             <div class="card-header">
-                <h1 class="h4 mb-0">Новое рабочее пространство</h1>
+                <h1 class="h4 mb-0">{{ page_title|default:'Пространство' }}</h1>
             </div>
             <div class="card-body">
                 <form method="post" novalidate>
@@ -28,8 +28,8 @@
                     <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                     {% endif %}
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">Создать</button>
-                        <a href="{% if cancel_url %}{{ cancel_url }}{% else %}{% url 'workspaces:select' %}{% endif %}" class="btn btn-outline-secondary">Отмена</a>
+                        <button type="submit" class="btn btn-primary">{{ submit_label|default:'Сохранить' }}</button>
+                        <a href="{% if cancel_url %}{{ cancel_url }}{% else %}{% url 'administration:admin_workspaces' %}{% endif %}" class="btn btn-outline-secondary">Отмена</a>
                     </div>
                 </form>
             </div>
