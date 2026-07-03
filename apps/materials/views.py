@@ -427,7 +427,7 @@ class MaterialDetailView(AppViewMixin, DetailView):
     def get_queryset(self):
         return (
             materials_visible_in(self.request.active_workspace)
-            .select_related('struct_type')
+            .select_related('struct_type', 'home_workspace')
             .prefetch_related('tags')
         )
 

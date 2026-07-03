@@ -37,14 +37,11 @@
             {% url 'materials:delete' material.pk as material_delete_url %}
             {% include 'includes/table_action_icon.html' with action='delete' url=material_delete_url title='Удалить' %}
             {% endif %}
-            {% if can_publish_material %}
-            {% url 'materials:visibility' material.pk as material_visibility_url %}
-            {% include 'includes/table_action_icon.html' with action='link' url=material_visibility_url title='Видимость' %}
-            {% endif %}
             <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm ms-1">К списку</a>
         </div>
     </div>
     <div class="card-body">
+        {% include 'materials/includes/material_visibility_panel.html' %}
         <dl class="row mb-0">
             <dt class="col-sm-3">Описание</dt>
             <dd class="col-sm-9">{{ material.description|default:"—" }}</dd>

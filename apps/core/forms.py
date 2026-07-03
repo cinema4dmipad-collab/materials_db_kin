@@ -12,7 +12,7 @@ class TagForm(forms.ModelForm):
     is_global = forms.BooleanField(
         required=False,
         label='Общий тег',
-        help_text='Доступен во всех пространствах. Может создать только администратор.',
+        help_text='Доступен во всех пространствах.',
         widget=forms.CheckboxInput(attrs=_BOOTSTRAP_CHECKBOX),
     )
 
@@ -22,9 +22,11 @@ class TagForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if not allow_global:
             self.fields.pop('is_global', None)
-        elif self.instance.pk and self.instance.is_global:
+        elif self.instance.pk and not self.instance._state.adding and self.instance.is_global:
             self.fields['is_global'].initial = True
             self.fields['is_global'].disabled = True
+        else:
+            self.fields['is_global'].initial = False
 
     class Meta:
         model = Tag
@@ -49,7 +51,7 @@ class TagForm(forms.ModelForm):
     def clean_is_global(self):
         if not self.allow_global:
             return False
-        if self.instance.pk and self.instance.is_global:
+        if self.instance.pk and not self.instance._state.adding and self.instance.is_global:
             return True
         return bool(self.cleaned_data.get('is_global'))
 
@@ -83,7 +85,7 @@ class TagForm(forms.ModelForm):
         is_global = self.cleaned_data.get('is_global', False)
         if is_global:
             instance.workspace = None
-        elif not instance.workspace_id and self.workspace is not None:
+        elif self.workspace is not None:
             instance.workspace = self.workspace
         if commit:
             instance.save()

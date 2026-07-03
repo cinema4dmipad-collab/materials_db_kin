@@ -286,6 +286,19 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertNotContains(response, 'client_filter_bar')
         self.assertNotContains(response, 'Параметры структуры')
 
+    def test_detail_page_shows_visibility_panel(self):
+        material = self.create_material(
+            code='MAT-VIS-001',
+            name='Visibility material',
+            visibility_mode=VisibilityMode.ALL_WORKSPACES,
+        )
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Видимость и доступ')
+        self.assertContains(response, 'Все пространства')
+        self.assertContains(response, 'Настроить видимость')
+        self.assertContains(response, reverse('materials:visibility', kwargs={'pk': material.pk}))
+
     def test_sample_detail_inherits_material_structure_properties(self):
         from apps.samples.models import Sample
 

@@ -1,0 +1,64 @@
+<div class="tag-input-widget group-picker-widget">
+    <div class="tag-input-widget__field-wrap">
+        <div class="tag-input-composer">
+            <div class="tag-input-chips" aria-live="polite"></div>
+            <input type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   class="tag-input-typing group-picker-typing"
+                   placeholder="Добавить группу…"
+                   aria-label="Добавить группу">
+        </div>
+    </div>
+
+    <div class="visually-hidden group-picker-checkboxes" aria-hidden="true">
+        {% for group_name, options, index in widget.optgroups %}
+            {% for option in options %}
+            <input type="checkbox"
+                   name="{{ widget.name }}"
+                   value="{{ option.value }}"
+                   data-group-name="{{ option.label }}"
+                   {% if option.attrs.id %}id="{{ option.attrs.id }}"{% endif %}
+                   {% if option.selected %}checked{% endif %}>
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    {% if widget.group_items %}
+    <div class="tag-input-existing">
+        {% if widget.show_workspace_sections %}
+            {% regroup widget.group_items by workspace as workspace_sections %}
+            {% for section in workspace_sections %}
+            <div class="group-picker-section">
+                <div class="tag-input-existing__label">{{ section.grouper }}</div>
+                <div class="tag-input-existing__list">
+                    {% for group in section.list %}
+                    <button type="button"
+                            class="entity-tag tone-tag tag-input-pick group-picker-pick"
+                            data-group-id="{{ group.id }}"
+                            data-group-name="{{ group.name }}"
+                            title="Добавить или убрать группу «{{ group.name }}»">
+                        {{ group.name }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="tag-input-existing__label">Доступные группы</div>
+            <div class="tag-input-existing__list">
+                {% for group in widget.group_items %}
+                <button type="button"
+                        class="entity-tag tone-tag tag-input-pick group-picker-pick"
+                        data-group-id="{{ group.id }}"
+                        data-group-name="{{ group.name }}"
+                        title="Добавить или убрать группу «{{ group.name }}»">
+                    {{ group.name }}
+                </button>
+                {% endfor %}
+            </div>
+        {% endif %}
+        <p class="tag-input-existing__empty text-muted small mb-0" hidden>Группа не найдена</p>
+    </div>
+    {% endif %}
+</div>

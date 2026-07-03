@@ -97,6 +97,9 @@
         totalFormsInput.value = String(formIndex + 1);
         var row = container.lastElementChild;
         bindDeleteButton(container, row, totalFormsInput);
+        if (window.GroupPicker) {
+            window.GroupPicker.initWithin(row);
+        }
         updateEmptyState(container);
         return row;
     }
@@ -150,7 +153,7 @@
             if (!userInput || !userInput.value) {
                 return 'В каждой строке должен быть выбран пользователь.';
             }
-            if (!row.querySelector('[name$="-groups"]:checked')) {
+            if (!row.querySelector('.group-picker-checkboxes input:checked')) {
                 return 'Выберите хотя бы одну группу для каждого участника.';
             }
         }
@@ -171,6 +174,9 @@
 
         container.querySelectorAll('.member-add-row').forEach(function (row) {
             bindDeleteButton(container, row, totalFormsInput);
+            if (window.GroupPicker) {
+                window.GroupPicker.initWithin(row);
+            }
             var userInput = row.querySelector('[name$="-user"]');
             if (userInput && userInput.value) {
                 var users = picker.getWorkspaceUsers();

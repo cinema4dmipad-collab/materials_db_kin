@@ -84,7 +84,7 @@ PRIVILEGED_PERMISSIONS = frozenset(
 
 PERMISSION_LABELS = {
     WorkspacePerm.VIEW: 'Просмотр пространства',
-    WorkspacePerm.MANAGE_SETTINGS: 'Настройки и группы',
+    WorkspacePerm.MANAGE_SETTINGS: 'Настройки пространства',
     WorkspacePerm.MANAGE_MEMBERS: 'Управление участниками',
     WorkspacePerm.MATERIAL_VIEW: 'Просмотр материалов',
     WorkspacePerm.MATERIAL_CREATE: 'Создание материалов',
@@ -204,6 +204,7 @@ DEFAULT_GROUP_PERMISSIONS = {
             WorkspacePerm.MATERIAL_VIEW,
             WorkspacePerm.MATERIAL_CREATE,
             WorkspacePerm.MATERIAL_EDIT,
+            WorkspacePerm.MATERIAL_PUBLISH,
             WorkspacePerm.STRUCTURE_VIEW,
             WorkspacePerm.SAMPLE_VIEW,
             WorkspacePerm.SAMPLE_CREATE,
@@ -225,15 +226,21 @@ def can_manage_properties(user) -> bool:
     return is_system_admin(user)
 
 
-def can_manage_global_tags(user) -> bool:
-    return is_system_admin(user)
+def can_manage_global_tags(user, workspace=None) -> bool:
+    if not user or not user.is_authenticated:
+        return False
+    if is_system_admin(user):
+        return True
+    if workspace is None:
+        return False
+    return has_workspace_perm(user, workspace, WorkspacePerm.TAG_EDIT)
 
 
 def can_manage_tag(user, tag, workspace) -> bool:
     if not user or not user.is_authenticated or tag is None:
         return False
     if tag.is_global:
-        return is_system_admin(user)
+        return can_manage_global_tags(user, workspace)
     if workspace is None or tag.workspace_id != workspace.pk:
         return False
     return has_workspace_perm(user, workspace, WorkspacePerm.TAG_EDIT)
@@ -303,7 +310,7 @@ def can_manage_structure_types(user) -> bool:
 
 
 def can_manage_groups(user, workspace) -> bool:
-    return is_system_admin(user) or has_workspace_perm(user, workspace, WorkspacePerm.MANAGE_SETTINGS)
+    return is_system_admin(user)
 
 
 def group_has_privileged_permissions(group) -> bool:

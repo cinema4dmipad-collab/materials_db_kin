@@ -170,12 +170,14 @@ class TagViewsTests(AuthenticatedWorkspaceTestCase):
         self.assertNotContains(response, 'Prepreg')
 
     def test_manager_can_create_workspace_tag(self):
+        Tag.objects.filter(slug='t700').delete()
         response = self.client.post(reverse('core:tag_create'), {'name': 'T700'})
         self.assertEqual(response.status_code, 302)
-        tag = Tag.objects.get(slug='t700')
+        tag = Tag.objects.get(slug='t700', workspace=self.workspace)
+        self.assertEqual(tag.workspace, self.workspace)
         self.assertEqual(tag.workspace, self.workspace)
 
-    def test_operator_cannot_edit_global_tag(self):
+    def test_operator_can_edit_global_tag(self):
         login_test_client(
             self.client,
             user=self.operator,
@@ -186,9 +188,9 @@ class TagViewsTests(AuthenticatedWorkspaceTestCase):
             reverse('core:tag_edit', kwargs={'pk': self.global_tag.pk}),
             {'name': 'Composite updated', 'is_global': True},
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 302)
         self.global_tag.refresh_from_db()
-        self.assertEqual(self.global_tag.name, 'Composite')
+        self.assertEqual(self.global_tag.name, 'Composite updated')
 
     def test_admin_can_create_global_tag(self):
         login_test_client(
@@ -205,7 +207,7 @@ class TagViewsTests(AuthenticatedWorkspaceTestCase):
         tag = Tag.objects.get(slug='shared-tag')
         self.assertIsNone(tag.workspace_id)
 
-    def test_operator_cannot_forge_global_tag(self):
+    def test_operator_can_create_global_tag(self):
         login_test_client(
             self.client,
             user=self.operator,
@@ -218,7 +220,7 @@ class TagViewsTests(AuthenticatedWorkspaceTestCase):
         )
         self.assertEqual(response.status_code, 302)
         tag = Tag.objects.get(slug='fake-global')
-        self.assertEqual(tag.workspace, self.workspace)
+        self.assertIsNone(tag.workspace_id)
 
     def test_tag_update_view(self):
         response = self.client.post(

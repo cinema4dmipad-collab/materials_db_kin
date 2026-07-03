@@ -79,6 +79,8 @@ from apps.workspaces.services import (
 
     get_user_workspaces,
 
+    redirect_url_after_workspace_switch,
+
     set_active_workspace,
 
 )
@@ -185,11 +187,7 @@ class WorkspaceSwitchView(LoginRequiredMixin, View):
 
         next_url = request.POST.get('next') or reverse('core:dashboard')
 
-        select_url = reverse('workspaces:select')
-
-        if next_url.rstrip('/') == select_url.rstrip('/'):
-
-            next_url = reverse('core:dashboard')
+        next_url = redirect_url_after_workspace_switch(workspace, next_url, request.user)
 
         return redirect(next_url)
 
@@ -491,9 +489,9 @@ class WorkspaceUserGroupsUpdateView(WorkspaceMemberManageMixin, View):
 
         members_view.request = request
 
-        context = members_view.get_context_data(
+        context = members_view._build_members_context(
 
-            member_add_formset=WorkspaceMemberAddFormSet(
+            WorkspaceMemberAddFormSet(
 
                 workspace=self.workspace,
 

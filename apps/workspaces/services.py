@@ -1,4 +1,7 @@
+from urllib.parse import urlparse
+
 from django.db.models import Q
+from django.urls import Resolver404, resolve, reverse
 
 from apps.workspaces.models import (
     BUILTIN_GROUP_MANAGER,
@@ -7,7 +10,7 @@ from apps.workspaces.models import (
     WorkspaceGroup,
     WorkspaceGroupMembership,
 )
-from apps.workspaces.permissions import DEFAULT_GROUP_PERMISSIONS
+from apps.workspaces.permissions import DEFAULT_GROUP_PERMISSIONS, WorkspacePerm, has_workspace_perm, is_system_admin
 
 ACTIVE_WORKSPACE_SESSION_KEY = 'active_workspace_id'
 LEGACY_WORKSPACE_SLUG = 'legacy'
@@ -32,6 +35,40 @@ def set_active_workspace(request, workspace) -> None:
         request.session.pop(ACTIVE_WORKSPACE_SESSION_KEY, None)
         return
     request.session[ACTIVE_WORKSPACE_SESSION_KEY] = str(workspace.pk)
+
+
+def redirect_url_after_workspace_switch(target_workspace, next_url, user):
+    select_url = reverse('workspaces:select')
+    if not next_url:
+        return reverse('core:dashboard')
+    if next_url.rstrip('/') == select_url.rstrip('/'):
+        return reverse('core:dashboard')
+
+    path = urlparse(next_url).path
+    try:
+        match = resolve(path)
+    except Resolver404:
+        return reverse('core:dashboard')
+
+    url_pk = match.kwargs.get('pk')
+    if url_pk is None or str(url_pk) == str(target_workspace.pk):
+        return next_url
+
+    if match.namespace != 'workspaces':
+        return reverse('core:dashboard')
+
+    url_name = match.url_name or ''
+    if url_name in ('members', 'member_edit', 'member_add', 'member_delete'):
+        if has_workspace_perm(user, target_workspace, WorkspacePerm.MANAGE_MEMBERS):
+            return reverse('workspaces:members', kwargs={'pk': target_workspace.pk})
+    elif url_name in ('groups', 'group_create', 'group_edit', 'group_delete'):
+        if is_system_admin(user):
+            return reverse('workspaces:groups', kwargs={'pk': target_workspace.pk})
+    elif url_name == 'settings':
+        if has_workspace_perm(user, target_workspace, WorkspacePerm.MANAGE_SETTINGS):
+            return reverse('workspaces:settings', kwargs={'pk': target_workspace.pk})
+
+    return reverse('core:dashboard')
 
 
 def get_user_workspaces(user):

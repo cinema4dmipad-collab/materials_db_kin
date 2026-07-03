@@ -122,7 +122,7 @@ def workspace_navigation(request):
                 'visible': True,
             }
         )
-    if can(WorkspacePerm.MANAGE_SETTINGS) and active_workspace:
+    if is_system_admin(user) and active_workspace:
         admin_items.append(
             {
                 'label': 'Группы',

@@ -137,10 +137,16 @@
     display: none;
 }
 
-.member-add-row__groups-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem 0.85rem;
+.member-add-row__groups .group-picker-widget {
+    min-width: 14rem;
+}
+
+.member-add-row__groups .tag-input-existing {
+    margin-top: 0.35rem;
+}
+
+.group-picker-section + .group-picker-section {
+    margin-top: 0.75rem;
 }
 
 .member-add-row__user-card-inner {

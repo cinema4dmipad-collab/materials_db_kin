@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm
+from django.db.models import Q
 from django.utils.text import slugify
 
 from apps.workspaces.models import Workspace, WorkspaceGroup, WorkspaceGroupMembership
@@ -13,7 +14,7 @@ from apps.workspaces.permissions import (
 )
 from apps.workspaces.services import assign_user_to_groups, assign_user_to_selected_groups, set_user_groups
 
-from apps.workspaces.widgets import UserPickerWidget
+from apps.workspaces.widgets import GroupPickerWidget, UserPickerWidget
 
 User = get_user_model()
 
@@ -45,14 +46,46 @@ def assignable_groups_queryset(workspace, acting_user):
     return all_groups
 
 
+def member_groups_queryset(workspace, acting_user, target_user=None):
+    queryset = assignable_groups_queryset(workspace, acting_user)
+    if target_user is None:
+        return queryset
+    current_ids = WorkspaceGroup.objects.filter(
+        workspace=workspace,
+        memberships__user=target_user,
+    ).values_list('pk', flat=True)
+    return WorkspaceGroup.objects.filter(
+        workspace=workspace,
+    ).filter(
+        Q(pk__in=queryset.values('pk')) | Q(pk__in=current_ids),
+    ).order_by('name')
+
+
+def configure_group_picker_field(field):
+    queryset = field.queryset.select_related('workspace').order_by('workspace__name', 'name')
+    field.widget.group_items = [
+        {
+            'id': str(group.pk),
+            'name': group.name,
+            'workspace': group.workspace.name,
+        }
+        for group in queryset
+    ]
+
+
+class WorkspaceGroupChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        return obj.name
+
+
 class WorkspaceMemberAddRowForm(forms.Form):
     user = forms.ModelChoiceField(
         queryset=User.objects.none(),
         widget=forms.HiddenInput,
     )
-    groups = forms.ModelMultipleChoiceField(
+    groups = WorkspaceGroupChoiceField(
         queryset=WorkspaceGroup.objects.none(),
-        widget=forms.CheckboxSelectMultiple,
+        widget=GroupPickerWidget(),
         label='Группы',
     )
 
@@ -62,7 +95,7 @@ class WorkspaceMemberAddRowForm(forms.Form):
         super().__init__(*args, **kwargs)
         if workspace:
             self.fields['groups'].queryset = assignable_groups_queryset(workspace, acting_user)
-        self.fields['groups'].widget.attrs['class'] = 'form-check-input'
+            configure_group_picker_field(self.fields['groups'])
 
     def clean_groups(self):
         groups = self.cleaned_data.get('groups')
@@ -105,7 +138,7 @@ class WorkspaceMemberAddFormSet(forms.BaseFormSet):
                 self.workspace,
                 self.acting_user,
             )
-        form.fields['groups'].widget.attrs['class'] = 'form-check-input'
+            configure_group_picker_field(form.fields['groups'])
 
     def _construct_form(self, i, **kwargs):
         form = super()._construct_form(i, **kwargs)
@@ -254,9 +287,9 @@ class WorkspaceUserGroupsForm(forms.Form):
         empty_label=None,
         widget=UserPickerWidget(),
     )
-    groups = forms.ModelMultipleChoiceField(
+    groups = WorkspaceGroupChoiceField(
         queryset=WorkspaceGroup.objects.none(),
-        widget=forms.CheckboxSelectMultiple,
+        widget=GroupPickerWidget(),
         label='Группы',
     )
 
@@ -264,16 +297,25 @@ class WorkspaceUserGroupsForm(forms.Form):
         self.workspace = workspace
         self.acting_user = acting_user
         self.target_user = target_user
+
+        if target_user is not None and workspace is not None:
+            kwargs.setdefault('initial', {})
+            kwargs['initial']['groups'] = list(
+                WorkspaceGroup.objects.filter(
+                    workspace=workspace,
+                    memberships__user=target_user,
+                ).values_list('pk', flat=True)
+            )
+
         super().__init__(*args, **kwargs)
+
         if workspace:
-            all_groups = WorkspaceGroup.objects.filter(workspace=workspace).order_by('name')
-            if acting_user and not is_system_admin(acting_user):
-                assignable = [group for group in all_groups if can_assign_group(acting_user, workspace, group)]
-                self.fields['groups'].queryset = WorkspaceGroup.objects.filter(
-                    pk__in=[group.pk for group in assignable],
-                )
-            else:
-                self.fields['groups'].queryset = all_groups
+            self.fields['groups'].queryset = member_groups_queryset(
+                workspace,
+                acting_user,
+                target_user,
+            )
+            configure_group_picker_field(self.fields['groups'])
         if target_user is None:
             member_ids = WorkspaceGroupMembership.objects.filter(
                 group__workspace=workspace,
@@ -287,11 +329,6 @@ class WorkspaceUserGroupsForm(forms.Form):
             self.fields['user'].widget.users = list(user_queryset)
             self.fields['user'].initial = target_user.pk
             self.fields['user'].disabled = True
-            self.initial['groups'] = WorkspaceGroup.objects.filter(
-                workspace=workspace,
-                memberships__user=target_user,
-            )
-        self.fields['groups'].widget.attrs['class'] = 'form-check-input'
         _add_bootstrap_classes(self)
 
     def clean_groups(self):
@@ -353,9 +390,9 @@ class WorkspaceSettingsForm(forms.ModelForm):
 
 
 class UserMembershipAssignForm(forms.Form):
-    groups = forms.ModelMultipleChoiceField(
+    groups = WorkspaceGroupChoiceField(
         queryset=WorkspaceGroup.objects.none(),
-        widget=forms.CheckboxSelectMultiple,
+        widget=GroupPickerWidget(),
         label='Группы',
     )
 
@@ -363,7 +400,7 @@ class UserMembershipAssignForm(forms.Form):
         self.target_user = user
         super().__init__(*args, **kwargs)
         self.fields['groups'].queryset = all_assignable_groups_queryset()
-        self.fields['groups'].widget.attrs['class'] = 'form-check-input'
+        configure_group_picker_field(self.fields['groups'])
         _add_bootstrap_classes(self)
 
     def clean_groups(self):

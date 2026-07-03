@@ -2,6 +2,7 @@ from functools import wraps
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin as DjangoLoginRequiredMixin
+from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -61,8 +62,15 @@ class WorkspaceMemberManageMixin(LoginRequiredMixin):
             active_workspace = getattr(request, 'active_workspace', None) or get_active_workspace(
                 request
             )
-            if active_workspace is None or active_workspace.pk != self.workspace.pk:
-                raise PermissionDenied
+            if active_workspace is None:
+                return redirect('workspaces:select')
+            if active_workspace.pk != self.workspace.pk:
+                messages.info(
+                    request,
+                    f'Страница относится к пространству «{self.workspace.name}». '
+                    f'Открыт список участников «{active_workspace.name}».',
+                )
+                return redirect('workspaces:members', pk=active_workspace.pk)
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -75,8 +83,15 @@ class WorkspaceGroupManageMixin(LoginRequiredMixin):
             active_workspace = getattr(request, 'active_workspace', None) or get_active_workspace(
                 request
             )
-            if active_workspace is None or active_workspace.pk != self.workspace.pk:
-                raise PermissionDenied
+            if active_workspace is None:
+                return redirect('workspaces:select')
+            if active_workspace.pk != self.workspace.pk:
+                messages.info(
+                    request,
+                    f'Страница относится к пространству «{self.workspace.name}». '
+                    f'Открыт список групп «{active_workspace.name}».',
+                )
+                return redirect('workspaces:groups', pk=active_workspace.pk)
         return super().dispatch(request, *args, **kwargs)
 
 

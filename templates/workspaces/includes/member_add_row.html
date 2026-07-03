@@ -7,14 +7,7 @@
         {% endif %}
     </td>
     <td class="member-add-row__groups">
-        <div class="member-add-row__groups-list">
-            {% for option in member_form.groups %}
-            <div class="form-check form-check-inline">
-                {{ option.tag }}
-                <label class="form-check-label" for="{{ option.id_for_label }}">{{ option.choice_label }}</label>
-            </div>
-            {% endfor %}
-        </div>
+        {{ member_form.groups }}
         {% if member_form.groups.errors %}
         <div class="text-danger small">{{ member_form.groups.errors }}</div>
         {% endif %}

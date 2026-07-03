@@ -477,6 +477,11 @@ a:hover {
     --bs-btn-hover-color: var(--kx-brand-dark);
 }
 
+.material-visibility-panel {
+    background: var(--kx-brand-soft);
+    border-color: rgba(0, 118, 121, 0.22) !important;
+}
+
 .material-select-field {
     display: flex;
     flex-direction: column;

@@ -1,0 +1,28 @@
+<div class="material-visibility-panel mb-3 p-3 rounded border d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+        <h2 class="h6 mb-2">Видимость и доступ</h2>
+        {% if material.home_workspace %}
+        <p class="text-muted small mb-2">
+            Домашнее пространство:
+            <span class="badge text-bg-light border">{{ material.home_workspace.name }}</span>
+        </p>
+        {% endif %}
+        <p class="mb-0 d-flex flex-wrap align-items-center gap-2">
+            <span class="text-muted small">Сейчас:</span>
+            {% if material.visibility_mode == 'all_workspaces' %}
+            <span class="badge text-bg-success">Все пространства</span>
+            <span class="text-muted small">Материал доступен для просмотра во всех пространствах.</span>
+            {% elif material.visibility_mode == 'private' %}
+            <span class="badge text-bg-secondary">Только домашнее пространство</span>
+            <span class="text-muted small">Материал виден только в домашнем пространстве.</span>
+            {% else %}
+            <span class="badge text-bg-info text-dark">{{ material.get_visibility_mode_display }}</span>
+            {% endif %}
+        </p>
+    </div>
+    {% if can_publish_material %}
+    <a href="{% url 'materials:visibility' material.pk %}" class="btn btn-primary btn-sm flex-shrink-0">
+        Настроить видимость
+    </a>
+    {% endif %}
+</div>

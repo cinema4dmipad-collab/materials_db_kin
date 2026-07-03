@@ -107,9 +107,9 @@ class TagListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, Li
         context['can_create_workspace_tag'] = has_workspace_perm(
             user, workspace, WorkspacePerm.TAG_CREATE
         )
-        context['can_manage_global_tags'] = can_manage_global_tags(user)
+        context['can_manage_global_tags'] = can_manage_global_tags(user, workspace)
         context['show_create_button'] = (
-            scope == TAG_SCOPE_GLOBAL and can_manage_global_tags(user)
+            scope == TAG_SCOPE_GLOBAL and can_manage_global_tags(user, workspace)
         ) or (scope == TAG_SCOPE_WORKSPACE and context['can_create_workspace_tag'])
         context['manageable_tag_ids'] = {
             tag.pk for tag in context['tags'] if can_manage_tag(user, tag, workspace)
@@ -126,26 +126,32 @@ class TagCreateView(AppViewMixin, CreateView):
     def dispatch(self, request, *args, **kwargs):
         workspace = request.active_workspace
         can_create_workspace = has_workspace_perm(request.user, workspace, WorkspacePerm.TAG_CREATE)
-        if not can_create_workspace and not can_manage_global_tags(request.user):
+        if not can_create_workspace and not can_manage_global_tags(request.user, workspace):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['workspace'] = self.request.active_workspace
-        kwargs['allow_global'] = can_manage_global_tags(self.request.user)
+        kwargs['allow_global'] = can_manage_global_tags(
+            self.request.user,
+            self.request.active_workspace,
+        )
         return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['cancel_url'] = reverse_lazy('core:tag_list')
-        context['can_manage_global_tags'] = can_manage_global_tags(self.request.user)
+        context['can_manage_global_tags'] = can_manage_global_tags(
+            self.request.user,
+            self.request.active_workspace,
+        )
         return context
 
     def form_valid(self, form):
         is_global = form.cleaned_data.get('is_global', False)
         if is_global:
-            if not can_manage_global_tags(self.request.user):
+            if not can_manage_global_tags(self.request.user, self.request.active_workspace):
                 raise PermissionDenied
             form.instance.workspace = None
         else:
@@ -185,13 +191,19 @@ class TagUpdateView(AppViewMixin, UpdateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['workspace'] = self.object.workspace or self.request.active_workspace
-        kwargs['allow_global'] = can_manage_global_tags(self.request.user)
+        kwargs['allow_global'] = can_manage_global_tags(
+            self.request.user,
+            self.request.active_workspace,
+        )
         return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['cancel_url'] = reverse_lazy('core:tag_list')
-        context['can_manage_global_tags'] = can_manage_global_tags(self.request.user)
+        context['can_manage_global_tags'] = can_manage_global_tags(
+            self.request.user,
+            self.request.active_workspace,
+        )
         tag = self.object
         context['material_count'] = tag.materials.count()
         context['sample_count'] = tag.samples.count()

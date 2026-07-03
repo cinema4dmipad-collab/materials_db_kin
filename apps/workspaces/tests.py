@@ -10,7 +10,7 @@ from apps.workspaces.models import (
     WorkspaceGroupMembership,
 )
 from apps.workspaces.permissions import WorkspacePerm, can_manage_membership, has_workspace_perm
-from apps.workspaces.forms import WorkspaceMemberAddFormSet
+from apps.workspaces.forms import WorkspaceMemberAddFormSet, WorkspaceUserGroupsForm
 from apps.workspaces.services import ACTIVE_WORKSPACE_SESSION_KEY, assign_user_to_groups, ensure_default_groups
 from apps.workspaces.test_utils import AuthenticatedWorkspaceTestCase
 from apps.materials.models import Material
@@ -140,6 +140,11 @@ class PermissionTests(TestCase):
     def test_operator_can_view_materials(self):
         self.assertTrue(
             has_workspace_perm(self.operator, self.workspace, WorkspacePerm.MATERIAL_VIEW)
+        )
+
+    def test_operator_can_publish_materials(self):
+        self.assertTrue(
+            has_workspace_perm(self.operator, self.workspace, WorkspacePerm.MATERIAL_PUBLISH)
         )
 
     def test_superuser_has_all_permissions(self):
@@ -329,6 +334,26 @@ class AuthenticatedAccessTests(AuthenticatedWorkspaceTestCase):
         response = self.client.get(reverse('core:dashboard'))
         self.assertEqual(response.status_code, 200)
 
+    def test_switch_workspace_from_member_edit_redirects_to_members(self):
+        other = Workspace.objects.create(slug='ws-switch-edit', name='Пространство для switch')
+        ensure_default_groups(other)
+        _assign_manager(self.user, other)
+        operator = User.objects.create_user('switch-edit-op', password='pass')
+        _assign_operator(operator, self.workspace)
+        edit_url = reverse(
+            'workspaces:member_edit',
+            kwargs={'pk': self.workspace.pk, 'user_id': operator.pk},
+        )
+        response = self.client.post(
+            reverse('workspaces:switch', kwargs={'pk': other.pk}),
+            {'next': edit_url},
+        )
+        self.assertRedirects(
+            response,
+            reverse('workspaces:members', kwargs={'pk': other.pk}),
+            fetch_redirect_response=False,
+        )
+
 
 class WorkspaceMemberAccessTests(AuthenticatedWorkspaceTestCase):
     def test_manager_can_open_members_page(self):
@@ -337,6 +362,14 @@ class WorkspaceMemberAccessTests(AuthenticatedWorkspaceTestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Добавить участников')
+
+    def test_members_list_marks_current_user_as_you(self):
+        response = self.client.get(
+            reverse('workspaces:members', kwargs={'pk': self.workspace.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '>Вы<')
+        self.assertContains(response, f'({self.user.username})')
 
     def test_manager_cannot_save_empty_member_list(self):
         User.objects.create_user('spare-for-empty-test', password='pass')
@@ -374,7 +407,73 @@ class WorkspaceMemberAccessTests(AuthenticatedWorkspaceTestCase):
             ).exists()
         )
 
-    def test_member_add_empty_form_includes_assignable_groups(self):
+    def test_manager_redirected_from_member_edit_of_inactive_workspace(self):
+        other = Workspace.objects.create(slug='ws-other-members', name='Другое пространство')
+        ensure_default_groups(other)
+        _assign_manager(self.user, other)
+        operator = User.objects.create_user('other-ws-operator', password='pass')
+        _assign_operator(operator, other)
+        response = self.client.get(
+            reverse(
+                'workspaces:member_edit',
+                kwargs={'pk': other.pk, 'user_id': operator.pk},
+            ),
+        )
+        self.assertRedirects(
+            response,
+            reverse('workspaces:members', kwargs={'pk': self.workspace.pk}),
+        )
+        follow = self.client.get(
+            reverse(
+                'workspaces:member_edit',
+                kwargs={'pk': other.pk, 'user_id': operator.pk},
+            ),
+            follow=True,
+        )
+        self.assertContains(follow, 'Открыт список участников')
+        self.assertNotContains(follow, 'Группы участника other-ws-operator')
+
+    def test_manager_can_open_member_edit_page(self):
+        operator = User.objects.create_user('edit-operator', password='pass')
+        _assign_operator(operator, self.workspace)
+        response = self.client.get(
+            reverse(
+                'workspaces:member_edit',
+                kwargs={'pk': self.workspace.pk, 'user_id': operator.pk},
+            ),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Группы участника edit-operator')
+        self.assertContains(response, 'group-picker-widget')
+        operator_group = _operator_group(self.workspace)
+        self.assertContains(
+            response,
+            f'value="{operator_group.pk}"',
+        )
+        self.assertRegex(
+            response.content.decode(),
+            rf'value="{operator_group.pk}"[^>]*checked|checked[^>]*value="{operator_group.pk}"',
+        )
+
+    def test_member_edit_form_initializes_current_groups(self):
+        operator = User.objects.create_user('edit-operator-form', password='pass')
+        _assign_operator(operator, self.workspace)
+        form = WorkspaceUserGroupsForm(
+            workspace=self.workspace,
+            acting_user=self.user,
+            target_user=operator,
+        )
+        operator_group = _operator_group(self.workspace)
+        self.assertEqual(
+            set(str(value) for value in form['groups'].value()),
+            {str(operator_group.pk)},
+        )
+        selected = [
+            str(widget.data['value'].value if hasattr(widget.data['value'], 'value') else widget.data['value'])
+            for widget in form['groups'].subwidgets
+            if widget.data.get('selected')
+        ]
+        self.assertEqual(selected, [str(operator_group.pk)])
         User.objects.create_user('spare-for-groups-test', password='pass')
         formset = WorkspaceMemberAddFormSet(
             workspace=self.workspace,
@@ -402,12 +501,40 @@ class WorkspaceMemberAccessTests(AuthenticatedWorkspaceTestCase):
 
 
 class WorkspaceGroupAccessTests(AuthenticatedWorkspaceTestCase):
-    def test_manager_can_open_groups_page(self):
+    def test_manager_cannot_open_groups_page(self):
+        response = self.client.get(reverse('workspaces:groups', kwargs={'pk': self.workspace.pk}))
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_cannot_create_custom_group(self):
+        response = self.client.post(
+            reverse('workspaces:group_create', kwargs={'pk': self.workspace.pk}),
+            {
+                'name': 'Аналитики',
+                'description': 'Только просмотр',
+                'permissions': ['workspace.view', 'material.view'],
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            WorkspaceGroup.objects.filter(workspace=self.workspace, name='Аналитики').exists()
+        )
+
+    def test_system_admin_can_open_groups_page(self):
+        admin = User.objects.create_superuser('groups-admin', password=self.password)
+        self.client.login(username=admin.username, password=self.password)
+        session = self.client.session
+        session[ACTIVE_WORKSPACE_SESSION_KEY] = str(self.workspace.pk)
+        session.save()
         response = self.client.get(reverse('workspaces:groups', kwargs={'pk': self.workspace.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, BUILTIN_GROUP_MANAGER)
 
-    def test_manager_can_create_custom_group(self):
+    def test_system_admin_can_create_custom_group(self):
+        admin = User.objects.create_superuser('groups-admin-create', password=self.password)
+        self.client.login(username=admin.username, password=self.password)
+        session = self.client.session
+        session[ACTIVE_WORKSPACE_SESSION_KEY] = str(self.workspace.pk)
+        session.save()
         response = self.client.post(
             reverse('workspaces:group_create', kwargs={'pk': self.workspace.pk}),
             {
