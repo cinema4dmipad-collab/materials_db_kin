@@ -299,6 +299,20 @@ def is_editable_in_workspace(user, obj, workspace) -> bool:
     return obj.is_editable_in(workspace)
 
 
+def can_edit_structure_records(user, structure_type, workspace) -> bool:
+    if is_system_admin(user):
+        return True
+    if structure_type is None or workspace is None:
+        return False
+    if not has_workspace_perm(user, workspace, WorkspacePerm.MATERIAL_EDIT):
+        return False
+    if not structure_type.is_visible_in(workspace):
+        return False
+    if structure_type.home_workspace_id is None:
+        return True
+    return structure_type.home_workspace_id == workspace.pk
+
+
 def can_delete_in_workspace(user, obj, workspace) -> bool:
     if not is_editable_in_workspace(user, obj, workspace):
         return False

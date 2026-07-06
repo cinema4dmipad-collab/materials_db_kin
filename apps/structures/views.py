@@ -18,7 +18,7 @@ from apps.structures.table_storage import (
     structure_record_label,
 )
 from apps.workspaces.mixins import AppViewMixin
-from apps.workspaces.permissions import is_editable_in_workspace
+from apps.workspaces.permissions import can_edit_structure_records
 from apps.workspaces.services import structure_types_visible_in
 
 
@@ -167,7 +167,7 @@ class StructureRecordCreateView(AppViewMixin, CreatedTableRequiredMixin, FormVie
         return context
 
     def form_valid(self, form):
-        if not is_editable_in_workspace(
+        if not can_edit_structure_records(
             self.request.user, self.structure_type, self.request.active_workspace
         ):
             raise PermissionDenied
@@ -227,7 +227,7 @@ class StructureRecordUpdateView(AppViewMixin, CreatedTableRequiredMixin, FormVie
         return context
 
     def form_valid(self, form):
-        if not is_editable_in_workspace(
+        if not can_edit_structure_records(
             self.request.user, self.structure_type, self.request.active_workspace
         ):
             raise PermissionDenied
@@ -252,7 +252,9 @@ class StructureRecordDeleteView(AppViewMixin, CreatedTableRequiredMixin, View):
         return self.render(request, record)
 
     def post(self, request, type_code, pk):
-        if not is_editable_in_workspace(request.user, self.structure_type, request.active_workspace):
+        if not can_edit_structure_records(
+            request.user, self.structure_type, request.active_workspace
+        ):
             raise PermissionDenied
         record = get_row(self.structure_type, pk)
         if record is None:
