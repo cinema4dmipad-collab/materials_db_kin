@@ -6,7 +6,7 @@ Physical **specimens** derived from materials.
 
 ## Model
 
-**Sample** — code, name, material (FK), object type (test, control, product, …), tags, description.
+**Sample** — code, name, material (FK), object type (test, control, product, …), tags, workspace, creator, description.
 
 **SampleProperty** — property values; copied from material on create, editable per sample.
 
@@ -22,6 +22,15 @@ Physical **specimens** derived from materials.
 | `/samples/<pk>/edit/` | Edit |
 
 Attachments: `/samples/<pk>/attachments/`.
+
+## Material selection
+
+Sample form uses the shared **material picker** modal with tabs:
+
+* **Пространство** — materials owned by active workspace
+* **Общие** — published materials visible in workspace
+
+`SampleForm` limits `material` queryset to `materials_visible_in(workspace)`.
 
 ## Property Inheritance
 

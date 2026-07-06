@@ -1,14 +1,35 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}Теги — База композитов{% endblock %}
 
 {% block content %}
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h1 class="h4 mb-0">Справочник тегов</h1>
-        <a href="{% url 'core:tag_create' %}" class="btn btn-primary btn-sm">Создать</a>
+    <div class="card-header">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h1 class="h4 mb-0">Справочник тегов</h1>
+            {% if show_create_button %}
+            <a href="{% url 'core:tag_create' %}" class="btn btn-primary btn-sm">Создать</a>
+            {% endif %}
+        </div>
+        <ul class="nav nav-tabs card-header-tabs">
+            {% for tab in tag_scope_tabs %}
+            <li class="nav-item">
+                <a class="nav-link{% if tag_scope == tab.key %} active{% endif %}"
+                   href="{{ tab.url }}"
+                   {% if tag_scope == tab.key %}aria-current="page"{% endif %}>
+                    {{ tab.label }}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
     </div>
     <div class="card-body p-0">
+        {% if tag_scope == 'global' %}
+        <p class="text-muted small px-3 pt-3 mb-0">
+            Общие теги доступны во всех пространствах.
+        </p>
+        {% endif %}
         {% include 'includes/list_filter_bar.html' %}
         {% if tags %}
         <div class="table-responsive">
@@ -16,6 +37,7 @@
                 <thead>
                     <tr>
                         <th>Название</th>
+                        <th>Создал</th>
                         <th>Материалов</th>
                         <th>Образцов</th>
                         <th>Сканов</th>
@@ -29,15 +51,22 @@
                         <td>
                             <span class="entity-tag tone-tag">{{ tag.name }}</span>
                         </td>
+                        <td>{% include 'includes/creator_filter_link.html' with obj=tag %}</td>
                         <td>{{ tag.material_count }}</td>
                         <td>{{ tag.sample_count }}</td>
                         <td>{{ tag.scan_count }}</td>
                         <td>{{ tag.created_at|date:"d.m.Y" }}</td>
                         <td class="text-end">
+                            {% if tag.pk in manageable_tag_ids %}
                             <div class="table-actions">
-                                <a href="{% url 'core:tag_edit' tag.pk %}" class="btn btn-sm btn-outline-primary btn-action-edit">Изменить</a>
-                                <a href="{% url 'core:tag_delete' tag.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                                {% url 'core:tag_edit' tag.pk as tag_edit_url %}
+                                {% include 'includes/table_action_icon.html' with action='edit' url=tag_edit_url title='Изменить' %}
+                                {% url 'core:tag_delete' tag.pk as tag_delete_url %}
+                                {% include 'includes/table_action_icon.html' with action='delete' url=tag_delete_url title='Удалить' %}
                             </div>
+                            {% else %}
+                            —
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -53,8 +82,18 @@
         <div class="alert alert-info mb-0 m-3">
             {% if has_active_filters %}
             По вашему запросу тегов не найдено. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
+            {% elif show_create_button %}
+            {% if tag_scope == 'global' %}
+            Общих тегов пока нет. <a href="{% url 'core:tag_create' %}">Создать</a>.
             {% else %}
-            Тегов пока нет. <a href="{% url 'core:tag_create' %}">Создать</a> или добавьте теги при редактировании материалов и образцов.
+            Тегов пространства пока нет. <a href="{% url 'core:tag_create' %}">Создать</a> или добавьте теги при редактировании материалов и образцов.
+            {% endif %}
+            {% else %}
+            {% if tag_scope == 'global' %}
+            Общих тегов пока нет.
+            {% else %}
+            Тегов пространства пока нет.
+            {% endif %}
             {% endif %}
         </div>
         {% endif %}

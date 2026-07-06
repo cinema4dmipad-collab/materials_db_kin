@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Выбор пространства — База композитов{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/workspace-select.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="workspace-select">
+    <div class="workspace-select__intro">
+        <h1 class="workspace-select__title">Выберите рабочее пространство</h1>
+        <p class="workspace-select__subtitle">
+            Материалы, образцы и другие разделы открываются в контексте выбранного пространства.
+        </p>
+    </div>
+
+    {% if is_system_admin %}
+    <div class="workspace-select__toolbar">
+        <a href="{% url 'administration:admin_workspace_create' %}" class="btn btn-outline-primary btn-sm">
+            Создать пространство
+        </a>
+    </div>
+    {% endif %}
+
+    {% if workspaces %}
+    <div class="workspace-select__grid">
+        {% for workspace in workspaces %}
+        <form method="post"
+              action="{% url 'workspaces:switch' workspace.pk %}"
+              class="workspace-select__card-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'core:dashboard' %}">
+            <button type="submit" class="workspace-select__card">
+                <span class="workspace-select__badge" aria-hidden="true">
+                    {{ workspace.name|slice:":2"|upper }}
+                </span>
+                <span class="workspace-select__info">
+                    <span class="workspace-select__name">{{ workspace.name }}</span>
+                    <span class="workspace-select__slug">{{ workspace.slug }}</span>
+                </span>
+                <span class="workspace-select__action" aria-hidden="true">Открыть</span>
+            </button>
+        </form>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="workspace-select__empty">
+        <div class="workspace-select__empty-icon" aria-hidden="true">?</div>
+        <p class="workspace-select__empty-title">Нет доступных пространств</p>
+        <p class="workspace-select__empty-text">Обратитесь к администратору или создайте новое пространство.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

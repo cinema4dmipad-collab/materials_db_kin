@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}Образцы — База композитов{% endblock %}
 
@@ -20,6 +21,7 @@
                         <th>Материал</th>
                         <th>Тип объекта</th>
                         <th>Теги</th>
+                        <th>Создал</th>
                         <th>Создан</th>
                         <th class="text-end">Действия</th>
                     </tr>
@@ -38,12 +40,16 @@
                         </td>
                         <td>{% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type use_object_type_filter=True %}</td>
                         <td>{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</td>
+                        <td>{% include 'includes/creator_filter_link.html' with obj=sample %}</td>
                         <td>{{ sample.created_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end">
                             <div class="table-actions">
-                            <a href="{% url 'samples:detail' sample.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view">Просмотр</a>
-                            <a href="{% url 'samples:edit' sample.pk %}" class="btn btn-sm btn-outline-primary btn-action-edit">Изменить</a>
-                            <a href="{% url 'samples:delete' sample.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                            {% url 'samples:detail' sample.pk as sample_detail_url %}
+                            {% include 'includes/table_action_icon.html' with action='view' url=sample_detail_url title='Просмотр' %}
+                            {% url 'samples:edit' sample.pk as sample_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=sample_edit_url title='Изменить' %}
+                            {% url 'samples:delete' sample.pk as sample_delete_url %}
+                            {% include 'includes/table_action_icon.html' with action='delete' url=sample_delete_url title='Удалить' %}
                             </div>
                         </td>
                     </tr>

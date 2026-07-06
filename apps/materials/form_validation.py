@@ -13,6 +13,10 @@ def build_material_form_validation_summary(form, properties_formset=None, layers
         for field_name in form.errors
         if field_name.startswith(STRUCTURE_FIELD_PREFIX)
     }
+    field_sections.update({
+        'visibility_mode': 'Видимость',
+        'published_workspaces': 'Видимость',
+    })
     summary = collect_form_errors(
         form,
         default_section='Материал',

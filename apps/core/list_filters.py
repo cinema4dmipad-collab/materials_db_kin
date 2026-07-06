@@ -7,6 +7,7 @@ ALL_SEARCH_SCOPE = ''
 STRUCT_TYPE_SEARCH_SCOPE = 'struct_type'
 OBJECT_TYPE_SEARCH_SCOPE = 'object_type'
 SCAN_METHOD_SEARCH_SCOPE = 'method'
+CREATOR_SEARCH_SCOPE = 'creator'
 
 
 def build_choice_label_filter(choices: list[tuple[str, str]] | tuple[tuple[str, str], ...], field_name: str):
@@ -21,6 +22,27 @@ def build_choice_label_filter(choices: list[tuple[str, str]] | tuple[tuple[str, 
         return None
 
     return filter_fn
+
+
+def build_creator_filter(
+    user_field: str = 'created_by_user',
+    label_field: str = 'created_by',
+):
+    def filter_fn(query: str):
+        q = query.strip()
+        if not q:
+            return None
+        condition = Q(**{f'{label_field}__icontains': q})
+        condition |= Q(**{f'{user_field}__username__icontains': q})
+        condition |= Q(**{f'{user_field}__first_name__icontains': q})
+        condition |= Q(**{f'{user_field}__last_name__icontains': q})
+        return condition
+
+    return filter_fn
+
+
+DEFAULT_CREATOR_FILTER = build_creator_filter()
+UPLOADED_BY_CREATOR_FILTER = build_creator_filter('uploaded_by_user', 'uploaded_by')
 
 
 class QuerySetFilterMixin:
@@ -85,13 +107,31 @@ class QuerySetFilterMixin:
                 slugs.append(normalized)
         return slugs
 
+    def get_tag_filter_workspace(self):
+        return getattr(self.request, 'active_workspace', None)
+
+    def _tag_scope_filter(self, workspace):
+        if workspace is None:
+            return Q(**{f'{self.tag_relation}__workspace__isnull': True})
+        return Q(**{f'{self.tag_relation}__workspace': workspace}) | Q(
+            **{f'{self.tag_relation}__workspace__isnull': True}
+        )
+
     def _get_active_tags(self) -> list[dict[str, str]]:
         slugs = self._get_active_tag_slugs()
         if not slugs:
             return []
+        workspace = self.get_tag_filter_workspace()
+        tag_queryset = Tag.objects.filter(slug__in=slugs)
+        if workspace is not None:
+            tag_queryset = tag_queryset.filter(
+                Q(workspace=workspace) | Q(workspace__isnull=True)
+            )
+        elif workspace is None:
+            tag_queryset = tag_queryset.filter(workspace__isnull=True)
         labels = {
             slug: name
-            for slug, name in Tag.objects.filter(slug__in=slugs).values_list('slug', 'name')
+            for slug, name in tag_queryset.values_list('slug', 'name')
         }
         return [
             {
@@ -117,7 +157,9 @@ class QuerySetFilterMixin:
             for field in all_fields:
                 condition |= Q(**{f'{field}__icontains': query})
             if self.enable_tag_filter:
-                condition |= Q(**{f'{self.tag_relation}__name__icontains': query})
+                tag_filter = {f'{self.tag_relation}__name__icontains': query}
+                workspace = self.get_tag_filter_workspace()
+                condition |= Q(**tag_filter) & self._tag_scope_filter(workspace)
                 needs_distinct = True
             return condition, needs_distinct
 
@@ -133,7 +175,9 @@ class QuerySetFilterMixin:
             if scope_value == TAG_SEARCH_SCOPE:
                 if not self.enable_tag_filter:
                     continue
-                condition |= Q(**{f'{self.tag_relation}__name__icontains': query})
+                tag_filter = {f'{self.tag_relation}__name__icontains': query}
+                workspace = self.get_tag_filter_workspace()
+                condition |= Q(**tag_filter) & self._tag_scope_filter(workspace)
                 needs_distinct = True
                 continue
             for field in scope_fields:
@@ -160,8 +204,11 @@ class QuerySetFilterMixin:
                 queryset = queryset.filter(**{field_name: value})
 
         if self.enable_tag_filter:
+            workspace = self.get_tag_filter_workspace()
             for slug in self._get_active_tag_slugs():
-                queryset = queryset.filter(**{f'{self.tag_relation}__slug': slug})
+                queryset = queryset.filter(
+                    Q(**{f'{self.tag_relation}__slug': slug}) & self._tag_scope_filter(workspace)
+                )
                 needs_distinct = True
 
         if needs_distinct:
@@ -244,6 +291,7 @@ class QuerySetFilterMixin:
             'active_tags': active_tags,
             'has_active_filters': has_active_filters,
             'filter_reset_url': self.request.path,
+            'list_filter_preserve_params': [],
             'pagination_query': pagination_query.urlencode(),
             'remove_search_url': (
                 self._build_filter_url((self.search_param, self.search_scope_param))

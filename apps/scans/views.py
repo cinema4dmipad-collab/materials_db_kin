@@ -5,18 +5,23 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.core.creator import assign_creator
 from apps.core.file_download import build_file_download_response
 
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
     SCAN_METHOD_SEARCH_SCOPE,
     TAG_SEARCH_SCOPE,
+    UPLOADED_BY_CREATOR_FILTER,
     QuerySetFilterMixin,
     build_choice_label_filter,
 )
 from apps.samples.models import Sample
 from apps.scans.forms import ScanRecordForm
 from apps.scans.models import ScanRecord
+from apps.workspaces.mixins import AppViewMixin
+from apps.workspaces.services import samples_in_workspace, scans_in_workspace
 
 
 class ScanMethodFilterMixin:
@@ -26,10 +31,11 @@ class ScanMethodFilterMixin:
                 ScanRecord.METHODS,
                 'method',
             ),
+            CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER,
         }
 
 
-class AllScansListView(ScanMethodFilterMixin, QuerySetFilterMixin, ListView):
+class AllScansListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin, ListView):
     model = ScanRecord
     template_name = 'scans/all_list.html'
     context_object_name = 'scans'
@@ -57,6 +63,7 @@ class AllScansListView(ScanMethodFilterMixin, QuerySetFilterMixin, ListView):
         ('material', 'Материал', ('sample__material__code', 'sample__material__name')),
         ('description', 'Описание', ('description',)),
         (SCAN_METHOD_SEARCH_SCOPE, 'Метод', ()),
+        (CREATOR_SEARCH_SCOPE, 'Загрузил', ()),
         (TAG_SEARCH_SCOPE, 'Тег', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
@@ -65,9 +72,11 @@ class AllScansListView(ScanMethodFilterMixin, QuerySetFilterMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            ScanRecord.objects.select_related(
-                'sample', 'sample__material', 'sample__material__struct_type'
-            ).prefetch_related('tags')
+            scans_in_workspace(self.request.active_workspace)
+            .select_related(
+                'sample', 'sample__material', 'sample__material__struct_type', 'uploaded_by_user'
+            )
+            .prefetch_related('tags')
         )
 
     def get_choice_filter_options(self):
@@ -78,7 +87,10 @@ class SampleScanMixin:
     active_tab = 'scans'
 
     def dispatch(self, request, *args, **kwargs):
-        self.sample = get_object_or_404(Sample.objects.select_related('material'), pk=kwargs['sample_pk'])
+        self.sample = get_object_or_404(
+            samples_in_workspace(request.active_workspace).select_related('material'),
+            pk=kwargs['sample_pk'],
+        )
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -90,7 +102,7 @@ class SampleScanMixin:
         return context
 
 
-class ScanListView(ScanMethodFilterMixin, QuerySetFilterMixin, SampleScanMixin, ListView):
+class ScanListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin, SampleScanMixin, ListView):
     model = ScanRecord
     template_name = 'scans/list.html'
     context_object_name = 'scans'
@@ -102,6 +114,7 @@ class ScanListView(ScanMethodFilterMixin, QuerySetFilterMixin, SampleScanMixin, 
         ('description', 'Описание', ('description',)),
         ('file', 'Файл', ('file',)),
         (SCAN_METHOD_SEARCH_SCOPE, 'Метод', ()),
+        (CREATOR_SEARCH_SCOPE, 'Загрузил', ()),
         (TAG_SEARCH_SCOPE, 'Тег', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
@@ -131,6 +144,8 @@ class ScanListView(ScanMethodFilterMixin, QuerySetFilterMixin, SampleScanMixin, 
         if form.is_valid():
             scan = form.save(commit=False)
             scan.sample = self.sample
+            scan.workspace = self.sample.workspace
+            assign_creator(scan, request.user)
             scan.save()
             form.save_tags(scan)
             messages.success(request, 'Скан прикреплён к образцу.')
@@ -149,7 +164,7 @@ class ScanListView(ScanMethodFilterMixin, QuerySetFilterMixin, SampleScanMixin, 
         return self.filter_queryset(self.sample.scans.prefetch_related('tags'))
 
 
-class ScanDetailView(SampleScanMixin, DetailView):
+class ScanDetailView(AppViewMixin, SampleScanMixin, DetailView):
     model = ScanRecord
     template_name = 'scans/detail.html'
     context_object_name = 'scan'
@@ -158,7 +173,7 @@ class ScanDetailView(SampleScanMixin, DetailView):
         return self.sample.scans.prefetch_related('tags')
 
 
-class ScanCreateView(SampleScanMixin, CreateView):
+class ScanCreateView(AppViewMixin, SampleScanMixin, CreateView):
     model = ScanRecord
     form_class = ScanRecordForm
     template_name = 'scans/form.html'
@@ -166,6 +181,7 @@ class ScanCreateView(SampleScanMixin, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['sample'] = self.sample
+        kwargs['workspace'] = self.request.active_workspace
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -175,6 +191,8 @@ class ScanCreateView(SampleScanMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.sample = self.sample
+        form.instance.workspace = self.sample.workspace
+        assign_creator(form.instance, self.request.user)
         messages.success(self.request, 'Скан успешно загружен.')
         return super().form_valid(form)
 
@@ -182,7 +200,7 @@ class ScanCreateView(SampleScanMixin, CreateView):
         return reverse('scans:detail', kwargs={'sample_pk': self.sample.pk, 'pk': self.object.pk})
 
 
-class ScanUpdateView(SampleScanMixin, UpdateView):
+class ScanUpdateView(AppViewMixin, SampleScanMixin, UpdateView):
     model = ScanRecord
     form_class = ScanRecordForm
     template_name = 'scans/form.html'
@@ -204,7 +222,7 @@ class ScanUpdateView(SampleScanMixin, UpdateView):
         return reverse('scans:detail', kwargs={'sample_pk': self.sample.pk, 'pk': self.object.pk})
 
 
-class ScanDeleteView(SampleScanMixin, DeleteView):
+class ScanDeleteView(AppViewMixin, SampleScanMixin, DeleteView):
     model = ScanRecord
     template_name = 'scans/confirm_delete.html'
     context_object_name = 'scan'
@@ -222,7 +240,7 @@ class ScanDeleteView(SampleScanMixin, DeleteView):
         return redirect(self.get_success_url())
 
 
-class ScanDownloadView(SampleScanMixin, View):
+class ScanDownloadView(AppViewMixin, SampleScanMixin, View):
     def get(self, request, *args, **kwargs):
         scan = get_object_or_404(self.sample.scans.all(), pk=kwargs['pk'])
         if not scan.file:

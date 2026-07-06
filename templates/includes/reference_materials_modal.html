@@ -10,13 +10,40 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
             </div>
             <div class="modal-body">
+                <ul class="nav nav-tabs reference-materials-scope-tabs mb-3" id="reference-materials-scope-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button type="button"
+                                class="nav-link active"
+                                id="reference-materials-scope-workspace"
+                                data-scope="workspace"
+                                role="tab"
+                                aria-selected="true">
+                            Пространство
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button type="button"
+                                class="nav-link"
+                                id="reference-materials-scope-shared"
+                                data-scope="shared"
+                                role="tab"
+                                aria-selected="false">
+                            Общие
+                        </button>
+                    </li>
+                </ul>
+                <p class="text-muted small reference-materials-scope-hint mb-3" id="reference-materials-scope-hint">
+                    Материалы, созданные в текущем рабочем пространстве.
+                </p>
                 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
                     <input type="search" class="form-control form-control-sm flex-grow-1" id="reference-materials-search" placeholder="Поиск по коду, названию или типу структуры..." autocomplete="off">
-                    <a href="{{ material_create_url }}?next={{ request.get_full_path|urlencode }}" class="btn btn-outline-primary btn-sm text-nowrap">Создать</a>
+                    <a href="{{ material_create_url }}?next={{ request.get_full_path|urlencode }}"
+                       class="btn btn-outline-primary btn-sm text-nowrap reference-materials-create-btn">Создать</a>
                 </div>
-                <div id="reference-materials-empty" class="alert alert-info mb-0">
+                <div id="reference-materials-empty" class="alert alert-info mb-0 d-none">
                     В базе пока нет материалов. Создайте первый материал кнопкой выше.
                 </div>
+                <div id="reference-materials-scope-empty" class="alert alert-info mb-0 d-none"></div>
                 <div id="reference-materials-list"></div>
             </div>
             <div class="modal-footer">

@@ -1,0 +1,30 @@
+{% load ui_tags %}
+{% workspace_users_json_script available_users_picker %}
+
+<div class="modal fade" id="workspace-users-modal" tabindex="-1" aria-labelledby="workspace-users-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="workspace-users-modal-label">Выбор пользователей</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+                    <input type="search"
+                           class="form-control form-control-sm flex-grow-1"
+                           id="workspace-users-search"
+                           placeholder="Поиск по логину, имени или e-mail…"
+                           autocomplete="off">
+                </div>
+                <div id="workspace-users-empty" class="alert alert-info mb-0 d-none">
+                    Нет пользователей, которых можно добавить в это пространство.
+                </div>
+                <div id="workspace-users-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary btn-sm" id="workspace-users-add-btn" disabled>Добавить</button>
+            </div>
+        </div>
+    </div>
+</div>

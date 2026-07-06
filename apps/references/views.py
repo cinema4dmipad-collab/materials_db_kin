@@ -4,12 +4,21 @@ from django.urls import reverse_lazy
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
-from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
+from apps.core.list_filters import (
+    ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
+    DEFAULT_CREATOR_FILTER,
+    QuerySetFilterMixin,
+)
+from apps.core.creator import assign_creator
 from apps.references.forms import PropertyForm
 from apps.references.models import Property, PropertyGroup
+from apps.workspaces.mixins import AppViewMixin, PermissionRequiredMixin, SystemAdminRequiredMixin
+from apps.workspaces.permissions import WorkspacePerm
 
 
-class PropertyListView(QuerySetFilterMixin, ListView):
+class PropertyListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, ListView):
+    permission_codename = WorkspacePerm.PROPERTY_VIEW
     model = Property
     template_name = 'references/property_list.html'
     context_object_name = 'properties'
@@ -21,14 +30,20 @@ class PropertyListView(QuerySetFilterMixin, ListView):
         ('display_name', 'Название', ('display_name',)),
         ('unit', 'Единица', ('unit',)),
         ('description', 'Описание', ('description',)),
+        (CREATOR_SEARCH_SCOPE, 'Создал', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
     choice_filters = (('group', 'group_id'), ('data_type', 'data_type'))
     choice_filter_labels = {'group': 'Группа', 'data_type': 'Тип данных'}
 
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
+        }
+
     def get_queryset(self):
         return self.filter_queryset(
-            Property.objects.select_related('group')
+            Property.objects.select_related('group', 'created_by_user')
             .annotate(material_count=Count('material_values'))
             .order_by('group__sort_order', 'display_name', 'name')
         )
@@ -42,7 +57,7 @@ class PropertyListView(QuerySetFilterMixin, ListView):
         }
 
 
-class PropertyCreateView(CreateView):
+class PropertyCreateView(SystemAdminRequiredMixin, AppViewMixin, CreateView):
     model = Property
     form_class = PropertyForm
     template_name = 'references/property_form.html'
@@ -76,11 +91,12 @@ class PropertyCreateView(CreateView):
         return str(self.success_url)
 
     def form_valid(self, form):
+        assign_creator(form.instance, self.request.user)
         messages.success(self.request, f'Свойство «{form.instance.display_name}» создано.')
         return super().form_valid(form)
 
 
-class PropertyUpdateView(UpdateView):
+class PropertyUpdateView(SystemAdminRequiredMixin, AppViewMixin, UpdateView):
     model = Property
     form_class = PropertyForm
     template_name = 'references/property_form.html'
@@ -99,7 +115,7 @@ class PropertyUpdateView(UpdateView):
         return reverse_lazy('references:list')
 
 
-class PropertyDeleteView(DeleteView):
+class PropertyDeleteView(SystemAdminRequiredMixin, AppViewMixin, DeleteView):
     model = Property
     template_name = 'references/property_confirm_delete.html'
     context_object_name = 'property_obj'

@@ -384,6 +384,17 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
 
 
 class PublicStructureTypeManageViewsTests(TransactionTestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.workspaces.services import ensure_legacy_workspace
+        from apps.workspaces.test_utils import login_test_client
+
+        user_model = get_user_model()
+        self.admin = user_model.objects.create_superuser('struct-admin', password='pass')
+        legacy = ensure_legacy_workspace()
+        login_test_client(self.client, user=self.admin, workspace=legacy, password='pass')
+
     def tearDown(self):
         for structure_type in StructureType.objects.filter(code__startswith='ui_'):
             if structure_type.is_created:

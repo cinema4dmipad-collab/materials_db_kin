@@ -1,8 +1,14 @@
-from django.test import TestCase
+from django.contrib.auth import get_user_model
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.references.forms import PropertyForm
 from apps.references.models import Property, PropertyGroup
+from apps.workspaces.models import BUILTIN_GROUP_OPERATOR, Workspace
+from apps.workspaces.services import assign_user_to_groups, ensure_default_groups
+from apps.workspaces.test_utils import login_test_client
+
+User = get_user_model()
 
 
 class PropertyFormTests(TestCase):
@@ -23,35 +29,55 @@ class PropertyFormTests(TestCase):
 
 
 class PropertyViewsTests(TestCase):
-    def setUp(self):
-        self.group = PropertyGroup.objects.create(name='Mechanical', sort_order=1)
-        self.property = Property.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.group = PropertyGroup.objects.create(name='Mechanical', sort_order=1)
+        cls.property = Property.objects.create(
             name='density',
             display_name='Density',
             unit='g/cm3',
             data_type='number',
-            group=self.group,
+            group=cls.group,
         )
+        cls.workspace = Workspace.objects.create(slug='prop-ws', name='Prop WS')
+        cls.admin = User.objects.create_superuser('prop-admin', password='pass-123')
+        cls.operator = User.objects.create_user('prop-operator', password='pass-123')
+        ensure_default_groups(cls.workspace)
+        assign_user_to_groups(cls.operator, cls.workspace, [BUILTIN_GROUP_OPERATOR])
 
-    def test_property_list_renders(self):
+    def setUp(self):
+        self.client = Client()
+
+    def _property_payload(self, **overrides):
+        data = {
+            'display_name': 'Предел прочности',
+            'name': '',
+            'unit': 'МПа',
+            'data_type': 'number',
+            'group': str(self.group.pk),
+            'description': 'Test property',
+        }
+        data.update(overrides)
+        return data
+
+    def test_property_list_renders_for_operator(self):
+        login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
         response = self.client.get(reverse('references:list'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Density')
-        self.assertContains(response, 'density')
+        self.assertNotContains(response, reverse('references:create'))
+
+    def test_operator_cannot_create_property(self):
+        login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
+        response = self.client.post(reverse('references:create'), self._property_payload())
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Property.objects.filter(name='predel_prochnosti').exists())
 
     def test_property_create_view(self):
-        response = self.client.post(
-            reverse('references:create'),
-            {
-                'display_name': 'Предел прочности',
-                'name': '',
-                'unit': 'МПа',
-                'data_type': 'number',
-                'group': str(self.group.pk),
-                'description': 'Test property',
-            },
-        )
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
+        response = self.client.post(reverse('references:create'), self._property_payload())
 
         self.assertEqual(response.status_code, 302)
         created = Property.objects.get(name='predel_prochnosti')
@@ -59,16 +85,17 @@ class PropertyViewsTests(TestCase):
         self.assertEqual(created.group, self.group)
 
     def test_property_create_redirects_to_next_with_open_properties(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
         next_url = reverse('structures:type_create')
         response = self.client.post(
             f"{reverse('references:create')}?next={next_url}",
             {
-                'display_name': 'Young modulus',
-                'name': 'young_modulus',
-                'unit': 'GPa',
-                'data_type': 'number',
-                'group': str(self.group.pk),
-                'description': '',
+                **self._property_payload(
+                    display_name='Young modulus',
+                    name='young_modulus',
+                    unit='GPa',
+                    description='',
+                ),
                 'next': next_url,
             },
         )
@@ -81,16 +108,17 @@ class PropertyViewsTests(TestCase):
         )
 
     def test_property_create_redirects_to_material_form_with_created_property(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
         next_url = reverse('materials:create')
         response = self.client.post(
             f"{reverse('references:create')}?next={next_url}",
             {
-                'display_name': 'Shear modulus',
-                'name': 'shear_modulus',
-                'unit': 'GPa',
-                'data_type': 'number',
-                'group': str(self.group.pk),
-                'description': '',
+                **self._property_payload(
+                    display_name='Shear modulus',
+                    name='shear_modulus',
+                    unit='GPa',
+                    description='',
+                ),
                 'next': next_url,
             },
         )
@@ -108,6 +136,7 @@ class PropertyViewsTests(TestCase):
         self.assertContains(follow_response, 'Shear modulus')
 
     def test_property_update_view(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
         response = self.client.post(
             reverse('references:edit', kwargs={'pk': self.property.pk}),
             {
@@ -125,10 +154,38 @@ class PropertyViewsTests(TestCase):
         self.assertEqual(self.property.display_name, 'Mass density')
         self.assertEqual(self.property.unit, 'kg/m3')
 
+    def test_operator_cannot_update_property(self):
+        login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
+        response = self.client.post(
+            reverse('references:edit', kwargs={'pk': self.property.pk}),
+            {
+                'name': 'density',
+                'display_name': 'Mass density',
+                'unit': 'kg/m3',
+                'data_type': 'number',
+                'group': str(self.group.pk),
+                'description': '',
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.property.refresh_from_db()
+        self.assertEqual(self.property.display_name, 'Density')
+
     def test_property_delete_view(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
         response = self.client.post(
             reverse('references:delete', kwargs={'pk': self.property.pk}),
         )
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Property.objects.filter(pk=self.property.pk).exists())
+
+    def test_operator_cannot_delete_property(self):
+        login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
+        response = self.client.post(
+            reverse('references:delete', kwargs={'pk': self.property.pk}),
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Property.objects.filter(pk=self.property.pk).exists())

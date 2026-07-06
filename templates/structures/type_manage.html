@@ -3,6 +3,12 @@
 {% block title %}{{ structure_type.name }} — Управление{% endblock %}
 
 {% block content %}
+{% if structure_type_is_readonly %}
+<div class="alert alert-info" role="status">
+    Тип структуры опубликован из другого пространства. Редактирование недоступно.
+</div>
+{% endif %}
+
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
@@ -15,8 +21,11 @@
             {% if structure_type.is_created %}
             <a href="{% url 'structures:list' structure_type.code %}" class="btn btn-primary btn-sm">Записи</a>
             {% endif %}
-            {% if not structure_type.is_created %}
+            {% if not structure_type.is_created and not structure_type_is_readonly %}
             <a href="{% url 'structures:type_edit' structure_type.code %}" class="btn btn-outline-primary btn-sm">Изменить</a>
+            {% endif %}
+            {% if can_publish_structure_type %}
+            <a href="{% url 'structures:type_visibility' structure_type.code %}" class="btn btn-outline-secondary btn-sm">Видимость</a>
             {% endif %}
             <a href="{% url 'structures:select_type' %}" class="btn btn-outline-secondary btn-sm">К типам</a>
         </div>
@@ -45,7 +54,7 @@
             <dd class="col-sm-9">{{ linked_materials_count }}</dd>
         </dl>
 
-        <form method="post" class="mt-4 pt-3 border-top">
+        <form method="post" class="mt-4 pt-3 border-top"{% if structure_type_is_readonly %} hidden{% endif %}>
             {% csrf_token %}
             <label class="form-label fw-semibold" for="{{ color_form.display_color.id_for_label }}">{{ color_form.display_color.label }}</label>
             {% if color_form.display_color.help_text %}

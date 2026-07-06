@@ -4,9 +4,11 @@ from django.views.generic import ListView
 from apps.core.list_filters import ALL_SEARCH_SCOPE, TAG_SEARCH_SCOPE, QuerySetFilterMixin
 from apps.materials.tab_mixins import MaterialTabMixin
 from apps.samples.models import Sample
+from apps.workspaces.mixins import AppViewMixin
+from apps.workspaces.services import samples_in_workspace
 
 
-class MaterialSamplesListView(QuerySetFilterMixin, MaterialTabMixin, ListView):
+class MaterialSamplesListView(AppViewMixin, QuerySetFilterMixin, MaterialTabMixin, ListView):
     model = Sample
     template_name = 'materials/samples/list.html'
     context_object_name = 'samples'
@@ -25,7 +27,9 @@ class MaterialSamplesListView(QuerySetFilterMixin, MaterialTabMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            self.material.samples.annotate(scan_count=Count('scans'))
+            samples_in_workspace(self.request.active_workspace)
+            .filter(material=self.material)
+            .annotate(scan_count=Count('scans'))
             .prefetch_related('tags')
             .order_by('code')
         )

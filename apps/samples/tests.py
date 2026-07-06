@@ -16,6 +16,7 @@ from apps.samples.models import Sample, SampleAttachment, SampleProperty
 from apps.scans.models import ScanRecord
 
 from apps.scans.test_utils import make_hdf5_upload
+from apps.workspaces.services import ensure_legacy_workspace
 
 _STORAGE_OVERRIDE = {
 
@@ -41,13 +42,19 @@ class SampleViewsTests(TestCase):
 
         self.settings_override.enable()
 
-        self.material = Material.objects.create(code='MAT-SMP-UI', name='UI material')
+        self.legacy_workspace = ensure_legacy_workspace()
+        self.material = Material.objects.create(
+            code='MAT-SMP-UI',
+            name='UI material',
+            home_workspace=self.legacy_workspace,
+        )
 
         self.sample = Sample.objects.create(
             code='SMP-UI-001',
             name='UI sample',
             material=self.material,
             object_type='test',
+            workspace=self.legacy_workspace,
         )
 
     def _property_formset_management_data(self, total='0', initial='0'):
@@ -102,6 +109,7 @@ class SampleViewsTests(TestCase):
             name='Control sample',
             material=self.material,
             object_type='control',
+            workspace=self.legacy_workspace,
         )
 
         response = self.client.get(
@@ -157,6 +165,8 @@ class SampleViewsTests(TestCase):
         self.assertContains(response, 'data-sample-material-select')
         self.assertContains(response, 'material-property-forms-container')
         self.assertContains(response, 'extra-property-forms-container')
+        self.assertContains(response, 'reference-materials-modal')
+        self.assertContains(response, 'reference-materials-scope-tabs')
 
     def test_sample_create_view_saves_property_formset(self):
         density = Property.objects.create(
@@ -432,13 +442,10 @@ class SampleViewsTests(TestCase):
     def test_global_scans_list(self):
 
         ScanRecord.objects.create(
-
             sample=self.sample,
-
             title='Global list scan',
-
             file=make_hdf5_upload('global.h5'),
-
+            workspace=self.legacy_workspace,
         )
 
         response = self.client.get(reverse('scans_all'))
@@ -457,16 +464,18 @@ class ScanUiViewsTests(TestCase):
 
         self.settings_override.enable()
 
-        self.material = Material.objects.create(code='MAT-SCN-UI', name='Scan UI material')
+        self.legacy_workspace = ensure_legacy_workspace()
+        self.material = Material.objects.create(
+            code='MAT-SCN-UI',
+            name='Scan UI material',
+            home_workspace=self.legacy_workspace,
+        )
 
         self.sample = Sample.objects.create(
-
             code='SMP-SCN-UI',
-
             name='Scan UI sample',
-
             material=self.material,
-
+            workspace=self.legacy_workspace,
         )
 
     def tearDown(self):

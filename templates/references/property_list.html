@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}Свойства — База композитов{% endblock %}
 
@@ -6,7 +7,9 @@
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h1 class="h4 mb-0">Справочник свойств</h1>
+        {% if is_system_admin %}
         <a href="{% url 'references:create' %}" class="btn btn-primary btn-sm">Создать</a>
+        {% endif %}
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
@@ -20,6 +23,7 @@
                         <th>Единица</th>
                         <th>Тип</th>
                         <th>Группа</th>
+                        <th>Создал</th>
                         <th>Материалов</th>
                         <th class="text-end">Действия</th>
                     </tr>
@@ -32,12 +36,19 @@
                         <td>{{ property.unit|default:"—" }}</td>
                         <td>{% include 'includes/type_badge.html' with label=property.get_data_type_display value=property.data_type %}</td>
                         <td>{{ property.group.name|default:"—" }}</td>
+                        <td>{% include 'includes/creator_filter_link.html' with obj=property %}</td>
                         <td>{{ property.material_count }}</td>
                         <td class="text-end">
+                            {% if is_system_admin %}
                             <div class="table-actions">
-                            <a href="{% url 'references:edit' property.pk %}" class="btn btn-sm btn-outline-primary btn-action-edit">Изменить</a>
-                            <a href="{% url 'references:delete' property.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                            {% url 'references:edit' property.pk as property_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=property_edit_url title='Изменить' %}
+                            {% url 'references:delete' property.pk as property_delete_url %}
+                            {% include 'includes/table_action_icon.html' with action='delete' url=property_delete_url title='Удалить' %}
                             </div>
+                            {% else %}
+                            —
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -53,8 +64,10 @@
         <div class="alert alert-info mb-0 m-3">
             {% if has_active_filters %}
             По вашему запросу свойств не найдено. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
-            {% else %}
+            {% elif is_system_admin %}
             Свойств пока нет. <a href="{% url 'references:create' %}">Создать</a>.
+            {% else %}
+            Свойств пока нет.
             {% endif %}
         </div>
         {% endif %}

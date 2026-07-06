@@ -1,14 +1,16 @@
 import uuid
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.references.models import Property
+from apps.workspaces.visibility import VisibilityMode, WorkspaceVisibilityMixin
 
 
-class Material(models.Model):
+class Material(WorkspaceVisibilityMixin, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code = models.CharField(max_length=50, unique=True, verbose_name='Код')
+    code = models.CharField(max_length=50, verbose_name='Код')
     name = models.CharField(max_length=200, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
     struct_type = models.ForeignKey(
@@ -24,9 +26,37 @@ class Material(models.Model):
         blank=True,
         verbose_name='ID параметров структуры',
     )
+    home_workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='home_materials',
+        verbose_name='Домашнее пространство',
+    )
+    visibility_mode = models.CharField(
+        max_length=32,
+        choices=VisibilityMode.choices,
+        default=VisibilityMode.ALL_WORKSPACES,
+        verbose_name='Режим видимости',
+    )
+    published_workspaces = models.ManyToManyField(
+        'workspaces.Workspace',
+        blank=True,
+        related_name='published_materials',
+        verbose_name='Опубликовано в пространствах',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создан')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлён')
     created_by = models.CharField(max_length=100, blank=True, verbose_name='Создал')
+    created_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_materials',
+        verbose_name='Создал (пользователь)',
+    )
     tags = models.ManyToManyField(
         'core.Tag',
         blank=True,
@@ -84,6 +114,12 @@ class Material(models.Model):
         ordering = ['code']
         verbose_name = 'материал'
         verbose_name_plural = 'материалы'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['home_workspace', 'code'],
+                name='unique_material_code_per_workspace',
+            ),
+        ]
 
 
 class MaterialAttachment(models.Model):
@@ -94,6 +130,14 @@ class MaterialAttachment(models.Model):
         related_name='attachments',
         verbose_name='Материал',
     )
+    workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='material_attachments',
+        verbose_name='Пространство',
+    )
     file = models.FileField(
         upload_to='material_attachments/%Y/%m/%d/',
         verbose_name='Файл',
@@ -101,6 +145,15 @@ class MaterialAttachment(models.Model):
     title = models.CharField(max_length=200, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Загружен')
+    uploaded_by = models.CharField(max_length=100, blank=True, verbose_name='Загрузил')
+    uploaded_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_material_attachments',
+        verbose_name='Загрузил (пользователь)',
+    )
 
     class Meta:
         ordering = ['-uploaded_at']

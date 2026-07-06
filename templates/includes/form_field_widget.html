@@ -1,0 +1,29 @@
+{% if field.name == 'groups' %}
+{{ field }}
+{% elif field.name == 'user' and field.field.disabled %}
+<div class="user-picker user-picker--readonly">
+    {% with user=field.field.queryset.first %}
+    {% if user %}
+    <div class="user-picker__option is-selected">
+        <span class="user-picker__badge" aria-hidden="true">{{ user.username|slice:":2"|upper }}</span>
+        <span class="user-picker__text">
+            <span class="user-picker__username">{{ user.username }}</span>
+            {% if user.get_full_name %}
+            <span class="user-picker__meta">{{ user.get_full_name }}</span>
+            {% endif %}
+            {% if user.email %}
+            <span class="user-picker__meta">{{ user.email }}</span>
+            {% endif %}
+        </span>
+    </div>
+    {{ field.as_hidden }}
+    {% else %}
+    {{ field }}
+    {% endif %}
+    {% endwith %}
+</div>
+{% elif field.name == 'user' %}
+{% include 'widgets/user_picker.html' with field=field widget=field.field.widget %}
+{% else %}
+{{ field }}
+{% endif %}

@@ -72,19 +72,21 @@ def _parse_default(field: StructureField):
     return field.default_value
 
 
-def _build_dynamic_field(structure_field: StructureField) -> forms.Field:
+def _build_dynamic_field(structure_field: StructureField, workspace=None) -> forms.Field:
     label = structure_field.label
     required = structure_field.is_required
     help_text = structure_field.help_text or None
     initial = _parse_default(structure_field)
 
     if structure_field.field_type == MATERIAL_LINK_FIELD_TYPE:
+        from apps.materials.picker_data import materials_for_picker_queryset
+
         return MaterialChoiceField(
             label=label,
             required=False,
             help_text=help_text,
             initial=initial,
-            queryset=Material.objects.order_by('code'),
+            queryset=materials_for_picker_queryset(workspace),
             widget=forms.Select(attrs=material_select_widget_attrs()),
         )
     if structure_field.field_type == 'CharField':
@@ -212,13 +214,14 @@ STRUCTURE_FIELD_PREFIX = 'structure_field_'
 class StructureRecordForm(forms.Form):
     """Форма записи в SQL-таблице динамической структуры (публичный UI)."""
 
-    def __init__(self, structure_type, record=None, *args, **kwargs):
+    def __init__(self, structure_type, record=None, workspace=None, *args, **kwargs):
         self.structure_type = structure_type
         self.record = record
+        self.workspace = workspace
         super().__init__(*args, **kwargs)
         self.structure_fields = _supported_structure_fields(structure_type)
         for structure_field in self.structure_fields:
-            field = _build_dynamic_field(structure_field)
+            field = _build_dynamic_field(structure_field, workspace=workspace)
             self.fields[self.field_name(structure_field)] = field
         if record:
             self._apply_initial_values(record)

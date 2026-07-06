@@ -1,0 +1,24 @@
+<tr class="member-add-row">
+    {% for hidden in member_form.hidden_fields %}{{ hidden }}{% endfor %}
+    <td class="member-add-row__user">
+        <div class="member-add-row__user-card text-muted">—</div>
+        {% if member_form.user.errors %}
+        <div class="text-danger small">{{ member_form.user.errors }}</div>
+        {% endif %}
+    </td>
+    <td class="member-add-row__groups">
+        {{ member_form.groups }}
+        {% if member_form.groups.errors %}
+        <div class="text-danger small">{{ member_form.groups.errors }}</div>
+        {% endif %}
+    </td>
+    <td class="text-end text-nowrap">
+        {% if member_add_formset.can_delete %}
+        <span class="visually-hidden">{{ member_form.DELETE }}</span>
+        {% endif %}
+        <button type="button" class="btn btn-sm btn-outline-danger delete-member-row-btn" title="Убрать из списка">✖</button>
+    </td>
+    {% if member_form.non_field_errors %}
+    <td colspan="3"><div class="text-danger small">{{ member_form.non_field_errors }}</div></td>
+    {% endif %}
+</tr>

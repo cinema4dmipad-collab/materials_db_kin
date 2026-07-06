@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 from apps.samples.models import Sample
@@ -16,6 +17,14 @@ class ScanRecord(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name='scans')
+    workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='scan_records',
+        verbose_name='Пространство',
+    )
     file = models.FileField(
         upload_to='scans/%Y/%m/%d/',
         verbose_name='Файл скана (HDF5)',
@@ -30,6 +39,14 @@ class ScanRecord(models.Model):
     )
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Загружен')
     uploaded_by = models.CharField(max_length=100, blank=True, verbose_name='Загрузил')
+    uploaded_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_scans',
+        verbose_name='Загрузил (пользователь)',
+    )
     tags = models.ManyToManyField(
         'core.Tag',
         blank=True,

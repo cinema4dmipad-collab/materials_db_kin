@@ -32,9 +32,14 @@
                     {% endif %}
 
                     {% for field in form %}
-                    <div class="mb-3">
+                    <div class="mb-3{% if field.name == 'is_global' %} form-check{% endif %}">
+                        {% if field.name == 'is_global' %}
+                        {{ field }}
+                        <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {% else %}
                         <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
+                        {% endif %}
                         {% if field.help_text %}
                         <div class="form-text">{{ field.help_text }}</div>
                         {% endif %}

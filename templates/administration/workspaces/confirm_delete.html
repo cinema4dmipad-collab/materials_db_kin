@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление пространства — Администрирование{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h1 class="h4 mb-0">Удалить пространство</h1>
+            </div>
+            <div class="card-body">
+                <p>
+                    Вы уверены, что хотите удалить пространство
+                    <strong>{{ workspace.name }}</strong> (<code>{{ workspace.slug }}</code>)?
+                </p>
+                <p class="text-muted small mb-4">
+                    Участников: {{ member_count }}.
+                    Если в пространстве есть материалы, образцы или другие данные, удаление будет отклонено —
+                    в этом случае деактивируйте пространство вместо удаления.
+                </p>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">Удалить</button>
+                        <a href="{% url 'administration:admin_workspaces' %}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

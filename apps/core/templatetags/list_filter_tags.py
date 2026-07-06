@@ -1,7 +1,12 @@
 from django import template
 from django.http import QueryDict
 
-from apps.core.list_filters import OBJECT_TYPE_SEARCH_SCOPE, SCAN_METHOD_SEARCH_SCOPE, STRUCT_TYPE_SEARCH_SCOPE
+from apps.core.list_filters import (
+    CREATOR_SEARCH_SCOPE,
+    OBJECT_TYPE_SEARCH_SCOPE,
+    SCAN_METHOD_SEARCH_SCOPE,
+    STRUCT_TYPE_SEARCH_SCOPE,
+)
 
 register = template.Library()
 
@@ -60,6 +65,21 @@ def object_type_filter_link(context, object_type_label: str, base_path: str | No
         params = request.GET.copy() if request else QueryDict(mutable=True)
     params['q'] = object_type_label
     params.setlist('q_in', [OBJECT_TYPE_SEARCH_SCOPE])
+    params.pop('page', None)
+    encoded = params.urlencode()
+    return f'{target_path}?{encoded}' if encoded else target_path
+
+
+@register.simple_tag(takes_context=True)
+def creator_filter_link(context, creator_label: str, base_path: str | None = None) -> str:
+    request = context.get('request')
+    target_path = _filter_target_path(context, base_path)
+    if base_path and request and _normalize_path(base_path) != _normalize_path(request.path):
+        params = QueryDict(mutable=True)
+    else:
+        params = request.GET.copy() if request else QueryDict(mutable=True)
+    params['q'] = creator_label
+    params.setlist('q_in', [CREATOR_SEARCH_SCOPE])
     params.pop('page', None)
     encoded = params.urlencode()
     return f'{target_path}?{encoded}' if encoded else target_path
