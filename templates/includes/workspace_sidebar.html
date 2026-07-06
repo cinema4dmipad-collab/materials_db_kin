@@ -1,8 +1,22 @@
 {% load static %}
 <aside class="workspace-sidebar" id="appWorkspaceSidebar" aria-label="Навигация приложения">
     <div class="workspace-sidebar__header">
+        {% if active_workspace %}
         <a href="{% url 'core:dashboard' %}" class="workspace-sidebar__home-link">Дашборд</a>
+        {% else %}
+        <span class="workspace-sidebar__home-label">Пространство не выбрано</span>
+        {% endif %}
     </div>
+
+    {% if not active_workspace %}
+    <div class="workspace-sidebar__notice">
+        {% if user_workspaces %}
+        <p class="workspace-sidebar__notice-text">Выберите рабочее пространство на главном экране, чтобы открыть разделы приложения.</p>
+        {% else %}
+        <p class="workspace-sidebar__notice-text">Доступных пространств нет. Обратитесь к администратору.</p>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <nav class="workspace-sidebar__nav">
         {% if main_nav_items %}

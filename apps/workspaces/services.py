@@ -37,6 +37,39 @@ def set_active_workspace(request, workspace) -> None:
     request.session[ACTIVE_WORKSPACE_SESSION_KEY] = str(workspace.pk)
 
 
+def resolve_active_workspace_for_user(request, user):
+    """Возвращает активное пространство или автоматически выбирает единственное."""
+    active_workspace = get_active_workspace(request)
+    if active_workspace is not None:
+        return active_workspace
+
+    workspaces = list(get_user_workspaces(user))
+    if len(workspaces) == 1:
+        set_active_workspace(request, workspaces[0])
+        return workspaces[0]
+
+    if not workspaces and user.is_superuser:
+        legacy = Workspace.objects.filter(
+            slug=LEGACY_WORKSPACE_SLUG,
+            is_active=True,
+        ).first()
+        if legacy:
+            set_active_workspace(request, legacy)
+            return legacy
+
+    return None
+
+
+def get_post_login_redirect_url(request):
+    """Куда направить пользователя сразу после входа."""
+    from django.conf import settings
+
+    user = request.user
+    if resolve_active_workspace_for_user(request, user) is not None:
+        return settings.LOGIN_REDIRECT_URL
+    return reverse('workspaces:select')
+
+
 def redirect_url_after_workspace_switch(target_workspace, next_url, user):
     select_url = reverse('workspaces:select')
     if not next_url:

@@ -108,6 +108,30 @@ class WorkspaceSelectTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.client.session.get(ACTIVE_WORKSPACE_SESSION_KEY), str(self.workspace.pk))
 
+    def test_login_redirects_to_select_with_multiple_workspaces(self):
+        other = Workspace.objects.create(slug='ws-b', name='Пространство B')
+        _assign_operator(self.user, other)
+        response = self.client.post(
+            reverse('accounts:login'),
+            {'username': 'select-user', 'password': 'pass-123'},
+        )
+        self.assertRedirects(response, reverse('workspaces:select'))
+
+    def test_sidebar_hides_workspace_sections_without_active_workspace(self):
+        other = Workspace.objects.create(slug='ws-b-nav', name='Пространство B')
+        _assign_operator(self.user, other)
+        session = self.client.session
+        session.pop(ACTIVE_WORKSPACE_SESSION_KEY, None)
+        session.save()
+
+        response = self.client.get(reverse('workspaces:select'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, reverse('materials:list'))
+        self.assertContains(response, 'Пространство не выбрано')
+        self.assertContains(response, 'Выберите рабочее пространство на главном экране')
+        self.assertContains(response, 'workspace-select__grid')
+        self.assertContains(response, reverse('core:help'))
+
 
 class PermissionTests(TestCase):
     def setUp(self):

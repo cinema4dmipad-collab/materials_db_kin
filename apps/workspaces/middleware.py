@@ -4,17 +4,14 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponseRedirect
 from django.urls import Resolver404, resolve, reverse
 
-from apps.workspaces.models import BUILTIN_GROUP_MANAGER, Workspace
+from apps.workspaces.models import BUILTIN_GROUP_MANAGER
 from apps.workspaces.services import (
     ACTIVE_WORKSPACE_SESSION_KEY,
-    LEGACY_WORKSPACE_SLUG,
     assign_user_to_groups,
     ensure_default_groups,
     ensure_legacy_workspace,
-    get_active_workspace,
     get_user_groups,
-    get_user_workspaces,
-    set_active_workspace,
+    resolve_active_workspace_for_user,
     user_has_workspace_access,
 )
 
@@ -72,25 +69,9 @@ class WorkspaceMiddleware:
         if not user or not user.is_authenticated:
             return redirect_to_login(request.get_full_path(), login_url=settings.LOGIN_URL)
 
-        active_workspace = get_active_workspace(request)
+        active_workspace = resolve_active_workspace_for_user(request, user)
         if active_workspace is None:
-            workspaces = list(get_user_workspaces(user))
-            if len(workspaces) == 1:
-                set_active_workspace(request, workspaces[0])
-                active_workspace = workspaces[0]
-            elif not workspaces:
-                if user.is_superuser:
-                    legacy = Workspace.objects.filter(
-                        slug=LEGACY_WORKSPACE_SLUG,
-                        is_active=True,
-                    ).first()
-                    if legacy:
-                        set_active_workspace(request, legacy)
-                        active_workspace = legacy
-                else:
-                    return HttpResponseRedirect(reverse('workspaces:select'))
-            else:
-                return HttpResponseRedirect(reverse('workspaces:select'))
+            return HttpResponseRedirect(reverse('workspaces:select'))
 
         if active_workspace is not None:
             if not user_has_workspace_access(user, active_workspace):

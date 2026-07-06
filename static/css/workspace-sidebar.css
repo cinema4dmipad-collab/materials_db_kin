@@ -431,6 +431,30 @@
     flex-shrink: 0;
 }
 
+.workspace-sidebar__notice {
+    margin: 0 0.75rem 0.5rem;
+    padding: 0.65rem 0.7rem;
+    border: 1px solid var(--kx-border);
+    border-radius: 0.35rem;
+    background: var(--kx-brand-soft);
+    flex-shrink: 0;
+}
+
+.workspace-sidebar__home-label {
+    display: block;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--kx-text-muted);
+}
+
+.workspace-sidebar__notice-text {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--kx-text);
+}
+
 .workspace-sidebar__home-link {
     display: block;
     padding: 0.35rem 0.5rem;

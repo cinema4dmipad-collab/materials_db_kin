@@ -77,6 +77,8 @@ from apps.workspaces.services import (
 
     ensure_default_groups,
 
+    get_post_login_redirect_url,
+
     get_user_workspaces,
 
     redirect_url_after_workspace_switch,
@@ -98,6 +100,9 @@ class WorkspaceLoginView(LoginView):
     template_name = 'registration/login.html'
 
     redirect_authenticated_user = True
+
+    def get_success_url(self):
+        return get_post_login_redirect_url(self.request)
 
 
 

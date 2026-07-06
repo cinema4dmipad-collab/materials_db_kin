@@ -14,6 +14,8 @@ def workspace_navigation(request):
     user_workspaces = get_user_workspaces(user)
 
     def can(codename):
+        if active_workspace is None:
+            return False
         return has_workspace_perm(user, active_workspace, codename)
 
     main_nav_items = [
@@ -100,7 +102,7 @@ def workspace_navigation(request):
         nav_sections.append({'title': 'Пространство', 'items': workspace_items})
 
     admin_items = []
-    if is_system_admin(user):
+    if is_system_admin(user) and active_workspace:
         admin_items.append(
             {
                 'label': 'Пользователи',
@@ -122,7 +124,6 @@ def workspace_navigation(request):
                 'visible': True,
             }
         )
-    if is_system_admin(user) and active_workspace:
         admin_items.append(
             {
                 'label': 'Группы',
