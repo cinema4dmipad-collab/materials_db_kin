@@ -40,6 +40,21 @@
         });
     }
 
+    function bindVisibilityFields(form) {
+        var modeSelect = document.getElementById('id_visibility_mode');
+        var publishedGroup = document.getElementById('published-workspaces-group');
+        if (!modeSelect || !publishedGroup) {
+            return;
+        }
+
+        function syncPublishedVisibility() {
+            publishedGroup.hidden = modeSelect.value !== 'selected_workspaces';
+        }
+
+        modeSelect.addEventListener('change', syncPublishedVisibility);
+        syncPublishedVisibility();
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var form = document.getElementById('material-form');
         if (!form) {
@@ -47,5 +62,6 @@
         }
         bindEnterGuard(form);
         bindStructureTypeApply(form);
+        bindVisibilityFields(form);
     });
 })();

@@ -6,7 +6,7 @@ Shared catalog of measurable **properties** used in materials, samples, and stru
 
 ## Model
 
-**Property** — name, code, unit, data type (`CharField`, `IntegerField`, `DecimalField`, `BooleanField`, `DateField`), optional group, description.
+**Property** — name, code, unit, data type (`CharField`, `IntegerField`, `DecimalField`, `BooleanField`, `DateField`), optional group, description, creator.
 
 Codes are generated from names (transliteration + snake_case) with validation against SQL reserved words.
 
@@ -15,11 +15,13 @@ Codes are generated from names (transliteration + snake_case) with validation ag
 | URL | Action |
 |-----|--------|
 | `/properties/` | List with search/filters |
-| `/properties/create/` | New property |
-| `/properties/<pk>/edit/` | Edit |
-| `/properties/<pk>/delete/` | Delete confirmation |
+| `/properties/create/` | New property (**admin only**) |
+| `/properties/<pk>/edit/` | Edit (**admin only**) |
+| `/properties/<pk>/delete/` | Delete confirmation (**admin only**) |
 
-Forms: `apps/references/forms.py`.
+All workspace roles may **view** the catalog and pick properties in material/sample forms.
+
+Forms: `apps/references/forms.py`. Access: `can_manage_properties()` in `apps/workspaces/permissions.py`.
 
 ## Integration
 
@@ -29,8 +31,8 @@ Forms: `apps/references/forms.py`.
 
 ## Workflow
 
-1. Define properties once in the catalog (with correct units and types).
-2. Reuse across many materials and samples via picker.
+1. Admin defines properties once in the catalog (with correct units and types).
+2. Managers and operators reuse them across materials and samples via picker.
 3. When designing structure types, import compatible properties as SQL columns.
 
 See [Materials](materials.md) and [Structures](structures.md).

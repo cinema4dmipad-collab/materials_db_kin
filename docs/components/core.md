@@ -2,39 +2,43 @@
 
 Location: `apps/core/`
 
-Cross-cutting features: landing page, in-app help, tag management, list filtering utilities.
+Cross-cutting features: landing page, in-app help, tag management, list filtering utilities, user profile route.
 
 ## Views and URLs
 
-| URL | View | Description |
-|-----|------|-------------|
-| `/` | Dashboard | Entry page with links to main sections |
-| `/help/` | Help page | User documentation (Russian) |
-| `/tags/` | Tag list/create/edit/delete | Tag CRUD |
+| URL | Action |
+|-----|------|
+| `/` | Dashboard |
+| `/help/` | Help page (Russian user guide) |
+| `/tags/` | Tag list — tabs **Пространство** / **Общие** |
+| `/accounts/profile/` | Current user profile (via `apps/workspaces`) |
 
-App URL config: `apps/core/urls.py`.
+App URL config: `apps/core/urls.py`, accounts in `apps/workspaces/urls/accounts.py`.
 
 ## List Filters
 
 Shared filtering for list views across apps:
 
-* `apps/core/list_filters.py` — filter definitions, queryset helpers
-* `apps/core/templatetags/list_filter_tags.py` — template tags
+* `apps/core/list_filters.py` — scopes including `creator`, `struct_type`, tags
+* `apps/core/templatetags/list_filter_tags.py` — filter link template tags
 * `static/js/list_filter_client.js` — client-side row filtering on detail pages
 
-Templates: `includes/list_filter_bar.html`, `includes/client_filter_bar.html`.
+Templates: `includes/list_filter_bar.html`, `includes/client_filter_bar.html`, `includes/creator_filter_link.html`, `includes/type_badge.html`.
+
+**Interactive filters:** click structure type badge, object type, scan method, tag, or creator pill in lists to apply search scope.
 
 ## Tags
 
-* Model and utilities: `apps/core/tag_utils.py`, signals in `apps/core/signals.py`
+* Model: optional `workspace` (null = global tag)
+* **Пространство** — workspace-scoped tags; managers/operators can CRUD
+* **Общие** — global tags; admin only (`can_manage_global_tags`)
+* Forms see both via `tags_in_workspace()`
 * Widget: `tag_names_input` — comma-separated entry with suggestions
-* Context processor `tag_suggestions` injects existing tags into forms
-
-Tags normalize on save; clickable badges on lists apply filter query params.
 
 ## Forms and Helpers
 
-* `apps/core/forms.py` — shared form pieces
+* `apps/core/creator.py` — assign/display creator on create
+* `apps/core/forms.py` — shared form pieces (e.g. `TagForm`)
 * `apps/core/number_utils.py` — numeric parsing/formatting
 * `apps/core/property_form_display.py` — property label/unit display for formsets
 
@@ -47,4 +51,6 @@ Tags normalize on save; clickable badges on lists apply filter query params.
 
 ## Tests
 
-`apps/core/tests.py` — dashboard, help render, tag views, filter behaviour.
+`apps/core/tests.py` — dashboard, help render, tag views, filter behaviour, creator scope.
+
+In-app help source: `templates/core/help.html`.

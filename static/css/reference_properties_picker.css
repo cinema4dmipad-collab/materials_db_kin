@@ -35,6 +35,10 @@
     font-size: 0.75rem;
 }
 
+.reference-materials-scope-tabs .nav-link {
+    cursor: pointer;
+}
+
 .material-picker-field {
     min-width: 0;
 }

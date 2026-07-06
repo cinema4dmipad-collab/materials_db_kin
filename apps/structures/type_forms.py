@@ -407,3 +407,25 @@ class StructureTypeDisplayColorForm(forms.ModelForm):
         labels = {'display_color': 'Цвет в списке материалов'}
         widgets = {'display_color': forms.RadioSelect(choices=StructureType._meta.get_field('display_color').choices)}
 
+
+class StructureTypeVisibilityForm(forms.ModelForm):
+    class Meta:
+        model = StructureType
+        fields = ('visibility_mode', 'published_workspaces')
+        labels = {
+            'visibility_mode': 'Режим видимости',
+            'published_workspaces': 'Опубликовано в пространствах',
+        }
+        widgets = {
+            'published_workspaces': forms.SelectMultiple(attrs={'class': 'form-select', 'size': 8}),
+            'visibility_mode': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from apps.workspaces.models import Workspace
+
+        self.fields['published_workspaces'].queryset = Workspace.objects.filter(
+            is_active=True,
+        ).order_by('name')
+

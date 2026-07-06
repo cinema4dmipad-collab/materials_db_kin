@@ -1,0 +1,19 @@
+{% load ui_tags list_filter_tags %}
+{% with label=obj|creator_display %}
+{% if label != "—" %}
+<a href="{% if filter_base_path %}{% creator_filter_link label filter_base_path %}{% else %}{% creator_filter_link label %}{% endif %}"
+   class="type-pill-link"
+   title="Искать по автору «{{ label }}»">
+    <span class="type-pill tone-slate">
+        <span class="type-pill__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 1.5c-2.33 0-7 1.17-7 3.5V14h14v-1c0-2.33-4.67-3.5-7-3.5Z"/>
+            </svg>
+        </span>
+        <span class="type-pill__label">{{ label }}</span>
+    </span>
+</a>
+{% else %}
+<span class="text-muted">—</span>
+{% endif %}
+{% endwith %}

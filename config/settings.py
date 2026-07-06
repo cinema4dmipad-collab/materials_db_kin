@@ -1,8 +1,11 @@
 import os
+import sys
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+
+TESTING = 'test' in sys.argv
 
 load_dotenv()
 
@@ -50,6 +53,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'apps.workspaces.apps.WorkspacesConfig',
     'apps.core.apps.CoreConfig',
     'apps.references',
     'apps.composites',
@@ -62,15 +66,41 @@ INSTALLED_APPS = [
 if DEBUG:
     INSTALLED_APPS.append('debug_toolbar')
 
+try:
+    import guardian  # noqa: F401
+except ImportError:
+    pass
+else:
+    INSTALLED_APPS.append('guardian')
+    AUTHENTICATION_BACKENDS = (
+        'django.contrib.auth.backends.ModelBackend',
+        'guardian.backends.ObjectPermissionBackend',
+    )
+    ANONYMOUS_USER_NAME = None
+
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.workspaces.middleware.WorkspaceMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if TESTING:
+    _workspace_middleware_index = MIDDLEWARE.index(
+        'apps.workspaces.middleware.WorkspaceMiddleware'
+    )
+    MIDDLEWARE.insert(
+        _workspace_middleware_index,
+        'apps.workspaces.middleware.TestAutoLoginMiddleware',
+    )
 
 if DEBUG:
     MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
@@ -90,6 +120,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'apps.core.context_processors.tag_suggestions',
                 'apps.core.context_processors.app_version',
+                'apps.workspaces.context_processors.workspace_navigation',
             ],
             'libraries': {
                 'ui_tags': 'apps.core.templatetags.ui_tags',

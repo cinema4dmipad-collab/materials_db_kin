@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Профиль — {{ profile_user.get_username }}{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Профиль пользователя</h1>
+    </div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Логин</dt>
+            <dd class="col-sm-9"><code>{{ profile_user.username }}</code></dd>
+
+            <dt class="col-sm-3">Имя</dt>
+            <dd class="col-sm-9">{{ profile_user.first_name|default:"—" }}</dd>
+
+            <dt class="col-sm-3">Фамилия</dt>
+            <dd class="col-sm-9">{{ profile_user.last_name|default:"—" }}</dd>
+
+            <dt class="col-sm-3">E-mail</dt>
+            <dd class="col-sm-9">{{ profile_user.email|default:"—" }}</dd>
+
+            <dt class="col-sm-3">Дата регистрации</dt>
+            <dd class="col-sm-9">{{ profile_user.date_joined|date:"d.m.Y H:i" }}</dd>
+
+            {% if profile_user.is_staff %}
+            <dt class="col-sm-3">Доступ</dt>
+            <dd class="col-sm-9">
+                {% if profile_user.is_superuser %}
+                Системный администратор
+                {% else %}
+                Админка Django
+                {% endif %}
+            </dd>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+{% if workspace_rows %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Рабочие пространства</h2>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Код</th>
+                        <th>Группы</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in workspace_rows %}
+                    <tr>
+                        <td>{{ row.workspace.name }}</td>
+                        <td><code>{{ row.workspace.slug }}</code></td>
+                        <td>
+                            {% for group in row.groups %}
+                            <span class="badge text-bg-light border">{{ group.name }}</span>
+                            {% empty %}—{% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

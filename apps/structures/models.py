@@ -1,7 +1,12 @@
 import uuid
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+
+from apps.structures.colors import DEFAULT_STRUCTURE_DISPLAY_COLOR, STRUCTURE_DISPLAY_COLOR_CHOICES
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES
+from apps.workspaces.visibility import VisibilityMode, WorkspaceVisibilityMixin
 
 
 STRUCTURE_FIELD_LOCK_ERROR = (
@@ -10,11 +15,7 @@ STRUCTURE_FIELD_LOCK_ERROR = (
 MATERIAL_LINK_FIELD_TYPE = 'MaterialLink'
 
 
-from apps.structures.colors import DEFAULT_STRUCTURE_DISPLAY_COLOR, STRUCTURE_DISPLAY_COLOR_CHOICES
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES
-
-
-class StructureType(models.Model):
+class StructureType(WorkspaceVisibilityMixin, models.Model):
     """Тип структуры — метаданные о таблице."""
 
     name = models.CharField(max_length=100, unique=True)
@@ -36,6 +37,34 @@ class StructureType(models.Model):
     is_active = models.BooleanField(default=True)
     is_created = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    created_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_structure_types',
+        verbose_name='Создал',
+    )
+    home_workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='home_structure_types',
+        verbose_name='Домашнее пространство',
+    )
+    visibility_mode = models.CharField(
+        max_length=32,
+        choices=VisibilityMode.choices,
+        default=VisibilityMode.ALL_WORKSPACES,
+        verbose_name='Режим видимости',
+    )
+    published_workspaces = models.ManyToManyField(
+        'workspaces.Workspace',
+        blank=True,
+        related_name='published_structure_types',
+        verbose_name='Опубликовано в пространствах',
+    )
 
     def save(self, *args, **kwargs):
         if not self.table_name:

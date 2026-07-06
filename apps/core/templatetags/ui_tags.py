@@ -3,6 +3,7 @@ from django.utils.html import json_script
 
 from apps.core.number_utils import format_decimal_display
 from apps.core.property_form_display import property_label_with_unit as format_property_label_with_unit
+from apps.core.creator import get_creator_display
 
 register = template.Library()
 
@@ -70,6 +71,11 @@ def property_label_with_unit(property_obj):
 
 
 @register.filter
+def creator_display(obj):
+    return get_creator_display(obj)
+
+
+@register.filter
 def decimal_comma(value):
     """Отображает число с запятой в качестве десятичного разделителя."""
     if value in (None, ''):
@@ -82,6 +88,13 @@ def reference_properties_json_script(properties=None):
     if not isinstance(properties, list):
         properties = []
     return json_script(properties, 'reference-properties-data')
+
+
+@register.simple_tag
+def workspace_users_json_script(users=None):
+    if not isinstance(users, list):
+        users = []
+    return json_script(users, 'workspace-users-data')
 
 
 @register.simple_tag

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}{{ scan.title }} — Скан{% endblock %}
 
@@ -32,6 +33,8 @@
             <dd class="col-sm-9">{% url 'scans:list' sample.pk as sample_scans_url %}{% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}</dd>
             <dt class="col-sm-3">Описание</dt>
             <dd class="col-sm-9">{{ scan.description|default:"—" }}</dd>
+            <dt class="col-sm-3">Загрузил</dt>
+            <dd class="col-sm-9">{{ scan|creator_display }}</dd>
             <dt class="col-sm-3">Загружен</dt>
             <dd class="col-sm-9">{{ scan.uploaded_at|date:"d.m.Y H:i" }}</dd>
             <dt class="col-sm-3">Файл</dt>

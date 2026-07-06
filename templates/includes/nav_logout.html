@@ -1,0 +1,4 @@
+<form method="post" action="{% url 'accounts:logout' %}" class="navbar-logout-form">
+    {% csrf_token %}
+    <button type="submit" class="nav-link navbar-logout-btn">Выйти</button>
+</form>

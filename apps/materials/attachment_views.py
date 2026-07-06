@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -7,17 +8,19 @@ from django.views.generic import DeleteView, ListView
 
 from apps.core.file_download import build_file_download_response
 
-from apps.core.list_filters import ALL_SEARCH_SCOPE, QuerySetFilterMixin
+from apps.core.creator import assign_creator
+from apps.core.list_filters import ALL_SEARCH_SCOPE, CREATOR_SEARCH_SCOPE, UPLOADED_BY_CREATOR_FILTER, QuerySetFilterMixin
 from apps.materials.forms_attachments import MaterialAttachmentForm
 from apps.materials.models import MaterialAttachment
 from apps.materials.tab_mixins import MaterialTabMixin
+from apps.workspaces.mixins import AppViewMixin
 
 
 class MaterialAttachmentMixin(MaterialTabMixin):
     active_tab = 'attachments'
 
 
-class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, ListView):
+class MaterialAttachmentListView(AppViewMixin, QuerySetFilterMixin, MaterialAttachmentMixin, ListView):
     model = MaterialAttachment
     template_name = 'materials/attachments/list.html'
     context_object_name = 'attachments'
@@ -27,8 +30,14 @@ class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, L
         ('title', 'Название', ('title',)),
         ('description', 'Описание', ('description',)),
         ('file', 'Файл', ('file',)),
+        (CREATOR_SEARCH_SCOPE, 'Загрузил', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
+
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER,
+        }
 
     def get_attachment_form(self):
         if hasattr(self, '_attachment_form'):
@@ -40,6 +49,7 @@ class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, L
         return MaterialAttachmentForm(**kwargs)
 
     def post(self, request, *args, **kwargs):
+        self._require_material_editable()
         self.object_list = self.get_queryset()
         form = MaterialAttachmentForm(
             request.POST,
@@ -50,6 +60,8 @@ class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, L
         if form.is_valid():
             attachment = form.save(commit=False)
             attachment.material = self.material
+            attachment.workspace = request.active_workspace
+            assign_creator(attachment, request.user)
             attachment.save()
             messages.success(request, 'Файл прикреплён к материалу.')
             return redirect('material_attachments:list', material_pk=self.material.pk)
@@ -67,7 +79,7 @@ class MaterialAttachmentListView(QuerySetFilterMixin, MaterialAttachmentMixin, L
         return self.filter_queryset(self.material.attachments.all())
 
 
-class MaterialAttachmentDeleteView(MaterialAttachmentMixin, DeleteView):
+class MaterialAttachmentDeleteView(AppViewMixin, MaterialAttachmentMixin, DeleteView):
     model = MaterialAttachment
     template_name = 'materials/attachments/confirm_delete.html'
     context_object_name = 'attachment'
@@ -79,13 +91,14 @@ class MaterialAttachmentDeleteView(MaterialAttachmentMixin, DeleteView):
         return reverse('material_attachments:list', material_pk=self.material.pk)
 
     def delete(self, request, *args, **kwargs):
+        self._require_material_editable()
         self.object = self.get_object()
         self.object.delete()
         messages.success(self.request, 'Файл удалён.')
         return redirect(self.get_success_url())
 
 
-class MaterialAttachmentDownloadView(MaterialAttachmentMixin, View):
+class MaterialAttachmentDownloadView(AppViewMixin, MaterialAttachmentMixin, View):
     def get(self, request, *args, **kwargs):
         attachment = get_object_or_404(self.material.attachments.all(), pk=kwargs['pk'])
         if not attachment.file:

@@ -2,6 +2,17 @@
     'use strict';
 
     var activeSelect = null;
+    var activeScope = 'workspace';
+
+    var SCOPE_HINTS = {
+        workspace: 'Материалы, созданные в текущем рабочем пространстве.',
+        shared: 'Опубликованные материалы, доступные в этом пространстве — с общей видимостью или из других пространств.',
+    };
+
+    var SCOPE_EMPTY_MESSAGES = {
+        workspace: 'В этом пространстве пока нет материалов. Создайте материал кнопкой «Создать».',
+        shared: 'Нет опубликованных материалов, доступных в этом пространстве.',
+    };
 
     function escapeHtml(text) {
         return String(text)
@@ -51,9 +62,62 @@
         return window.bootstrap.Modal.getOrCreateInstance(modalEl);
     }
 
+    function materialScopes(item) {
+        if (Array.isArray(item.scopes) && item.scopes.length) {
+            return item.scopes;
+        }
+        return ['workspace', 'shared'];
+    }
+
+    function filterByScope(materials, scope) {
+        return materials.filter(function (item) {
+            return materialScopes(item).indexOf(scope) !== -1;
+        });
+    }
+
+    function getActiveScope() {
+        var activeTab = document.querySelector('#reference-materials-scope-tabs .nav-link.active');
+        return activeTab ? activeTab.dataset.scope : activeScope;
+    }
+
+    function setActiveScope(scope) {
+        activeScope = scope || 'workspace';
+        var tabs = document.querySelectorAll('#reference-materials-scope-tabs .nav-link');
+        tabs.forEach(function (tab) {
+            var isActive = tab.dataset.scope === activeScope;
+            tab.classList.toggle('active', isActive);
+            tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        var hintNode = document.getElementById('reference-materials-scope-hint');
+        if (hintNode) {
+            hintNode.textContent = SCOPE_HINTS[activeScope] || '';
+        }
+
+        var createBtn = document.querySelector('.reference-materials-create-btn');
+        if (createBtn) {
+            createBtn.classList.toggle('d-none', activeScope !== 'workspace');
+        }
+    }
+
+    function guessScopeForMaterial(materialId) {
+        var item = getMaterials().find(function (entry) {
+            return entry.material_id === materialId;
+        });
+        if (!item) {
+            return 'workspace';
+        }
+        var scopes = materialScopes(item);
+        if (scopes.indexOf('workspace') !== -1) {
+            return 'workspace';
+        }
+        return scopes[0] || 'workspace';
+    }
+
     function renderList(filterText) {
         var listNode = document.getElementById('reference-materials-list');
         var emptyNode = document.getElementById('reference-materials-empty');
+        var scopeEmptyNode = document.getElementById('reference-materials-scope-empty');
         var selectBtn = document.getElementById('reference-materials-select-btn');
         if (!listNode || !emptyNode || !selectBtn) {
             return;
@@ -61,7 +125,9 @@
 
         var query = (filterText || '').trim().toLowerCase();
         var allMaterials = getMaterials();
-        var materials = allMaterials.filter(function (item) {
+        var scope = getActiveScope();
+        var scopedMaterials = filterByScope(allMaterials, scope);
+        var materials = scopedMaterials.filter(function (item) {
             if (!query) {
                 return true;
             }
@@ -75,12 +141,25 @@
         });
 
         listNode.innerHTML = '';
+        emptyNode.classList.add('d-none');
+        if (scopeEmptyNode) {
+            scopeEmptyNode.classList.add('d-none');
+        }
+
         if (!allMaterials.length) {
             emptyNode.classList.remove('d-none');
             selectBtn.disabled = true;
             return;
         }
-        emptyNode.classList.add('d-none');
+
+        if (!scopedMaterials.length) {
+            if (scopeEmptyNode) {
+                scopeEmptyNode.textContent = SCOPE_EMPTY_MESSAGES[scope] || 'Материалы не найдены.';
+                scopeEmptyNode.classList.remove('d-none');
+            }
+            selectBtn.disabled = true;
+            return;
+        }
 
         if (!materials.length) {
             listNode.innerHTML = '<p class="text-muted small mb-0">Ничего не найдено.</p>';
@@ -140,6 +219,13 @@
         }
         modalEl.dataset.materialPickerBound = 'true';
 
+        document.querySelectorAll('#reference-materials-scope-tabs .nav-link').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                setActiveScope(tab.dataset.scope);
+                renderList(searchInput.value);
+            });
+        });
+
         searchInput.addEventListener('input', function () {
             renderList(searchInput.value);
         });
@@ -169,6 +255,7 @@
         if (searchInput) {
             searchInput.value = '';
         }
+        setActiveScope(select.value ? guessScopeForMaterial(select.value) : 'workspace');
         renderList('');
         var modal = getModal();
         if (modal) {

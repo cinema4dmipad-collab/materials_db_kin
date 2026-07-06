@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block title %}Видимость — {{ material.code }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h1 class="h4 mb-0">Видимость материала</h1>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-3">
+                    Материал <strong>{{ material.code }}</strong> — {{ material.name }}.
+                    Домашнее пространство: {{ material.home_workspace.name }}.
+                </p>
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                        <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Отмена</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

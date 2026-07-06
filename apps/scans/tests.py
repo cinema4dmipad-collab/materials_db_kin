@@ -4,6 +4,7 @@ import tempfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from django.db import connection
 from django.test import TestCase, override_settings
 
 from django.urls import reverse
@@ -17,6 +18,7 @@ from apps.scans.models import ScanRecord
 from apps.scans.test_utils import make_hdf5_upload
 
 from apps.scans.validators import MAX_SCAN_FILE_SIZE, validate_scan_file
+from apps.workspaces.services import ensure_legacy_workspace
 
 class SampleModelTests(TestCase):
 
@@ -48,26 +50,19 @@ class SampleModelTests(TestCase):
 
         self.assertFalse(Sample.objects.filter(pk=sample_id).exists())
 
-@override_settings(
-
-    STORAGES={
-
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-
-    },
-
-)
-
 class SampleDeleteRemovesScanFilesTests(TestCase):
 
     def setUp(self):
-
         self.media_root = tempfile.mkdtemp()
-
-        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
-
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
         self.settings_override.enable()
 
         self.material = Material.objects.create(code='MAT-SMP-002', name='Cascade material')
@@ -108,38 +103,33 @@ class SampleDeleteRemovesScanFilesTests(TestCase):
 
         self.assertFalse(self.scan.file.storage.exists(self.file_name))
 
-@override_settings(
-
-    STORAGES={
-
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-
-    },
-
-)
-
 class SampleViewsTests(TestCase):
 
     def setUp(self):
-
         self.media_root = tempfile.mkdtemp()
-
-        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
-
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
         self.settings_override.enable()
 
-        self.material = Material.objects.create(code='MAT-SMP-003', name='View material')
+        self.legacy_workspace = ensure_legacy_workspace()
+        self.material = Material.objects.create(
+            code='MAT-SMP-003',
+            name='View material',
+            home_workspace=self.legacy_workspace,
+        )
 
         self.sample = Sample.objects.create(
-
             code='SMP-VIEW-001',
-
             name='View sample',
-
             material=self.material,
-
+            workspace=self.legacy_workspace,
         )
 
     def tearDown(self):
@@ -200,26 +190,19 @@ class ScanFileValidationTests(TestCase):
 
         validate_scan_file(make_hdf5_upload('scan.hdf5'))
 
-@override_settings(
-
-    STORAGES={
-
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-
-    },
-
-)
-
 class ScanRecordModelTests(TestCase):
 
     def setUp(self):
-
         self.media_root = tempfile.mkdtemp()
-
-        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
-
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
         self.settings_override.enable()
 
         self.material = Material.objects.create(code='MAT-SCN-001', name='Scan material')
@@ -278,38 +261,34 @@ class ScanRecordModelTests(TestCase):
 
         self.assertFalse(scan.file.storage.exists(file_name))
 
-@override_settings(
-
-    STORAGES={
-
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-
-        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
-
-    },
-
-)
-
 class ScanViewsTests(TestCase):
 
     def setUp(self):
-
+        connection.ensure_connection()
         self.media_root = tempfile.mkdtemp()
-
-        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
-
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
         self.settings_override.enable()
 
-        self.material = Material.objects.create(code='MAT-SCN-002', name='Upload material')
+        self.legacy_workspace = ensure_legacy_workspace()
+        self.material = Material.objects.create(
+            code='MAT-SCN-002',
+            name='Upload material',
+            home_workspace=self.legacy_workspace,
+        )
 
         self.sample = Sample.objects.create(
-
             code='SMP-SCN-002',
-
             name='Upload sample',
-
             material=self.material,
-
+            workspace=self.legacy_workspace,
         )
 
     def tearDown(self):
@@ -372,6 +351,7 @@ class ScanViewsTests(TestCase):
             title='Download scan',
             method='echo',
             file=make_hdf5_upload('download.h5'),
+            workspace=self.legacy_workspace,
         )
         download_url = reverse(
             'scans:download',
@@ -383,10 +363,7 @@ class ScanViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('attachment', response['Content-Disposition'])
         self.assertNotIn('seaweedfs', download_url)
-        try:
-            self.assertTrue(b''.join(response.streaming_content))
-        finally:
-            response.close()
+        self.assertTrue(b''.join(response.streaming_content))
 
     def test_list_page_uses_app_download_url(self):
         scan = ScanRecord.objects.create(
@@ -394,6 +371,7 @@ class ScanViewsTests(TestCase):
             title='Listed scan',
             method='echo',
             file=make_hdf5_upload('listed.h5'),
+            workspace=self.legacy_workspace,
         )
         list_url = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
         download_url = reverse(
@@ -413,12 +391,14 @@ class ScanViewsTests(TestCase):
             title='Echo scan',
             method='echo',
             file=make_hdf5_upload('echo.h5'),
+            workspace=self.legacy_workspace,
         )
         ScanRecord.objects.create(
             sample=self.sample,
             title='Shadow scan',
             method='shadow',
             file=make_hdf5_upload('shadow.h5'),
+            workspace=self.legacy_workspace,
         )
 
         response = self.client.get(
@@ -437,12 +417,14 @@ class ScanViewsTests(TestCase):
             title='Echo scan',
             method='echo',
             file=make_hdf5_upload('echo-list.h5'),
+            workspace=self.legacy_workspace,
         )
         ScanRecord.objects.create(
             sample=self.sample,
             title='Shadow scan',
             method='shadow',
             file=make_hdf5_upload('shadow-list.h5'),
+            workspace=self.legacy_workspace,
         )
 
         response = self.client.get(
@@ -507,6 +489,7 @@ class ScanViewsTests(TestCase):
             sample=self.sample,
             title=f'{self.sample.name} #0001',
             method='echo',
+            workspace=self.legacy_workspace,
         )
         create_url = reverse('scans:create', kwargs={'sample_pk': self.sample.pk})
         response = self.client.get(create_url)
