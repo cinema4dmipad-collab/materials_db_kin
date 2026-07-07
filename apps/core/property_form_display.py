@@ -13,10 +13,13 @@ def form_property_id(form):
     value = form['property'].value()
     if value:
         return str(value)
-    if form.instance.pk and form.instance.property_id:
-        return str(form.instance.property_id)
+    property_id = getattr(form.instance, 'property_id', None)
+    if property_id:
+        return str(property_id)
     initial = form.initial.get('property')
-    return str(initial) if initial else ''
+    if initial:
+        return str(getattr(initial, 'pk', initial))
+    return ''
 
 
 def enrich_property_form_display(form):
@@ -24,7 +27,7 @@ def enrich_property_form_display(form):
     if prop_id:
         prop = Property.objects.filter(pk=prop_id).first()
         form.property_label = prop.label_with_unit() if prop else EMPTY_LABEL
-        form.property_unit = prop.unit if prop else ''
+        form.property_unit = prop.effective_unit() if prop else ''
     else:
         form.property_label = EMPTY_LABEL
         form.property_unit = ''

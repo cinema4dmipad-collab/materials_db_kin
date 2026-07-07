@@ -410,14 +410,50 @@ class MaterialEditAccessTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Создание на основе материала')
         self.assertContains(response, self.shared_material.code)
+        self.assertContains(response, f'value="{self.shared_material.code}"', html=False)
         self.assertContains(response, f'value="{self.shared_material.name}"', html=False)
+
+    def test_create_based_on_prefills_form_from_own_workspace_material(self):
+        response = self.client.get(
+            reverse('materials:create'),
+            {'based_on': str(self.own_material.pk)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Создание на основе материала')
+        self.assertContains(response, self.own_material.code)
+        self.assertContains(response, f'value="{self.own_material.code}"', html=False)
+        self.assertContains(response, f'value="{self.own_material.name}"', html=False)
+
+    def test_create_based_on_rejects_duplicate_code_in_workspace(self):
+        response = self.client.post(
+            reverse('materials:create'),
+            {
+                'based_on': str(self.shared_material.pk),
+                'code': self.own_material.code,
+                'name': 'Another name',
+                'description': '',
+                'struct_type': '',
+                'visibility_mode': 'private',
+                'properties-TOTAL_FORMS': '0',
+                'properties-INITIAL_FORMS': '0',
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Материал с таким кодом уже существует')
+        self.assertEqual(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='Another name',
+            ).count(),
+            0,
+        )
 
     def test_create_based_on_allows_same_name_as_template(self):
         response = self.client.post(
             reverse('materials:create'),
             {
                 'based_on': str(self.shared_material.pk),
-                'code': 'MAT-COPY',
+                'code': self.shared_material.code,
                 'name': self.shared_material.name,
                 'description': self.shared_material.description,
                 'struct_type': '',
@@ -427,7 +463,10 @@ class MaterialEditAccessTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 302)
-        created = Material.objects.get(home_workspace=self.workspace, code='MAT-COPY')
+        created = Material.objects.get(
+            home_workspace=self.workspace,
+            code=self.shared_material.code,
+        )
         self.assertEqual(created.name, self.shared_material.name)
 
     def test_create_based_on_prefills_properties(self):
@@ -453,6 +492,7 @@ class MaterialEditAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Плотность')
+        self.assertContains(response, 'g/cm3')
         self.assertContains(response, 'value="1,55"', html=False)
 
     def test_create_based_on_prefills_composite_layers(self):

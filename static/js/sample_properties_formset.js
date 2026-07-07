@@ -305,7 +305,7 @@
                 rowsHtml += '<tr class="structure-property-row">'
                     + '<th scope="row" class="material-props-section__name">' + escapeHtml(prop.label || prop.name || '—') + '</th>'
                     + '<td class="material-props-section__value">' + buildStructurePropertyValueCell(prop, materialDetailUrlTemplate) + '</td>'
-                    + '<td class="material-props-section__unit">—</td>'
+                    + '<td class="material-props-section__unit">' + escapeHtml(prop.unit || '—') + '</td>'
                     + '</tr>';
             });
         } else {

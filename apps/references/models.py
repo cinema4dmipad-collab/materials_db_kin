@@ -3,6 +3,8 @@ import uuid
 from django.conf import settings
 from django.db import models
 
+from apps.core.unit_display import looks_like_unit
+
 
 class PropertyGroup(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -44,12 +46,33 @@ class Property(models.Model):
     def __str__(self):
         return f"{self.display_name} ({self.unit})" if self.unit else self.display_name
 
-    def label_with_unit(self) -> str:
-        display_name = (self.display_name or self.name or '').strip()
+    def effective_unit(self) -> str:
         unit = (self.unit or '').strip()
         if unit:
-            return f'{display_name}, {unit}'
+            return unit
+        display_name = (self.display_name or '').strip()
+        if ', ' not in display_name:
+            return ''
+        candidate = display_name.rsplit(', ', 1)[-1].strip()
+        if looks_like_unit(candidate):
+            return candidate
+        return ''
+
+    def base_display_name(self) -> str:
+        display_name = (self.display_name or self.name or '').strip()
+        unit = self.effective_unit()
+        if unit and display_name.endswith(f', {unit}'):
+            return display_name[: -len(f', {unit}')].strip()
         return display_name or '\u2014'
+
+    def label_with_unit(self) -> str:
+        display_name = self.base_display_name()
+        if display_name == '\u2014':
+            return display_name
+        unit = self.effective_unit()
+        if unit:
+            return f'{display_name}, {unit}'
+        return display_name
 
     class Meta:
         ordering = ['group__sort_order', 'display_name', 'name']

@@ -121,6 +121,19 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertTrue(result['success'], result.get('error'))
         return result['id']
 
+    def test_structure_property_item_extracts_unit_from_label(self):
+        from apps.materials.structure_display import build_structure_property_item
+
+        field = StructureField(
+            label='Объемное содержание волокна, %',
+            name='fiber_vol',
+            field_type='DecimalField',
+            decimal_places=4,
+        )
+        item = build_structure_property_item(field, {'fiber_vol': '32.0'})
+        self.assertEqual(item['unit'], '%')
+        self.assertEqual(item['label'], 'Объемное содержание волокна, %')
+
     def test_get_structure_params_returns_dynamic_row(self):
         row_id = self.insert_structure_row(title='Laminate')
         material = self.create_material(
@@ -143,6 +156,32 @@ class MaterialStructureLinkTests(TransactionTestCase):
         material.struct_type = self.structure_type
         material.struct_props_id = uuid.uuid4()
         self.assertIsNone(material.get_structure_params())
+
+    def test_create_from_template_prefills_structure_params(self):
+        row_id = self.insert_structure_row(title='Template panel', thickness='6.75')
+        template = self.create_material(
+            code='MAT-TEMPLATE',
+            name='Template material',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        form = PublicMaterialForm(
+            instance=Material(),
+            initial={'struct_type': template.struct_type_id},
+            template_material=template,
+        )
+        title_field = self.structure_type.fields.get(name='title')
+        thickness_field = self.structure_type.fields.get(name='thickness')
+
+        self.assertEqual(
+            form.fields[f'structure_field_{title_field.pk}'].initial,
+            'Template panel',
+        )
+        self.assertEqual(
+            str(form.fields[f'structure_field_{thickness_field.pk}'].initial),
+            '6.75',
+        )
 
     def test_material_type_proxy_flags_reflect_structure_and_layers(self):
         plain_material = self.create_material(code='MAT-TYPE-001', name='Plain material')

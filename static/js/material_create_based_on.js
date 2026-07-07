@@ -14,7 +14,7 @@
             }
 
             window.ReferenceMaterialsPicker.openWithOptions({
-                scope: 'shared',
+                scope: 'workspace',
                 onSelect: function (materialId) {
                     var url = new URL(createUrl, window.location.origin);
                     url.searchParams.set('based_on', materialId);

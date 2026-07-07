@@ -235,5 +235,21 @@
 
         updateEmptyState(container);
         addCreatedPropertyFromUrl(container, template, totalFormsInput);
+
+        container.querySelectorAll('.property-form-row').forEach(function (row) {
+            var propertySelect = row.querySelector('[name$="-property"]');
+            var unitCell = row.querySelector('.material-props-section__unit');
+            if (!propertySelect || !propertySelect.value || !unitCell) {
+                return;
+            }
+            if ((unitCell.textContent || '').trim() !== '—') {
+                return;
+            }
+            var payload = findPropertyPayload(propertySelect.value);
+            if (!payload) {
+                return;
+            }
+            setRowPropertyMeta(row, payload.label, payload.unit);
+        });
     });
 })();
