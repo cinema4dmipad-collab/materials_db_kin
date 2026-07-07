@@ -486,6 +486,13 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
     def _structure_type_changed(self):
         selected_id = self._selected_structure_type_id()
         initial_id = self._initial_struct_type_id
+        if (
+            not initial_id
+            and self._template_material
+            and self.instance
+            and self.instance._state.adding
+        ):
+            initial_id = self._template_material.struct_type_id
         if selected_id in (None, '') or initial_id in (None, ''):
             return bool(selected_id) != bool(initial_id)
         return str(selected_id) != str(initial_id)
@@ -529,6 +536,18 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         structure_type = cleaned_data.get('struct_type')
 
         if self.instance._state.adding and self._active_workspace:
+            code = (cleaned_data.get('code') or '').strip()
+            if code:
+                duplicate_code = Material.objects.filter(
+                    home_workspace=self._active_workspace,
+                    code=code,
+                )
+                if duplicate_code.exists():
+                    self.add_error(
+                        'code',
+                        'Материал с таким кодом уже существует в текущем пространстве.',
+                    )
+
             name = (cleaned_data.get('name') or '').strip()
             exclude_id = getattr(self._template_material, 'pk', None)
             if name and find_shared_materials_by_name(

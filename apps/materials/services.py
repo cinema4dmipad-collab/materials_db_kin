@@ -2,19 +2,33 @@ from django.db import transaction
 
 from apps.materials.models import Material
 from apps.workspaces.models import WorkspaceMaterialLink
-from apps.workspaces.services import materials_shared_in, materials_visible_in
+from apps.workspaces.services import (
+    materials_in_workspace_tab,
+    materials_shared_in,
+    materials_visible_in,
+)
 from apps.workspaces.visibility import VisibilityMode
 
 
-def suggest_material_code(base_code: str, workspace) -> str:
-    normalized = (base_code or '').strip() or 'MAT'
-    if not Material.objects.filter(home_workspace=workspace, code=normalized).exists():
-        return normalized
-    for index in range(2, 100):
-        candidate = f'{normalized}-{index}'
-        if not Material.objects.filter(home_workspace=workspace, code=candidate).exists():
-            return candidate
-    return f'{normalized}-копия'
+def build_material_create_initial(template: Material, workspace) -> dict:
+    from apps.core.tag_utils import format_tags_for_input
+
+    return {
+        'code': (template.code or '').strip() or 'MAT',
+        'name': template.name,
+        'description': template.description,
+        'struct_type': template.struct_type_id,
+        'tag_names': format_tags_for_input(template.tags.all()),
+        'visibility_mode': VisibilityMode.PRIVATE,
+    }
+
+
+def materials_usable_as_create_template(workspace):
+    if workspace is None:
+        return Material.objects.none()
+    workspace_materials = materials_in_workspace_tab(workspace)
+    shared_materials = materials_shared_in(workspace)
+    return workspace_materials | shared_materials
 
 
 def get_create_template_material(user, workspace, material_id):
@@ -32,22 +46,9 @@ def get_create_template_material(user, workspace, material_id):
         )
     except (Material.DoesNotExist, ValueError, TypeError):
         return None
-    if not materials_shared_in(workspace).filter(pk=material.pk).exists():
+    if not materials_usable_as_create_template(workspace).filter(pk=material.pk).exists():
         return None
     return material
-
-
-def build_material_create_initial(template: Material, workspace) -> dict:
-    from apps.core.tag_utils import format_tags_for_input
-
-    return {
-        'code': suggest_material_code(template.code, workspace),
-        'name': template.name,
-        'description': template.description,
-        'struct_type': template.struct_type_id,
-        'tag_names': format_tags_for_input(template.tags.all()),
-        'visibility_mode': VisibilityMode.PRIVATE,
-    }
 
 
 def material_property_formset_initial(template: Material) -> list[dict]:

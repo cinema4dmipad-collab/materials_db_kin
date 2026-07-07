@@ -94,7 +94,7 @@
                     <tr>
                         <th scope="row" class="material-props-section__name">{{ mp.property.label_with_unit }}</th>
                         <td class="material-props-section__value">{% if mp.property.data_type == 'number' %}{{ mp.value|decimal_comma }}{% else %}{{ mp.value }}{% endif %}</td>
-                        <td class="material-props-section__unit">{{ mp.property.unit|default:"—" }}</td>
+                        <td class="material-props-section__unit">{{ mp.property.effective_unit|default:"—" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

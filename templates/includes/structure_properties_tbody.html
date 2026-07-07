@@ -14,7 +14,7 @@
             {{ prop.display_value }}
             {% endif %}
         </td>
-        <td class="material-props-section__unit">—</td>
+        <td class="material-props-section__unit">{{ prop.unit|default:"—" }}</td>
     </tr>
     {% endfor %}
     {% else %}

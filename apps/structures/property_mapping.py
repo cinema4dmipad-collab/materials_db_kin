@@ -13,11 +13,7 @@ PROPERTY_DATA_TYPE_TO_FIELD_TYPE = {
 
 
 def structure_field_label_from_property(property_obj: Property) -> str:
-    display_name = (property_obj.display_name or property_obj.name or '').strip()
-    unit = (property_obj.unit or '').strip()
-    if unit:
-        return f'{display_name}, {unit}'
-    return display_name
+    return property_obj.label_with_unit()
 
 
 def structure_column_name_from_property(property_obj: Property) -> str:
@@ -48,7 +44,7 @@ def property_to_structure_field_data(property_obj: Property) -> dict:
         'name': structure_column_name_from_property(property_obj),
         'field_type': field_type,
         'data_type': property_obj.data_type,
-        'unit': property_obj.unit or '',
+        'unit': property_obj.effective_unit(),
         'group_name': property_obj.group.name if property_obj.group_id else '',
         'help_text': (property_obj.description or '')[:500],
     }

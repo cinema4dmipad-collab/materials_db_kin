@@ -27,6 +27,33 @@ class PropertyFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['name'], 'predel_prochnosti')
 
+    def test_effective_unit_uses_unit_field(self):
+        prop = Property(
+            display_name='Плотность',
+            name='density',
+            unit='g/cm3',
+        )
+        self.assertEqual(prop.effective_unit(), 'g/cm3')
+        self.assertEqual(prop.label_with_unit(), 'Плотность, g/cm3')
+
+    def test_effective_unit_parses_legacy_display_name(self):
+        prop = Property(
+            display_name='Плотность, г/см³',
+            name='plotnost',
+            unit='',
+        )
+        self.assertEqual(prop.effective_unit(), 'г/см³')
+        self.assertEqual(prop.base_display_name(), 'Плотность')
+        self.assertEqual(prop.label_with_unit(), 'Плотность, г/см³')
+
+    def test_effective_unit_does_not_split_arbitrary_commas(self):
+        prop = Property(
+            display_name='Foo, bar and baz',
+            name='foo_bar',
+            unit='',
+        )
+        self.assertEqual(prop.effective_unit(), '')
+
 
 class PropertyViewsTests(TestCase):
     @classmethod

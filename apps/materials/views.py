@@ -229,7 +229,7 @@ class MaterialFormsetMixin:
             if self.request.GET.get('based_on') and context['template_material'] is None:
                 messages.warning(
                     self.request,
-                    'Материал-образец не найден или недоступен в общих материалах.',
+                    'Материал-образец не найден или недоступен в текущем пространстве.',
                 )
         self._attach_validation_summary(context)
         return context
@@ -681,7 +681,7 @@ class MaterialPropertiesJSONView(AppViewMixin, View):
                     {
                         'property_id': str(item.property_id),
                         'display_name': item.property.display_name,
-                        'unit': item.property.unit,
+                        'unit': item.property.effective_unit(),
                         'value': (
                             format_decimal_display(item.value)
                             if item.property.data_type == 'number'

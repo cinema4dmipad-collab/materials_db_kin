@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from apps.core.unit_display import split_label_and_unit
 from apps.structures.display_format import format_structure_field_display
 from apps.structures.forms import material_from_value
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
@@ -20,8 +21,11 @@ def structure_field_display_value(field, value):
 
 def build_structure_property_item(field, structure_params):
     value = structure_params.get(field.name)
+    label = field.label or field.name
+    _, unit = split_label_and_unit(label)
     return {
-        'label': field.label,
+        'label': label,
+        'unit': unit,
         'name': field.name,
         'field_type': field.field_type,
         'value': value,
@@ -79,6 +83,7 @@ def serialize_structure_context(structure_context):
         'structure_properties': [
             {
                 'label': item['label'],
+                'unit': item.get('unit') or '',
                 'name': item['name'],
                 'field_type': item['field_type'],
                 'display_value': item['display_value'],
