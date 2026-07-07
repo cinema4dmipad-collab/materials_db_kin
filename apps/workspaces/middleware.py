@@ -5,6 +5,11 @@ from django.http import HttpResponseRedirect
 from django.urls import Resolver404, resolve, reverse
 
 from apps.workspaces.models import BUILTIN_GROUP_MANAGER
+from apps.workspaces.permissions import (
+    can_manage_global_groups,
+    can_manage_global_users,
+    can_manage_global_workspaces,
+)
 from apps.workspaces.services import (
     ACTIVE_WORKSPACE_SESSION_KEY,
     assign_user_to_groups,
@@ -54,6 +59,56 @@ def _is_exempt_request(request) -> bool:
     return url_name in _EXEMPT_URL_NAMES
 
 
+_ADMIN_USER_URL_NAMES = frozenset(
+    {
+        'admin_users',
+        'admin_user_create',
+        'admin_user_edit',
+        'admin_user_memberships',
+    }
+)
+_ADMIN_WORKSPACE_URL_NAMES = frozenset(
+    {
+        'admin_workspaces',
+        'admin_workspace_create',
+        'admin_workspace_edit',
+        'admin_workspace_delete',
+    }
+)
+_WORKSPACE_GROUP_URL_NAMES = frozenset(
+    {
+        'groups',
+        'group_create',
+        'group_edit',
+        'group_delete',
+    }
+)
+
+
+def _route_allowed_without_active_workspace(request, user) -> bool:
+    match = getattr(request, 'resolver_match', None)
+    if match is None:
+        try:
+            match = resolve(request.path_info)
+        except Resolver404:
+            return False
+
+    namespace = match.namespace or ''
+    url_name = match.url_name or ''
+
+    if namespace == 'administration':
+        if url_name in _ADMIN_USER_URL_NAMES:
+            return can_manage_global_users(user)
+        if url_name in _ADMIN_WORKSPACE_URL_NAMES:
+            return can_manage_global_workspaces(user)
+        return False
+
+    if namespace == 'workspaces' and url_name in _WORKSPACE_GROUP_URL_NAMES:
+        return can_manage_global_groups(user)
+
+    return False
+
+
 class WorkspaceMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -71,6 +126,8 @@ class WorkspaceMiddleware:
 
         active_workspace = resolve_active_workspace_for_user(request, user)
         if active_workspace is None:
+            if _route_allowed_without_active_workspace(request, user):
+                return self.get_response(request)
             return HttpResponseRedirect(reverse('workspaces:select'))
 
         if active_workspace is not None:

@@ -2,10 +2,10 @@ from django.db.models import Count
 from django.views.generic import ListView
 
 from apps.core.list_filters import ALL_SEARCH_SCOPE, TAG_SEARCH_SCOPE, QuerySetFilterMixin
+from apps.materials.services import samples_for_material
 from apps.materials.tab_mixins import MaterialTabMixin
 from apps.samples.models import Sample
 from apps.workspaces.mixins import AppViewMixin
-from apps.workspaces.services import samples_in_workspace
 
 
 class MaterialSamplesListView(AppViewMixin, QuerySetFilterMixin, MaterialTabMixin, ListView):
@@ -27,8 +27,7 @@ class MaterialSamplesListView(AppViewMixin, QuerySetFilterMixin, MaterialTabMixi
 
     def get_queryset(self):
         return self.filter_queryset(
-            samples_in_workspace(self.request.active_workspace)
-            .filter(material=self.material)
+            samples_for_material(self.material, self.request.active_workspace)
             .annotate(scan_count=Count('scans'))
             .prefetch_related('tags')
             .order_by('code')

@@ -6,11 +6,13 @@ from django.utils.text import slugify
 
 from apps.workspaces.models import Workspace, WorkspaceGroup, WorkspaceGroupMembership
 from apps.workspaces.permissions import (
-    PERMISSION_LABELS,
-    PERMISSION_SECTIONS,
+    PERMISSION_BUNDLE_KEYS,
+    UI_PERMISSION_BUNDLES,
     WorkspacePerm,
     can_assign_group,
+    expand_permission_bundles,
     is_system_admin,
+    permission_bundles_for_permissions,
 )
 from apps.workspaces.services import assign_user_to_groups, assign_user_to_selected_groups, set_user_groups
 
@@ -200,12 +202,8 @@ def _add_bootstrap_classes(form):
     return form
 
 
-def _permission_choices():
-    choices = []
-    for _section, codenames in PERMISSION_SECTIONS:
-        for codename in codenames:
-            choices.append((codename, PERMISSION_LABELS.get(codename, codename)))
-    return choices
+def _permission_bundle_choices():
+    return [(key, label) for key, label, _codes in UI_PERMISSION_BUNDLES]
 
 
 class WorkspaceForm(forms.ModelForm):
@@ -232,22 +230,23 @@ class WorkspaceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not self.instance.pk:
+        if self.instance._state.adding:
             self.fields.pop('is_active', None)
         _add_bootstrap_classes(self)
 
 
 class WorkspaceGroupForm(forms.ModelForm):
-    permissions = forms.MultipleChoiceField(
-        choices=_permission_choices(),
+    permission_bundles = forms.MultipleChoiceField(
+        choices=_permission_bundle_choices(),
         widget=forms.CheckboxSelectMultiple,
         required=False,
-        label='Права',
+        label='Разделы',
+        help_text='Выбранный раздел включает все операции внутри него. Базовый доступ к пространству добавляется автоматически.',
     )
 
     class Meta:
         model = WorkspaceGroup
-        fields = ('name', 'description', 'permissions')
+        fields = ('name', 'description')
         labels = {
             'name': 'Название',
             'description': 'Описание',
@@ -260,19 +259,28 @@ class WorkspaceGroupForm(forms.ModelForm):
         self.workspace = workspace
         super().__init__(*args, **kwargs)
         if self.instance.pk and self.instance.permissions:
-            self.initial['permissions'] = self.instance.permissions
+            self.initial['permission_bundles'] = permission_bundles_for_permissions(
+                self.instance.permissions
+            )
         if self.instance.is_builtin:
             self.fields['name'].disabled = True
         _add_bootstrap_classes(self)
 
-    def clean_permissions(self):
-        permissions = self.cleaned_data.get('permissions') or []
-        if WorkspacePerm.VIEW not in permissions:
-            raise forms.ValidationError('Группа должна включать право просмотра пространства.')
-        return sorted(permissions)
+    def clean(self):
+        cleaned_data = super().clean()
+        bundles = cleaned_data.get('permission_bundles') or []
+        unknown = set(bundles) - PERMISSION_BUNDLE_KEYS
+        if unknown:
+            raise forms.ValidationError({'permission_bundles': 'Выбран неизвестный раздел прав.'})
+        permissions = expand_permission_bundles(bundles)
+        if not permissions:
+            raise forms.ValidationError({'permission_bundles': 'Выберите хотя бы один раздел.'})
+        cleaned_data['expanded_permissions'] = permissions
+        return cleaned_data
 
     def save(self, commit=True):
         group = super().save(commit=False)
+        group.permissions = self.cleaned_data['expanded_permissions']
         if self.workspace:
             group.workspace = self.workspace
         if commit:

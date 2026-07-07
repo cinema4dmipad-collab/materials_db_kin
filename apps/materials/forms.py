@@ -2,6 +2,8 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
 from django.forms.utils import ErrorDict
+from django.urls import reverse
+from django.utils.safestring import mark_safe
 
 from apps.materials.form_widgets import material_select_widget_attrs, structure_type_select_widget_attrs
 from apps.composites.models import CompositeLayer
@@ -12,6 +14,7 @@ from apps.core.fields import (
 )
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.materials.models import Material, MaterialProperty
+from apps.materials.services import find_shared_materials_by_name
 from apps.structures.models import StructureType
 from apps.structures.forms import _build_dynamic_field, material_from_value
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
@@ -87,6 +90,59 @@ MaterialPropertyFormSet = inlineformset_factory(
     formset=MaterialPropertyInlineFormSet,
     widgets={},
 )
+
+
+def build_material_property_formset(*, instance=None, initial=None, data=None, prefix='properties'):
+    initial = list(initial or [])
+    formset_class = inlineformset_factory(
+        Material,
+        MaterialProperty,
+        form=MaterialPropertyForm,
+        fields=['property', 'value'],
+        extra=len(initial),
+        can_delete=True,
+        formset=MaterialPropertyInlineFormSet,
+        widgets={},
+    )
+    kwargs = {'instance': instance or Material(), 'prefix': prefix}
+    if data is not None:
+        kwargs['data'] = data
+    else:
+        kwargs['initial'] = initial
+    return formset_class(**kwargs)
+
+
+_COMPOSITE_LAYER_FORMSET_WIDGETS = {
+    'layer_number': forms.NumberInput(attrs=_LAYER_NUMBER_WIDGET),
+    'material': forms.Select(
+        attrs=material_select_widget_attrs(**{'data-material-picker-compact': 'true'}),
+    ),
+}
+
+
+def build_composite_layer_formset(*, workspace, instance=None, initial=None, data=None, prefix='layers'):
+    initial = list(initial or [])
+    formset_class = inlineformset_factory(
+        Material,
+        CompositeLayer,
+        form=CompositeLayerForm,
+        formset=CompositeLayerFormSet,
+        fk_name='parent_material',
+        fields=['layer_number', 'material', 'angle', 'thickness'],
+        extra=len(initial),
+        can_delete=True,
+        widgets=_COMPOSITE_LAYER_FORMSET_WIDGETS,
+    )
+    kwargs = {
+        'instance': instance or Material(),
+        'prefix': prefix,
+        'workspace': workspace,
+    }
+    if data is not None:
+        kwargs['data'] = data
+    else:
+        kwargs['initial'] = initial
+    return formset_class(**kwargs)
 
 
 class CompositeLayerFormSet(forms.BaseInlineFormSet):
@@ -282,12 +338,7 @@ def get_composite_layer_formset():
         fields=['layer_number', 'material', 'angle', 'thickness'],
         extra=0,
         can_delete=True,
-        widgets={
-            'layer_number': forms.NumberInput(attrs=_LAYER_NUMBER_WIDGET),
-            'material': forms.Select(
-                attrs=material_select_widget_attrs(**{'data-material-picker-compact': 'true'}),
-            ),
-        },
+        widgets=_COMPOSITE_LAYER_FORMSET_WIDGETS,
     )
 
 
@@ -314,11 +365,13 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         workspace=None,
         show_visibility=False,
         can_publish=False,
+        template_material=None,
         **kwargs,
     ):
         self.skip_validation = skip_validation
         self.show_visibility = show_visibility and can_publish
         self._active_workspace = workspace
+        self._template_material = template_material
         super().__init__(*args, workspace=workspace, **kwargs)
         self._initial_struct_type_id = self.instance.struct_type_id if self.instance else None
         self._initial_struct_type = self.instance.struct_type if self.instance else None
@@ -417,12 +470,16 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
     def _existing_structure_values(self):
         if self.is_bound:
             return {}
-        if (
-            not self.instance
-            or not self.instance.pk
-            or not self.instance.struct_props_id
-            or self._structure_type_changed()
-        ):
+        if self._structure_type_changed():
+            return {}
+        template = self._template_material
+        if template and self.instance._state.adding:
+            selected_type_id = self._selected_structure_type_id()
+            if selected_type_id and str(template.struct_type_id) == str(selected_type_id):
+                params = template.get_structure_params()
+                if params:
+                    return params
+        if not self.instance.struct_props_id:
             return {}
         return self.instance.get_structure_params() or {}
 
@@ -470,6 +527,23 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         structure_type = cleaned_data.get('struct_type')
+
+        if self.instance._state.adding and self._active_workspace:
+            name = (cleaned_data.get('name') or '').strip()
+            exclude_id = getattr(self._template_material, 'pk', None)
+            if name and find_shared_materials_by_name(
+                name,
+                self._active_workspace,
+                exclude_material_id=exclude_id,
+            ).exists():
+                shared_url = f"{reverse('materials:list')}?scope=shared"
+                self.add_error(
+                    'name',
+                    mark_safe(
+                        'Материал с таким названием уже существует. '
+                        f'Поищите его на вкладке «<a href="{shared_url}">Общие</a>».'
+                    ),
+                )
 
         if not structure_type:
             self.instance.struct_props_id = None

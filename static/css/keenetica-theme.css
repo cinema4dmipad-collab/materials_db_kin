@@ -560,6 +560,7 @@ a:hover {
     pointer-events: none;
 }
 
+.btn-action-link,
 .btn-action-clone {
     --bs-btn-color: var(--kx-brand);
     --bs-btn-border-color: rgba(0, 118, 121, 0.35);

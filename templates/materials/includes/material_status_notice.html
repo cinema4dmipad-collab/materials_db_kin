@@ -1,0 +1,13 @@
+{% if material_is_workspace_link %}
+<div class="alert alert-info" role="status">
+    Материал добавлен в пространство как <strong>ссылка</strong> на общий материал, а не как отдельная копия.
+    {% if material.home_workspace %}
+    Источник: <strong>{{ material.home_workspace.name }}</strong>.
+    {% endif %}
+    Изменения вносятся в исходном пространстве — здесь доступен только просмотр.
+</div>
+{% elif material_is_readonly %}
+<div class="alert alert-info" role="status">
+    Материал опубликован из другого пространства. Редактирование недоступно.
+</div>
+{% endif %}
