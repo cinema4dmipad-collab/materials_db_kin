@@ -14,7 +14,7 @@ from apps.core.fields import (
 )
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.materials.models import Material, MaterialProperty
-from apps.materials.services import find_shared_materials_by_name
+from apps.materials.services import find_shared_materials_by_code, find_shared_materials_by_name
 from apps.structures.models import StructureType
 from apps.structures.forms import _build_dynamic_field, material_from_value
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
@@ -546,6 +546,15 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
                     self.add_error(
                         'code',
                         'Материал с таким кодом уже существует в текущем пространстве.',
+                    )
+                elif find_shared_materials_by_code(code, self._active_workspace).exists():
+                    shared_url = f"{reverse('materials:list')}?scope=shared"
+                    self.add_error(
+                        'code',
+                        mark_safe(
+                            'Материал с таким кодом уже существует среди общих материалов. '
+                            f'Поищите его на вкладке «<a href="{shared_url}">Общие</a>».'
+                        ),
                     )
 
             name = (cleaned_data.get('name') or '').strip()

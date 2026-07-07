@@ -396,6 +396,31 @@ class MaterialEditAccessTests(TestCase):
         self.assertContains(response, 'scope=shared')
         self.assertFalse(Material.objects.filter(code='MAT-NEW').exists())
 
+    def test_create_material_warns_about_existing_shared_code(self):
+        response = self.client.post(
+            reverse('materials:create'),
+            {
+                'code': self.shared_material.code,
+                'name': 'Another material name',
+                'description': '',
+                'struct_type': '',
+                'visibility_mode': 'private',
+                'properties-TOTAL_FORMS': '0',
+                'properties-INITIAL_FORMS': '0',
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Материал с таким кодом уже существует среди общих материалов')
+        self.assertContains(response, 'scope=shared')
+        self.assertContains(response, '<a href="/materials/?scope=shared">Общие</a>', html=False)
+        self.assertNotContains(response, '&lt;a href')
+        self.assertFalse(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='Another material name',
+            ).exists(),
+        )
+
     def test_create_page_has_create_based_on_button(self):
         response = self.client.get(reverse('materials:create'))
         self.assertEqual(response.status_code, 200)
@@ -453,7 +478,7 @@ class MaterialEditAccessTests(TestCase):
             reverse('materials:create'),
             {
                 'based_on': str(self.shared_material.pk),
-                'code': self.shared_material.code,
+                'code': 'MAT-COPY-UNIQUE',
                 'name': self.shared_material.name,
                 'description': self.shared_material.description,
                 'struct_type': '',
@@ -465,9 +490,33 @@ class MaterialEditAccessTests(TestCase):
         self.assertEqual(response.status_code, 302)
         created = Material.objects.get(
             home_workspace=self.workspace,
-            code=self.shared_material.code,
+            code='MAT-COPY-UNIQUE',
         )
         self.assertEqual(created.name, self.shared_material.name)
+
+    def test_create_based_on_rejects_duplicate_code_in_shared_materials(self):
+        response = self.client.post(
+            reverse('materials:create'),
+            {
+                'based_on': str(self.shared_material.pk),
+                'code': self.shared_material.code,
+                'name': 'Another name',
+                'description': '',
+                'struct_type': '',
+                'visibility_mode': 'private',
+                'properties-TOTAL_FORMS': '0',
+                'properties-INITIAL_FORMS': '0',
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Материал с таким кодом уже существует среди общих материалов')
+        self.assertEqual(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='Another name',
+            ).count(),
+            0,
+        )
 
     def test_create_based_on_prefills_properties(self):
         from apps.materials.models import MaterialProperty

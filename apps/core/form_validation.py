@@ -1,3 +1,7 @@
+from django.utils.html import format_html
+from django.utils.safestring import SafeString
+
+
 def _field_label(form, field_name):
     field = form.fields.get(field_name)
     if field and field.label:
@@ -12,13 +16,17 @@ def collect_form_errors(form, *, default_section, field_sections=None):
         if field_name == '__all__':
             section = default_section
             for error in errors:
-                items.append({'section': section, 'message': str(error)})
+                items.append({'section': section, 'message': error})
             continue
 
         section = field_sections.get(field_name, default_section)
         label = _field_label(form, field_name)
         for error in errors:
-            items.append({'section': section, 'message': f'{label}: {error}'})
+            if isinstance(error, SafeString):
+                message = format_html('{}: {}', label, error)
+            else:
+                message = f'{label}: {error}'
+            items.append({'section': section, 'message': message})
     return items
 
 
