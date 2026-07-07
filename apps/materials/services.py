@@ -83,6 +83,16 @@ def find_shared_materials_by_name(name, workspace, *, exclude_material_id=None):
     return queryset
 
 
+def find_shared_materials_by_code(code, workspace, *, exclude_material_id=None):
+    normalized_code = (code or '').strip()
+    if not normalized_code or workspace is None:
+        return Material.objects.none()
+    queryset = materials_shared_in(workspace).filter(code=normalized_code)
+    if exclude_material_id:
+        queryset = queryset.exclude(pk=exclude_material_id)
+    return queryset
+
+
 def can_link_material_to_workspace(user, material, workspace) -> bool:
     from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm
 
