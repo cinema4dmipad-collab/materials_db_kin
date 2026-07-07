@@ -58,6 +58,12 @@ class WorkspaceGroup(models.Model):
     def has_perm(self, codename: str) -> bool:
         return codename in self.permission_set()
 
+    @property
+    def permission_bundle_labels(self):
+        from apps.workspaces.permissions import permission_bundle_labels_for_permissions
+
+        return permission_bundle_labels_for_permissions(self.permissions)
+
 
 class WorkspaceGroupMembership(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -90,3 +96,33 @@ class WorkspaceGroupMembership(models.Model):
     @property
     def workspace(self):
         return self.group.workspace
+
+
+class WorkspaceMaterialLink(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        related_name='material_links',
+        verbose_name='Пространство',
+    )
+    material = models.ForeignKey(
+        'materials.Material',
+        on_delete=models.CASCADE,
+        related_name='workspace_links',
+        verbose_name='Материал',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Добавлено')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['workspace', 'material'],
+                name='unique_workspace_material_link',
+            ),
+        ]
+        verbose_name = 'ссылка на материал'
+        verbose_name_plural = 'ссылки на материалы'
+
+    def __str__(self):
+        return f'{self.material} @ {self.workspace}'

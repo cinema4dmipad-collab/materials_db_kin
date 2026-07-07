@@ -21,7 +21,7 @@ from apps.samples.models import Sample
 from apps.scans.forms import ScanRecordForm
 from apps.scans.models import ScanRecord
 from apps.workspaces.mixins import AppViewMixin
-from apps.workspaces.services import samples_in_workspace, scans_in_workspace
+from apps.workspaces.services import samples_in_workspace, samples_visible_in, scans_in_workspace, scans_visible_in
 
 
 class ScanMethodFilterMixin:
@@ -72,7 +72,7 @@ class AllScansListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin,
 
     def get_queryset(self):
         return self.filter_queryset(
-            scans_in_workspace(self.request.active_workspace)
+            scans_visible_in(self.request.active_workspace)
             .select_related(
                 'sample', 'sample__material', 'sample__material__struct_type', 'uploaded_by_user'
             )
@@ -88,7 +88,7 @@ class SampleScanMixin:
 
     def dispatch(self, request, *args, **kwargs):
         self.sample = get_object_or_404(
-            samples_in_workspace(request.active_workspace).select_related('material'),
+            samples_visible_in(request.active_workspace).select_related('material'),
             pk=kwargs['sample_pk'],
         )
         return super().dispatch(request, *args, **kwargs)

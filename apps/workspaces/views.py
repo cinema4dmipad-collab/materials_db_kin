@@ -47,6 +47,8 @@ from apps.workspaces.mixins import (
 
     PermissionRequiredMixin,
 
+    GlobalUserAdminRequiredMixin,
+
     SystemAdminRequiredMixin,
 
     WorkspaceGroupManageMixin,
@@ -58,8 +60,6 @@ from apps.workspaces.mixins import (
 from apps.workspaces.models import Workspace, WorkspaceGroup, WorkspaceGroupMembership
 
 from apps.workspaces.permissions import (
-
-    PERMISSION_SECTIONS,
 
     WorkspacePerm,
 
@@ -200,7 +200,7 @@ class WorkspaceSwitchView(LoginRequiredMixin, View):
 
 
 
-class WorkspaceCreateView(SystemAdminRequiredMixin, CreateView):
+class WorkspaceCreateView(GlobalUserAdminRequiredMixin, CreateView):
 
     model = Workspace
 
@@ -630,8 +630,6 @@ class WorkspaceGroupCreateView(WorkspaceGroupManageMixin, CreateView):
 
         context['submit_label'] = 'Создать'
 
-        context['permission_sections'] = PERMISSION_SECTIONS
-
         return context
 
 
@@ -689,8 +687,6 @@ class WorkspaceGroupUpdateView(WorkspaceGroupManageMixin, UpdateView):
         context['page_title'] = 'Редактирование группы'
 
         context['submit_label'] = 'Сохранить'
-
-        context['permission_sections'] = PERMISSION_SECTIONS
 
         return context
 
@@ -804,7 +800,7 @@ class WorkspaceSettingsView(AppViewMixin, PermissionRequiredMixin, UpdateView):
 
 
 
-class AdminWorkspaceListView(SystemAdminRequiredMixin, ListView):
+class AdminWorkspaceListView(GlobalUserAdminRequiredMixin, ListView):
 
     model = Workspace
 
@@ -828,7 +824,7 @@ class AdminWorkspaceListView(SystemAdminRequiredMixin, ListView):
 
 
 
-class AdminWorkspaceUpdateView(SystemAdminRequiredMixin, UpdateView):
+class AdminWorkspaceUpdateView(GlobalUserAdminRequiredMixin, UpdateView):
 
     model = Workspace
 
@@ -870,7 +866,7 @@ class AdminWorkspaceUpdateView(SystemAdminRequiredMixin, UpdateView):
 
 
 
-class AdminWorkspaceDeleteView(SystemAdminRequiredMixin, DeleteView):
+class AdminWorkspaceDeleteView(GlobalUserAdminRequiredMixin, DeleteView):
 
     model = Workspace
 
@@ -928,7 +924,7 @@ class AdminWorkspaceDeleteView(SystemAdminRequiredMixin, DeleteView):
 
 
 
-class AdminUserListView(SystemAdminRequiredMixin, ListView):
+class AdminUserListView(GlobalUserAdminRequiredMixin, ListView):
 
     model = User
 
@@ -948,7 +944,7 @@ class AdminUserListView(SystemAdminRequiredMixin, ListView):
 
 
 
-class AdminUserCreateView(SystemAdminRequiredMixin, CreateView):
+class AdminUserCreateView(GlobalUserAdminRequiredMixin, CreateView):
 
     model = User
 
@@ -980,7 +976,7 @@ class AdminUserCreateView(SystemAdminRequiredMixin, CreateView):
 
 
 
-class AdminUserUpdateView(SystemAdminRequiredMixin, UpdateView):
+class AdminUserUpdateView(GlobalUserAdminRequiredMixin, UpdateView):
 
     model = User
 
@@ -1057,7 +1053,7 @@ def _admin_user_workspace_rows(target_user):
     return rows
 
 
-class AdminUserMembershipView(SystemAdminRequiredMixin, View):
+class AdminUserMembershipView(GlobalUserAdminRequiredMixin, View):
 
     template_name = 'administration/users/memberships.html'
 

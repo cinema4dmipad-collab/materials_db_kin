@@ -12,6 +12,7 @@ from apps.core.creator import assign_creator
 from apps.core.list_filters import ALL_SEARCH_SCOPE, CREATOR_SEARCH_SCOPE, UPLOADED_BY_CREATOR_FILTER, QuerySetFilterMixin
 from apps.materials.forms_attachments import MaterialAttachmentForm
 from apps.materials.models import MaterialAttachment
+from apps.materials.services import material_attachments_for_material
 from apps.materials.tab_mixins import MaterialTabMixin
 from apps.workspaces.mixins import AppViewMixin
 
@@ -76,7 +77,9 @@ class MaterialAttachmentListView(AppViewMixin, QuerySetFilterMixin, MaterialAtta
         return context
 
     def get_queryset(self):
-        return self.filter_queryset(self.material.attachments.all())
+        return self.filter_queryset(
+            material_attachments_for_material(self.material, self.request.active_workspace),
+        )
 
 
 class MaterialAttachmentDeleteView(AppViewMixin, MaterialAttachmentMixin, DeleteView):
@@ -85,7 +88,7 @@ class MaterialAttachmentDeleteView(AppViewMixin, MaterialAttachmentMixin, Delete
     context_object_name = 'attachment'
 
     def get_queryset(self):
-        return self.material.attachments.all()
+        return material_attachments_for_material(self.material, self.request.active_workspace)
 
     def get_success_url(self):
         return reverse('material_attachments:list', material_pk=self.material.pk)
@@ -100,7 +103,10 @@ class MaterialAttachmentDeleteView(AppViewMixin, MaterialAttachmentMixin, Delete
 
 class MaterialAttachmentDownloadView(AppViewMixin, MaterialAttachmentMixin, View):
     def get(self, request, *args, **kwargs):
-        attachment = get_object_or_404(self.material.attachments.all(), pk=kwargs['pk'])
+        attachment = get_object_or_404(
+            material_attachments_for_material(self.material, self.request.active_workspace),
+            pk=kwargs['pk'],
+        )
         if not attachment.file:
             raise Http404('Файл не найден')
         return build_file_download_response(attachment.file, filename=attachment.filename)

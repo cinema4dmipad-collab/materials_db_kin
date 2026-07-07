@@ -55,7 +55,12 @@
                             {% url 'materials:detail' material.pk as material_detail_url %}
                             {% include 'includes/entity_code.html' with code=material.code url=material_detail_url tone=material.struct_type.display_color %}
                         </td>
-                        <td>{{ material.name }}</td>
+                        <td>
+                            {{ material.name }}
+                            {% if material_scope == 'workspace' and material.pk in material_linked_pks %}
+                            <span class="badge text-bg-light border ms-1">Ссылка</span>
+                            {% endif %}
+                        </td>
                         {% if material_scope == 'shared' %}
                         <td>
                             {% if material.home_workspace %}
@@ -82,9 +87,9 @@
                             {% url 'materials:edit' material.pk as material_edit_url %}
                             {% include 'includes/table_action_icon.html' with action='edit' url=material_edit_url title='Изменить' %}
                             {% endif %}
-                            {% if material.pk in material_cloneable_pks %}
-                            {% url 'materials:clone' material.pk as material_clone_url %}
-                            {% include 'includes/table_action_icon.html' with action='clone' url=material_clone_url title='Клонировать в пространство' method='post' %}
+                            {% if material.pk in material_linkable_pks %}
+                            {% url 'materials:link' material.pk as material_link_url %}
+                            {% include 'includes/table_action_icon.html' with action='link' url=material_link_url title='Добавить в пространство' method='post' %}
                             {% endif %}
                             {% if material.pk in material_deletable_pks %}
                             {% url 'materials:delete' material.pk as material_delete_url %}

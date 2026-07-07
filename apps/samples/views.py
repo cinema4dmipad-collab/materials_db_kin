@@ -28,7 +28,7 @@ from apps.samples.models import Sample, SampleAttachment
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.property_mapping import reference_properties_for_picker
 from apps.workspaces.mixins import AppViewMixin
-from apps.workspaces.services import materials_visible_in, samples_in_workspace
+from apps.workspaces.services import materials_visible_in, samples_in_workspace, samples_visible_in
 
 
 def warn_extra_sample_properties(request, sample):
@@ -212,7 +212,7 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            samples_in_workspace(self.request.active_workspace)
+            samples_visible_in(self.request.active_workspace)
             .select_related('material', 'material__struct_type', 'created_by_user')
             .prefetch_related('tags')
         )
@@ -238,7 +238,7 @@ class SampleDetailView(AppViewMixin, DetailView):
 
     def get_queryset(self):
         return (
-            samples_in_workspace(self.request.active_workspace)
+            samples_visible_in(self.request.active_workspace)
             .select_related('material', 'material__struct_type', 'created_by_user')
             .prefetch_related('tags')
         )
@@ -307,6 +307,9 @@ class SampleUpdateView(AppViewMixin, SampleFormsetMixin, UpdateView):
     def get_success_url(self):
         return reverse('samples:detail', kwargs={'pk': self.object.pk})
 
+    def get_queryset(self):
+        return samples_in_workspace(self.request.active_workspace)
+
 
 class SampleDeleteView(AppViewMixin, DeleteView):
     model = Sample
@@ -328,7 +331,7 @@ class SampleAttachmentMixin:
 
     def dispatch(self, request, *args, **kwargs):
         self.sample = get_object_or_404(
-            samples_in_workspace(request.active_workspace).select_related('material'),
+            samples_visible_in(request.active_workspace).select_related('material'),
             pk=kwargs['sample_pk'],
         )
         return super().dispatch(request, *args, **kwargs)

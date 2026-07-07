@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 
 from apps.workspaces.models import Workspace
-from apps.workspaces.permissions import WorkspacePerm, can_manage_groups, has_workspace_perm, is_system_admin
+from apps.workspaces.permissions import WorkspacePerm, can_manage_groups, can_manage_global_users, has_workspace_perm, is_system_admin
 from apps.workspaces.services import get_active_workspace
 
 
@@ -47,6 +47,13 @@ class PermissionRequiredMixin(LoginRequiredMixin):
 class SystemAdminRequiredMixin(LoginRequiredMixin):
     def dispatch(self, request, *args, **kwargs):
         if not is_system_admin(request.user):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
+
+
+class GlobalUserAdminRequiredMixin(LoginRequiredMixin):
+    def dispatch(self, request, *args, **kwargs):
+        if not can_manage_global_users(request.user):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
 

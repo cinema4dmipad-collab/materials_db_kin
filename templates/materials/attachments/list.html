@@ -5,6 +5,7 @@
 
 {% block content %}
 {% include 'materials/includes/material_tabs.html' %}
+{% include 'materials/includes/material_status_notice.html' %}
 
 <div class="card mb-4">
     <div class="card-header">
@@ -39,8 +40,10 @@
                             <div class="table-actions">
                             {% url 'material_attachments:download' material.pk attachment.pk as attachment_download_url %}
                             {% include 'includes/table_action_icon.html' with action='download' url=attachment_download_url title='Скачать' extra_class='file-download-link btn-action-download' download_name=attachment.filename %}
+                            {% if not material_is_readonly %}
                             {% url 'material_attachments:delete' material.pk attachment.pk as attachment_delete_url %}
                             {% include 'includes/table_action_icon.html' with action='delete' url=attachment_delete_url title='Удалить' %}
+                            {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -60,6 +63,7 @@
     </div>
 </div>
 
+{% if not material_is_readonly %}
 <div class="card">
     <div class="card-header">
         <h2 class="h5 mb-0">Прикрепить файл</h2>
@@ -74,5 +78,6 @@
         </form>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 

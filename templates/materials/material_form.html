@@ -9,13 +9,32 @@
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 {% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}" rel="stylesheet">{% endif %}
 <div class="card mb-4 sticky-form-page">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h1 class="h4 mb-0">{% if material %}Редактирование материала{% else %}Новый материал{% endif %}</h1>
+        {% if show_create_based_on %}
+        <button type="button"
+                id="create-based-on-btn"
+                class="btn btn-outline-primary btn-sm"
+                data-create-url="{% url 'materials:create' %}">
+            Создать на основе
+        </button>
+        {% endif %}
     </div>
     <div class="card-body">
         <form method="post" novalidate id="material-form">
             {% csrf_token %}
             <input type="hidden" name="_apply_struct_type" value="" id="apply-struct-type-flag">
+            {% if template_material %}
+            <input type="hidden" name="based_on" value="{{ template_material.pk }}">
+            {% endif %}
+
+            {% if template_material %}
+            <div class="alert alert-info" role="status">
+                Создание на основе материала
+                <strong>{{ template_material.code }} — {{ template_material.name }}</strong>.
+                <a href="{% url 'materials:detail' template_material.pk %}">Открыть образец</a>
+            </div>
+            {% endif %}
 
             {% include 'includes/form_validation_summary.html' %}
 
@@ -272,6 +291,9 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/material_form.js' %}"></script>
+{% if show_create_based_on %}
+<script src="{% static 'js/material_create_based_on.js' %}"></script>
+{% endif %}
 <script src="{% static 'js/reference_properties_picker.js' %}"></script>
 <script src="{% static 'js/reference_materials_picker.js' %}"></script>
 <script src="{% static 'js/reference_structure_types_picker.js' %}"></script>

@@ -1,6 +1,13 @@
 from django.urls import reverse
 
-from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm, is_system_admin
+from apps.workspaces.permissions import (
+    WorkspacePerm,
+    can_manage_global_groups,
+    can_manage_global_users,
+    can_manage_global_workspaces,
+    has_workspace_perm,
+    is_system_admin,
+)
 from apps.workspaces.services import get_active_workspace, get_user_workspaces
 
 
@@ -102,7 +109,7 @@ def workspace_navigation(request):
         nav_sections.append({'title': 'Пространство', 'items': workspace_items})
 
     admin_items = []
-    if is_system_admin(user) and active_workspace:
+    if can_manage_global_users(user):
         admin_items.append(
             {
                 'label': 'Пользователи',
@@ -111,6 +118,7 @@ def workspace_navigation(request):
                 'visible': True,
             }
         )
+    if can_manage_global_workspaces(user):
         admin_items.append(
             {
                 'label': 'Пространства',
@@ -124,6 +132,7 @@ def workspace_navigation(request):
                 'visible': True,
             }
         )
+    if can_manage_global_groups(user) and active_workspace:
         admin_items.append(
             {
                 'label': 'Группы',
@@ -148,5 +157,7 @@ def workspace_navigation(request):
         'workspace_nav_sections': nav_sections,
         'can_manage_workspace_settings': can(WorkspacePerm.MANAGE_SETTINGS),
         'can_manage_workspace_members': can(WorkspacePerm.MANAGE_MEMBERS),
+        'can_manage_global_users': can_manage_global_users(user),
+        'can_manage_global_workspaces': can_manage_global_workspaces(user),
         'is_system_admin': is_system_admin(user),
     }

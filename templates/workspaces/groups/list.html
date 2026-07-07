@@ -19,7 +19,7 @@
                     <tr>
                         <th>Название</th>
                         <th>Участников</th>
-                        <th>Прав</th>
+                        <th>Разделы</th>
                         <th></th>
                         <th class="text-end">Действия</th>
                     </tr>
@@ -34,7 +34,7 @@
                             {% endif %}
                         </td>
                         <td>{{ group.member_count }}</td>
-                        <td>{{ group.permissions|length }}</td>
+                        <td class="small">{{ group.permission_bundle_labels|join:", " }}</td>
                         <td class="text-muted small">{{ group.description|truncatechars:60 }}</td>
                         <td class="text-end">
                             <div class="table-actions">

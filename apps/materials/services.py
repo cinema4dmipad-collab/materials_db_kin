@@ -1,28 +1,89 @@
-from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from apps.composites.models import CompositeLayer
-from apps.core.creator import assign_creator
-from apps.core.tag_utils import assign_tags
-from apps.materials.forms import STRUCTURE_SERVICE_FIELDS
-from apps.materials.models import Material, MaterialProperty
-from apps.structures.sql_executor import SQLExecutor
+from apps.materials.models import Material
+from apps.workspaces.models import WorkspaceMaterialLink
+from apps.workspaces.services import materials_shared_in, materials_visible_in
 from apps.workspaces.visibility import VisibilityMode
 
 
-def unique_material_code(base_code: str, workspace) -> str:
-    if not Material.objects.filter(home_workspace=workspace, code=base_code).exists():
-        return base_code
+def suggest_material_code(base_code: str, workspace) -> str:
+    normalized = (base_code or '').strip() or 'MAT'
+    if not Material.objects.filter(home_workspace=workspace, code=normalized).exists():
+        return normalized
     for index in range(2, 100):
-        candidate = f'{base_code}-{index}'
+        candidate = f'{normalized}-{index}'
         if not Material.objects.filter(home_workspace=workspace, code=candidate).exists():
             return candidate
-    return f'{base_code}-копия'
+    return f'{normalized}-копия'
 
 
-def can_clone_material_to_workspace(user, material, workspace) -> bool:
+def get_create_template_material(user, workspace, material_id):
     from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm
-    from apps.workspaces.services import materials_visible_in
+
+    if not material_id or workspace is None:
+        return None
+    if not has_workspace_perm(user, workspace, WorkspacePerm.MATERIAL_CREATE):
+        return None
+    try:
+        material = (
+            Material.objects.select_related('struct_type')
+            .prefetch_related('tags', 'properties', 'properties__property', 'composite_layers')
+            .get(pk=material_id)
+        )
+    except (Material.DoesNotExist, ValueError, TypeError):
+        return None
+    if not materials_shared_in(workspace).filter(pk=material.pk).exists():
+        return None
+    return material
+
+
+def build_material_create_initial(template: Material, workspace) -> dict:
+    from apps.core.tag_utils import format_tags_for_input
+
+    return {
+        'code': suggest_material_code(template.code, workspace),
+        'name': template.name,
+        'description': template.description,
+        'struct_type': template.struct_type_id,
+        'tag_names': format_tags_for_input(template.tags.all()),
+        'visibility_mode': VisibilityMode.PRIVATE,
+    }
+
+
+def material_property_formset_initial(template: Material) -> list[dict]:
+    return [
+        {
+            'property': link.property_id,
+            'value': link.value,
+        }
+        for link in template.properties.select_related('property')
+    ]
+
+
+def composite_layer_formset_initial(template: Material) -> list[dict]:
+    return [
+        {
+            'material': layer.material_id,
+            'angle': layer.angle,
+            'thickness': layer.thickness,
+            'layer_number': layer.layer_number,
+        }
+        for layer in template.composite_layers.select_related('material').order_by('layer_number')
+    ]
+
+
+def find_shared_materials_by_name(name, workspace, *, exclude_material_id=None):
+    normalized_name = (name or '').strip()
+    if not normalized_name or workspace is None:
+        return Material.objects.none()
+    queryset = materials_shared_in(workspace).filter(name__iexact=normalized_name)
+    if exclude_material_id:
+        queryset = queryset.exclude(pk=exclude_material_id)
+    return queryset
+
+
+def can_link_material_to_workspace(user, material, workspace) -> bool:
+    from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm
 
     if material is None or workspace is None:
         return False
@@ -30,84 +91,81 @@ def can_clone_material_to_workspace(user, material, workspace) -> bool:
         return False
     if not materials_visible_in(workspace).filter(pk=material.pk).exists():
         return False
-    return not material.is_editable_in(workspace)
+    if material.is_editable_in(workspace):
+        return False
+    if WorkspaceMaterialLink.objects.filter(workspace=workspace, material=material).exists():
+        return False
+    return True
 
 
-def _structure_row_payload(source_material, user):
-    params = source_material.get_structure_params()
-    if not params:
-        return None
-
-    data = {}
-    for key, value in params.items():
-        if key in STRUCTURE_SERVICE_FIELDS:
-            continue
-        if value not in (None, ''):
-            data[key] = value
-    if user is not None and getattr(user, 'is_authenticated', False):
-        from apps.core.creator import creator_label
-
-        data['created_by'] = creator_label(user)
-    return data
+def is_material_linked_to_workspace(material, workspace) -> bool:
+    if material is None or workspace is None:
+        return False
+    return WorkspaceMaterialLink.objects.filter(workspace=workspace, material=material).exists()
 
 
-def _copy_structure_row(source_material, user):
-    structure_type = source_material.struct_type
-    if not structure_type or not source_material.struct_props_id:
-        return None
+def material_pks_linked_in_workspace(workspace) -> frozenset:
+    if workspace is None:
+        return frozenset()
+    return frozenset(
+        WorkspaceMaterialLink.objects.filter(workspace=workspace).values_list(
+            'material_id',
+            flat=True,
+        )
+    )
 
-    payload = _structure_row_payload(source_material, user)
-    if payload is None:
-        return None
 
-    result = SQLExecutor.insert(structure_type, payload)
-    if not result.get('success'):
-        raise ValidationError(result.get('error') or 'Не удалось скопировать параметры структуры.')
-    return result['id']
+def can_manage_material_visibility(user, material, workspace) -> bool:
+    from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm, is_editable_in_workspace
+
+    if is_material_linked_to_workspace(material, workspace):
+        return False
+    if not is_editable_in_workspace(user, material, workspace):
+        return False
+    return has_workspace_perm(user, workspace, WorkspacePerm.MATERIAL_PUBLISH)
+
+
+def samples_for_material(material, workspace):
+    from apps.samples.models import Sample
+
+    if material is None:
+        return Sample.objects.none()
+    queryset = Sample.objects.filter(material=material)
+    if workspace is None:
+        return queryset
+    if material.is_editable_in(workspace):
+        return queryset.filter(workspace=workspace)
+    if material.home_workspace_id:
+        return queryset.filter(workspace=material.home_workspace_id)
+    return queryset
+
+
+def material_attachments_for_material(material, workspace):
+    from django.db.models import Q
+
+    from apps.materials.models import MaterialAttachment
+
+    if material is None:
+        return MaterialAttachment.objects.none()
+    queryset = MaterialAttachment.objects.filter(material=material)
+    if workspace is None:
+        return queryset
+    if material.is_editable_in(workspace):
+        return queryset.filter(Q(workspace=workspace) | Q(workspace__isnull=True))
+    if material.home_workspace_id:
+        return queryset.filter(
+            Q(workspace=material.home_workspace_id) | Q(workspace__isnull=True),
+        )
+    return queryset
 
 
 @transaction.atomic
-def clone_material_to_workspace(source: Material, workspace, user) -> Material:
-    if not can_clone_material_to_workspace(user, source, workspace):
-        raise PermissionError('Нельзя клонировать этот материал в текущее пространство.')
+def link_material_to_workspace(source: Material, workspace, user) -> Material:
+    if not can_link_material_to_workspace(user, source, workspace):
+        raise PermissionError('Нельзя добавить этот материал в текущее пространство.')
 
-    source = (
-        Material.objects.select_related('struct_type')
-        .prefetch_related('properties', 'properties__property', 'composite_layers', 'tags')
-        .get(pk=source.pk)
+    WorkspaceMaterialLink.objects.get_or_create(
+        workspace=workspace,
+        material=source,
     )
-
-    clone = Material(
-        code=unique_material_code(source.code, workspace),
-        name=source.name,
-        description=source.description,
-        struct_type=source.struct_type,
-        home_workspace=workspace,
-        visibility_mode=VisibilityMode.PRIVATE,
-    )
-    assign_creator(clone, user)
-    clone.struct_props_id = _copy_structure_row(source, user)
-    clone.save()
-
-    for link in source.properties.all():
-        MaterialProperty.objects.create(
-            material=clone,
-            property=link.property,
-            value=link.value,
-            notes=link.notes,
-        )
-
-    tag_names = list(source.tags.values_list('name', flat=True))
-    if tag_names:
-        assign_tags(clone, tag_names, workspace=workspace)
-
-    for layer in source.composite_layers.select_related('material').order_by('layer_number'):
-        CompositeLayer.objects.create(
-            parent_material=clone,
-            material=layer.material,
-            layer_number=layer.layer_number,
-            angle=layer.angle,
-            thickness=layer.thickness,
-        )
-
-    return clone
+    return source

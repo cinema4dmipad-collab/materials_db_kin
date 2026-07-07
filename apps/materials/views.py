@@ -26,12 +26,26 @@ from apps.materials.forms import (
     MaterialForm,
     MaterialPropertyFormSet,
     MaterialVisibilityForm,
+    build_composite_layer_formset,
+    build_material_property_formset,
     get_composite_layer_formset,
 )
 from apps.core.property_form_display import enrich_property_form_display
 from apps.core.number_utils import format_decimal_display
 from apps.materials.models import Material
-from apps.materials.services import can_clone_material_to_workspace, clone_material_to_workspace
+from apps.materials.services import (
+    build_material_create_initial,
+    can_link_material_to_workspace,
+    can_manage_material_visibility,
+    composite_layer_formset_initial,
+    get_create_template_material,
+    is_material_linked_to_workspace,
+    link_material_to_workspace,
+    material_pks_linked_in_workspace,
+    material_property_formset_initial,
+    material_attachments_for_material,
+    samples_for_material,
+)
 from apps.materials.structure_display import get_material_structure_context, serialize_structure_context
 from apps.structures.models import StructureType
 from apps.materials.picker_data import materials_for_picker
@@ -45,7 +59,12 @@ from apps.workspaces.permissions import (
     is_editable_in_workspace,
 )
 from apps.workspaces.visibility import VisibilityMode
-from apps.workspaces.services import materials_owned_by, materials_shared_in, materials_visible_in, structure_types_visible_in
+from apps.workspaces.services import (
+    materials_in_workspace_tab,
+    materials_shared_in,
+    materials_visible_in,
+    structure_types_visible_in,
+)
 
 
 MATERIAL_SCOPE_WORKSPACE = 'workspace'
@@ -54,6 +73,18 @@ MATERIAL_SCOPE_CHOICES = (MATERIAL_SCOPE_WORKSPACE, MATERIAL_SCOPE_SHARED)
 
 
 class MaterialFormsetMixin:
+    def get_template_material(self):
+        if not isinstance(self, CreateView):
+            return None
+        based_on = self.request.GET.get('based_on') or self.request.POST.get('based_on')
+        if not based_on:
+            return None
+        return get_create_template_material(
+            self.request.user,
+            self.request.active_workspace,
+            based_on,
+        )
+
     def get_tag_workspace(self, instance=None):
         material = instance if instance is not None else getattr(self, 'object', None)
         if material and material.home_workspace_id:
@@ -74,10 +105,18 @@ class MaterialFormsetMixin:
         kwargs = super().get_form_kwargs()
         kwargs['workspace'] = self.get_tag_workspace()
         kwargs.update(self._visibility_form_kwargs())
+        template_material = self.get_template_material()
+        if template_material is not None:
+            kwargs['template_material'] = template_material
         return kwargs
 
     def get_initial(self):
         initial = super().get_initial()
+        template_material = self.get_template_material()
+        if template_material is not None:
+            initial.update(
+                build_material_create_initial(template_material, self.request.active_workspace)
+            )
         if 'struct_type' in self.request.GET:
             initial['struct_type'] = self.request.GET.get('struct_type')
         return initial
@@ -114,24 +153,60 @@ class MaterialFormsetMixin:
         )
 
     def get_formset(self):
+        if getattr(self, 'object', None):
+            kwargs = {'prefix': 'properties', 'instance': self.object}
+            if self.request.method == 'POST':
+                kwargs['data'] = self.request.POST
+            return MaterialPropertyFormSet(**kwargs)
+
+        template_material = self.get_template_material()
+        if template_material is not None:
+            if self.request.method == 'POST':
+                return MaterialPropertyFormSet(
+                    self.request.POST,
+                    instance=Material(),
+                    prefix='properties',
+                )
+            return build_material_property_formset(
+                initial=material_property_formset_initial(template_material),
+            )
+
         kwargs = {'prefix': 'properties'}
         if self.request.method == 'POST':
             kwargs['data'] = self.request.POST
-        if getattr(self, 'object', None):
-            kwargs['instance'] = self.object
         return MaterialPropertyFormSet(**kwargs)
 
     def get_layer_formset(self):
         if not self.layers_allowed():
             return None
 
+        template_material = self.get_template_material()
+        if getattr(self, 'object', None):
+            formset_class = get_composite_layer_formset()
+            kwargs = {'prefix': 'layers', 'instance': self.object, 'workspace': self.request.active_workspace}
+            if self._has_formset_management_data('layers'):
+                kwargs['data'] = self.request.POST
+            return formset_class(**kwargs)
+
+        if template_material is not None:
+            if self.request.method == 'POST' and self._has_formset_management_data('layers'):
+                return build_composite_layer_formset(
+                    workspace=self.request.active_workspace,
+                    data=self.request.POST,
+                    prefix='layers',
+                )
+            return build_composite_layer_formset(
+                workspace=self.request.active_workspace,
+                initial=composite_layer_formset_initial(template_material),
+                prefix='layers',
+            )
+
         formset_class = get_composite_layer_formset()
-        kwargs = {'prefix': 'layers'}
+        kwargs = {'prefix': 'layers', 'workspace': self.request.active_workspace}
         if self._has_formset_management_data('layers'):
             kwargs['data'] = self.request.POST
         if getattr(self, 'object', None):
             kwargs['instance'] = self.object
-        kwargs['workspace'] = self.request.active_workspace
         return formset_class(**kwargs)
 
     def get_context_data(self, **kwargs):
@@ -148,6 +223,14 @@ class MaterialFormsetMixin:
         context['reference_properties'] = reference_properties_for_picker()
         context['reference_materials'] = materials_for_picker(self.request.active_workspace)
         context['reference_structure_types'] = structure_types_for_picker()
+        if isinstance(self, CreateView):
+            context['show_create_based_on'] = True
+            context['template_material'] = self.get_template_material()
+            if self.request.GET.get('based_on') and context['template_material'] is None:
+                messages.warning(
+                    self.request,
+                    'Материал-образец не найден или недоступен в общих материалах.',
+                )
         self._attach_validation_summary(context)
         return context
 
@@ -206,23 +289,39 @@ class MaterialFormsetMixin:
             instance=instance,
             skip_validation=True,
             workspace=self.get_tag_workspace(instance),
+            template_material=self.get_template_material(),
             **self._visibility_form_kwargs(),
         )
-        formset = MaterialPropertyFormSet(
-            self.request.POST,
-            instance=instance,
-            prefix='properties',
-        )
+        template_material = self.get_template_material()
+        if template_material is not None and 'properties-TOTAL_FORMS' not in self.request.POST:
+            formset = build_material_property_formset(
+                instance=instance or Material(),
+                initial=material_property_formset_initial(template_material),
+            )
+        else:
+            formset = MaterialPropertyFormSet(
+                self.request.POST,
+                instance=instance,
+                prefix='properties',
+            )
         layer_formset = None
         if self.layers_allowed():
-            layer_kwargs = {
-                'instance': instance,
-                'prefix': 'layers',
-                'workspace': self.request.active_workspace,
-            }
-            if self._has_formset_management_data('layers'):
-                layer_kwargs['data'] = self.request.POST
-            layer_formset = get_composite_layer_formset()(**layer_kwargs)
+            if template_material is not None and not self._has_formset_management_data('layers'):
+                layer_formset = build_composite_layer_formset(
+                    workspace=self.request.active_workspace,
+                    instance=instance or Material(),
+                    initial=composite_layer_formset_initial(template_material),
+                    prefix='layers',
+                )
+            else:
+                layer_kwargs = {
+                    'instance': instance,
+                    'prefix': 'layers',
+                    'workspace': self.request.active_workspace,
+                }
+                if self._has_formset_management_data('layers'):
+                    layer_kwargs['data'] = self.request.POST
+                layer_formset = get_composite_layer_formset()(**layer_kwargs)
         return self.render_to_response(
             self.get_context_data(
                 form=form,
@@ -338,7 +437,7 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
         if scope == MATERIAL_SCOPE_SHARED:
             base_qs = materials_shared_in(workspace)
         else:
-            base_qs = materials_owned_by(workspace)
+            base_qs = materials_in_workspace_tab(workspace)
         return self.filter_queryset(
             base_qs.select_related('struct_type', 'home_workspace', 'created_by_user')
             .prefetch_related('tags')
@@ -385,11 +484,12 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
             for material in materials
             if can_delete_in_workspace(user, material, workspace)
         }
-        context['material_cloneable_pks'] = {
+        context['material_linkable_pks'] = {
             material.pk
             for material in materials
-            if can_clone_material_to_workspace(user, material, workspace)
+            if can_link_material_to_workspace(user, material, workspace)
         }
+        context['material_linked_pks'] = material_pks_linked_in_workspace(workspace)
         return context
 
     def get_custom_search_scope_filters(self):
@@ -437,24 +537,35 @@ class MaterialDetailView(AppViewMixin, DetailView):
         context['material_is_readonly'] = not is_editable_in_workspace(
             self.request.user, self.object, active_ws
         )
-        context['can_publish_material'] = (
-            not context['material_is_readonly']
-            and has_workspace_perm(self.request.user, active_ws, WorkspacePerm.MATERIAL_PUBLISH)
+        context['material_is_workspace_link'] = is_material_linked_to_workspace(
+            self.object,
+            active_ws,
+        )
+        context['can_publish_material'] = can_manage_material_visibility(
+            self.request.user,
+            self.object,
+            active_ws,
         )
         context['can_delete_material'] = can_delete_in_workspace(
             self.request.user,
             self.object,
             active_ws,
         )
-        context['can_clone_material'] = can_clone_material_to_workspace(
+        context['can_link_material'] = can_link_material_to_workspace(
             self.request.user,
             self.object,
             active_ws,
         )
         context['active_tab'] = self.active_tab
-        context['attachment_count'] = self.object.attachments.count()
-        context['sample_count'] = self.object.samples.count()
-        context['attachments'] = self.object.attachments.all()[:5]
+        context['attachment_count'] = material_attachments_for_material(
+            self.object,
+            active_ws,
+        ).count()
+        context['sample_count'] = samples_for_material(self.object, active_ws).count()
+        context['attachments'] = material_attachments_for_material(
+            self.object,
+            active_ws,
+        )[:5]
         context['properties'] = (
             self.object.properties.select_related('property', 'property__group').order_by(
                 'property__group__sort_order',
@@ -503,7 +614,7 @@ class MaterialUpdateView(
         return reverse_lazy('materials:detail', kwargs={'pk': self.object.pk})
 
 
-class MaterialCloneView(AppViewMixin, PermissionRequiredMixin, View):
+class MaterialLinkView(AppViewMixin, PermissionRequiredMixin, View):
     permission_codename = WorkspacePerm.MATERIAL_CREATE
     http_method_names = ['post']
 
@@ -513,18 +624,15 @@ class MaterialCloneView(AppViewMixin, PermissionRequiredMixin, View):
             pk=pk,
         )
         try:
-            clone = clone_material_to_workspace(source, request.active_workspace, request.user)
+            material = link_material_to_workspace(source, request.active_workspace, request.user)
         except PermissionError:
             raise PermissionDenied
-        except ValidationError as exc:
-            messages.error(request, str(exc))
-            return redirect('materials:detail', pk=source.pk)
 
         messages.success(
             request,
-            f'Материал «{source.code}» скопирован в пространство как «{clone.code}».',
+            f'Материал «{material.code}» добавлен в пространство как ссылка.',
         )
-        return redirect('materials:detail', pk=clone.pk)
+        return redirect('materials:detail', pk=material.pk)
 
 
 class MaterialDeleteView(AppViewMixin, PermissionRequiredMixin, MaterialEditableMixin, DeleteView):
@@ -599,7 +707,11 @@ class MaterialVisibilityView(AppViewMixin, PermissionRequiredMixin, UpdateView):
 
     def get_object(self, queryset=None):
         obj = super().get_object(queryset)
-        if not is_editable_in_workspace(self.request.user, obj, self.request.active_workspace):
+        if not can_manage_material_visibility(
+            self.request.user,
+            obj,
+            self.request.active_workspace,
+        ):
             raise PermissionDenied
         return obj
 
