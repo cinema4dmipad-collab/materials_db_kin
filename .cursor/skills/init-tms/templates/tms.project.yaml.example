@@ -1,0 +1,26 @@
+# Copy to docs/tms.project.yaml. Issue types align with TestRay-managed Jira scheme.
+
+schema_version: 1
+testray:
+  scheme: testray  # workflows follow TestRay/Synapse semantics in this repo
+jira:
+  project_key: PROJ
+  base_url: https://jira.example.com
+links:
+  project: https://jira.example.com/jira/projects/PROJ
+  project_summary: https://jira.example.com/projects/PROJ/summary
+  # После скрипта / ручной настройки панелей (см. docs/tms.panels.md):
+  # panels:
+  #   requirements: https://host/projects/PROJ/issues?filter=...
+  #   test_cases: https://...
+  #   defects: https://...
+  #   test_plans: https://...
+  # Наследие: agile boards (глобальный контекст) — см. docs/tms.boards.md
+issue_types:
+  defect: Defect
+  functional_requirement: Functional Requirement
+  test_case: Test Case
+  test_plan: Test Plan
+# defaults:
+#   labels: [regression]
+#   components: [UI]

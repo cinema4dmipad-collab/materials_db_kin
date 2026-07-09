@@ -1,0 +1,29 @@
+{
+  "skill_name": "create-defect-tms",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Заведи дефект в Jira TMS: после обновления прошивки устройство теряет KNX-соединение при повторном запуске теста. Нужно сначала проверить похожие дефекты, уточнить шаги и labels, потом подготовить черновик на русском и дождаться подтверждения.",
+      "expected_output": "The agent uses the create-defect-tms workflow, searches similar issues before creation, asks focused Russian clarification questions, and prepares a structured Russian markdown draft without creating Jira issues before confirmation.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Оформи баг для проекта LUS2: при импорте конфигурации появляется 500, возможно связано с требованием LUS2-120 и тест-кейсом LUS2-344. Описание короткое, помоги уточнить и связать всё в TMS.",
+      "expected_output": "The agent does not assume project-specific issue type or link types, searches Jira for duplicates, asks for missing reproduction/environment details and proposed labels, drafts the defect in Russian, and explains that links are created only after user confirmation.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Есть подозрение на дубликат KNX-77: в ночном прогоне тест падает из-за таймаута ответа. Проверь TMS, предложи название дефекта или скажи, что лучше связать с существующим.",
+      "expected_output": "The agent prioritizes duplicate analysis, presents candidate issues with rationale, recommends whether to create or link/comment, and avoids creating a new defect until the user explicitly approves a markdown draft.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Пользователь уже подтвердил черновик дефекта на русском: создать баг в LUS2, добавить labels regression и import, связать с требованием LUS2-120, тест-кейсом LUS2-344 и дубликатом LUS2-88. Выполни создание через MCP.",
+      "expected_output": "The agent re-reads live MCP descriptors, validates each target key with jira_get_issue, checks jira_get_link_types for link direction, uses jira_create_issue only with confirmed fields, avoids jira_testray_link_requirement for defect links, and reports any blocked write without losing the draft.",
+      "files": []
+    }
+  ]
+}

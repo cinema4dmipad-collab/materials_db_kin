@@ -1,0 +1,69 @@
+# TMS / панели внутри проекта — `<PROJECT_KEY>`
+
+**Таблица ниже**: первые **три колонки** совпадают с эталоном **`docs/tms.boards.md`** («Доска», «Тип issue», «JQL»). Дальше:
+
+- **Панель проекта** — список в контексте проекта (`/projects/<KEY>/issues?filter=…`).
+- **Rapid Board** — Kanban URL как в примере:  
+  `{BASE_URL}/secure/RapidBoard.jspa?rapidView=<board_id>[&selectedIssue=<KEY>#]`  
+  (у вас может быть например `http://192.168.221.54:8083/secure/RapidBoard.jspa?rapidView=9&selectedIssue=LUS01-80#`).  
+  Здесь **`rapidView`** = числовой id Agile-доски (`board_id` в REST после **`--with-boards`** или вручную).
+- Важно: Rapid Board корректна только когда **Board settings → Columns** настроены под ваши статусы для **этого** `issue type`. Скрипт **не создаёт и не меняет** статусы/workflow в Jira. Справочно: `GET /rest/api/2/project/<KEY>/statuses` — если все типы делят один workflow, списки статусов будут одинаковыми, пока вы не разнесёте схемы в проекте.
+
+## Автоматизация (REST)
+
+Скрипт: **`skills/init-tms/scripts/jira_create_testray_boards.py`**.
+
+Окружение: **`JIRA_URL`**, **`JIRA_PERSONAL_TOKEN`**.
+
+```bash
+# Фильтры + панель проекта; колонка Rapid заполнится, если в state уже есть board_id
+python3 skills/init-tms/scripts/jira_create_testray_boards.py \
+  --project-key <PROJECT_KEY>
+
+# Создать ещё и Agile Kanban под каждый фильтр
+python3 skills/init-tms/scripts/jira_create_testray_boards.py \
+  --project-key <PROJECT_KEY> \
+  --with-boards
+
+# Опционально: автоматически выставить колонки 1:1 по ответу GET /project/<KEY>/statuses (после того как в Jira разные workflow на типы)
+python3 skills/init-tms/scripts/jira_create_testray_boards.py \
+  --project-key <PROJECT_KEY> \
+  --with-boards \
+  --configure-board-columns
+```
+
+По умолчанию колонки Kanban после `--with-boards` остаются как создаёт Jira; настраивайте вручную в **Board settings → Columns** или включайте **`--configure-board-columns`**.
+
+Состояние по умолчанию: **`docs/tms.panels.state.json`**. Повтор с тем же **`--state-file`** идемпотентен.
+
+## Сводка (колонки как у досок + ссылки)
+
+| Доска (название) | Тип issue (Jira) | JQL | Панель проекта (`/projects/…/issues?filter=`) | Rapid Board (`rapidView`) |
+|------------------|------------------|-----|-----------------------------------------------|---------------------------|
+| Требования | `Functional Requirement` | `project = <KEY> AND issuetype = "Functional Requirement" ORDER BY Rank ASC, updated DESC` | `<BASE>/projects/<KEY>/issues?filter=<id>` | `<BASE>/secure/RapidBoard.jspa?rapidView=<board_id>` |
+| Тест-кейсы | `Test Case` | `project = <KEY> AND issuetype = "Test Case" ORDER BY Rank ASC, updated DESC` | … | … |
+| Дефекты | `Defect` | `project = <KEY> AND issuetype = "Defect" ORDER BY Rank ASC, updated DESC` | … | … |
+| Тест-планы | `Test Plan` | `project = <KEY> AND issuetype = "Test Plan" ORDER BY Rank ASC, updated DESC` | … | … |
+
+Если Jira ругается на **Rank**, упростите `ORDER BY` до `updated DESC`.
+
+## Колонки доски (обязательно)
+
+Для каждой Agile-доски / `rapidView` колонки должны строиться из Jira-статусов соответствующего типа:
+
+```text
+GET <BASE_URL>/rest/api/2/project/<KEY>/statuses
+```
+
+Для выбранного `issue type` берём список `statuses[]` и создаём mapping **один статус в одну одноимённую колонку**. Не оставляйте стандартный Kanban mapping вроде `To Do` / `In Progress` / `Done`, где несколько статусов объединены в одну колонку.
+
+## Ручная настройка (UI)
+
+1. **Issues → Advanced** → JQL → **Save as**; **Поделиться** на проект.
+2. **Boards → Create board → Kanban** из этого фильтра — получите **`rapidView`** в URL.
+3. **Board settings → Columns** → настройте mapping из раздела выше.
+4. Ярлыки: **Project shortcuts** на нужный URL (проектный список или Rapid Board).
+
+## Ссылки проекта
+
+- Summary: `<BASE_URL>/projects/<KEY>/summary`

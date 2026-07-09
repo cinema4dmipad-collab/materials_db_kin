@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm, UserCreationForm
 from django.db.models import Q
 from django.utils.text import slugify
 
@@ -359,6 +359,67 @@ class WorkspaceUserGroupsForm(forms.Form):
         else:
             assign_user_to_groups(user, self.workspace, group_names)
         return user
+
+
+class UserProfileForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ('email', 'first_name', 'last_name')
+        labels = {
+            'email': 'E-mail',
+            'first_name': 'Имя',
+            'last_name': 'Фамилия',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _add_bootstrap_classes(self)
+
+
+class UserPasswordChangeForm(PasswordChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['old_password'].label = 'Текущий пароль'
+        self.fields['new_password1'].label = 'Новый пароль'
+        self.fields['new_password2'].label = 'Подтверждение нового пароля'
+        _add_bootstrap_classes(self)
+
+
+class UserAdminUpdateForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = (
+            'username',
+            'email',
+            'first_name',
+            'last_name',
+            'is_active',
+            'is_staff',
+            'is_superuser',
+        )
+        labels = {
+            'username': 'Логин',
+            'email': 'E-mail',
+            'first_name': 'Имя',
+            'last_name': 'Фамилия',
+            'is_active': 'Активен',
+            'is_staff': 'Доступ в админку Django',
+            'is_superuser': 'Системный администратор',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _add_bootstrap_classes(self)
+
+
+class WorkspaceLoginForm(AuthenticationForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['username'].label = 'Логин'
+        self.fields['password'].label = 'Пароль'
+        self.fields['username'].widget.attrs.setdefault('autocomplete', 'username')
+        self.fields['password'].widget.attrs.setdefault('autocomplete', 'current-password')
+        _add_bootstrap_classes(self)
 
 
 class UserCreateForm(UserCreationForm):

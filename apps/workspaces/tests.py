@@ -87,6 +87,49 @@ class UserProfileTests(AuthenticatedWorkspaceTestCase):
         help_response = self.client.get(reverse('core:help'))
         self.assertEqual(help_response.status_code, 200)
 
+    def test_profile_edit_page_updates_user_fields(self):
+        response = self.client.post(
+            reverse('accounts:profile_edit'),
+            {
+                'email': 'updated@example.com',
+                'first_name': 'Иван',
+                'last_name': 'Петров',
+            },
+        )
+        self.assertRedirects(response, reverse('accounts:profile'))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'updated@example.com')
+        self.assertEqual(self.user.first_name, 'Иван')
+        self.assertEqual(self.user.last_name, 'Петров')
+
+    def test_profile_edit_accessible_without_active_workspace(self):
+        session = self.client.session
+        session.pop(ACTIVE_WORKSPACE_SESSION_KEY, None)
+        session.save()
+
+        response = self.client.get(reverse('accounts:profile_edit'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Редактирование профиля')
+
+    def test_password_change_updates_credentials(self):
+        response = self.client.post(
+            reverse('accounts:password_change'),
+            {
+                'old_password': self.password,
+                'new_password1': 'new-pass-456',
+                'new_password2': 'new-pass-456',
+            },
+        )
+        self.assertRedirects(response, reverse('accounts:profile'))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('new-pass-456'))
+
+    def test_profile_page_has_edit_links(self):
+        response = self.client.get(reverse('accounts:profile'))
+        self.assertContains(response, reverse('accounts:profile_edit'))
+        self.assertContains(response, reverse('accounts:password_change'))
+        self.assertContains(response, 'Редактировать')
+
 
 class WorkspaceSelectTests(TestCase):
     def setUp(self):
@@ -1047,6 +1090,24 @@ class AdminWorkspaceManagementTests(TestCase):
         self.client.login(username=operator.username, password=self.password)
         response = self.client.get(reverse('administration:admin_workspaces'))
         self.assertEqual(response.status_code, 403)
+
+    def test_operator_cannot_create_users(self):
+        operator = User.objects.create_user('plain-user', password=self.password)
+        _assign_operator(operator, self.workspace)
+        self.client.login(username=operator.username, password=self.password)
+        response = self.client.get(reverse('administration:admin_user_create'))
+        self.assertEqual(response.status_code, 403)
+        create_response = self.client.post(
+            reverse('administration:admin_user_create'),
+            {
+                'username': 'blocked-user',
+                'email': 'blocked@example.com',
+                'password1': self.password,
+                'password2': self.password,
+            },
+        )
+        self.assertEqual(create_response.status_code, 403)
+        self.assertFalse(User.objects.filter(username='blocked-user').exists())
 
     def test_admin_can_create_edit_and_manage_members(self):
         create_response = self.client.post(

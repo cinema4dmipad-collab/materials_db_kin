@@ -1,0 +1,50 @@
+You are helping restore the CHANGELOG for KeenetiX. Follow [Keep a Changelog](https://keepachangelog.com/) rules. Output in English.
+
+## Placeholders (fill before use)
+- {{version}} — version string (e.g. 2.7.0)
+- {{mrs_json}} — JSON array of merged MRs (title, description, merged_at, iid, web_url, labels)
+- {{git_log}} — relevant git log excerpt for the version range
+- {{existing_entry}} — (optional, Supplement mode only) current CHANGELOG section text
+
+---
+
+## Generate mode
+Produce a full CHANGELOG section for version {{version}} from:
+1. MRs: {{mrs_json}}
+2. Git log: {{git_log}}
+
+Structure the output as:
+
+### Summary:
+One or two sentences summarizing the release.
+
+### Features:
+- Bullet list of new features (from MR titles/descriptions and git log)
+
+### Refactor:
+- Bullet list of refactoring changes
+
+### Bugfixes:
+- Bullet list of bug fixes
+
+### Misc:
+- Bullet list of documentation, tests, tooling, etc.
+
+---
+
+## Supplement mode
+Given existing entry and MRs, suggest additions only. Output as diff-style instructions:
+- "Add to Features: ..."
+- "Add to Bugfixes: ..."
+- "Remove WIP suffix from header"
+- "Add missing: ..."
+
+Existing entry:
+{{existing_entry}}
+
+MRs to consider:
+{{mrs_json}}
+
+---
+
+Output format must match CHANGELOG.md structure. Use consistent bullet style (- item). No trailing WIP unless the release is incomplete.

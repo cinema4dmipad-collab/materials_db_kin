@@ -1,0 +1,131 @@
+---
+description: Схема версионирования и процедура релиза materials-db-v1
+alwaysApply: true
+---
+
+# Project Versioning — materials-db-v1
+
+## Sources of Truth
+
+Единственный источник версии приложения:
+
+- `pyproject.toml` → `[project].version` (сейчас `0.1.0`)
+
+Poetry читает эту версию при сборке и установке зависимостей. Docker-образ собирается из `pyproject.toml` / `poetry.lock` (см. `Dockerfile`).
+
+История изменений для людей — в `CHANGELOG.md` в корне репозитория. Файл описывает, что изменилось в каждом релизе, но **не задаёт** номер версии.
+
+## Git Remotes
+
+| Remote | Назначение |
+|--------|------------|
+| `origin-glab` | **Основной** — GitLab (`gitlab.keeneticcorp.ru/.../materials_db_strict`), CI/CD, registry, деплой |
+| `origin` | GitHub (`cinema4dmipad-collab/materials_db_kin`) — зеркало / коллаборация |
+
+Пуш в GitLab для релизов и CI:
+
+```bash
+git push origin-glab main
+git push origin-glab vX.Y.Z
+```
+
+## Branch Model
+
+| Ветка | Назначение |
+|-------|------------|
+| `main` | Продакшен-ready код; default branch на GitLab; CI: test + build + manual `deploy:staging` |
+| `develop` | Интеграционная ветка для накопления фич перед merge в `main` |
+| `feature/*` | Разработка; MR в `develop` или `main` |
+
+## Semantic Versioning (SemVer)
+
+Формат тегов и версии в `pyproject.toml`: **`X.Y.Z`** (без префикса в pyproject, с префиксом `v` в git-тегах).
+
+- **MAJOR**: несовместимые изменения схемы БД, API или деплоя
+- **MINOR**: новые фичи, обратно совместимые
+- **PATCH**: исправления багов, обратно совместимые
+
+## Changelog Rules
+
+- Файл: `CHANGELOG.md` в корне репозитория (создать, если отсутствует).
+- В активной разработке держать секцию `## [Unreleased]`.
+- При релизе переносить записи из `Unreleased` в `## [X.Y.Z] - YYYY-MM-DD`.
+- Писать кратко и по делу: поведение и влияние для пользователя, не детали реализации.
+
+## Release Procedure
+
+### 1. Подготовка на ветке релиза
+
+Релизный коммит обычно идёт в `main` (через MR из `develop` или напрямую):
+
+```bash
+git checkout main
+git pull origin-glab main
+```
+
+### 2. Bump версии
+
+```bash
+poetry version patch   # 0.1.0 → 0.1.1
+# или: poetry version minor / major
+```
+
+Вручную проверить `[project].version` в `pyproject.toml`.
+
+### 3. Changelog
+
+- Добавить секцию `## [X.Y.Z] - YYYY-MM-DD` в `CHANGELOG.md`.
+- Очистить или обновить `## [Unreleased]`.
+
+### 4. Коммит
+
+```bash
+git add pyproject.toml CHANGELOG.md
+git commit -m "chore(release): vX.Y.Z"
+git push origin-glab main
+```
+
+### 5. Git tag
+
+Теги — **`vX.Y.Z`**, аннотированные:
+
+```bash
+git tag -a vX.Y.Z -m "Release X.Y.Z"
+git push origin-glab vX.Y.Z
+```
+
+### 6. CI/CD (GitLab)
+
+При пуше тега (см. `.gitlab-ci.yml`):
+
+| Job | Когда | Действие |
+|-----|-------|----------|
+| `test` | MR, tag, `main` | Django tests |
+| `build` | tag, `main` | Docker build → `$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA`; для тега дополнительно `$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG` |
+| `deploy:staging` | `main`, manual | Staging через SSH |
+| `deploy:production` | tag, manual | Production; образ `$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG` |
+
+После успешного `build` на теге — вручную запустить **`deploy:production`** в GitLab CI.
+
+### 7. Проверка после деплоя
+
+- Контейнер поднялся: `docker compose -f docker-compose.prod.yml ps` на сервере.
+- Приложение открывается по production URL.
+- При необходимости — smoke-тест ключевых страниц (материалы, сканы, загрузка в S3).
+
+## Where Version Appears
+
+| Компонент | Источник |
+|-----------|----------|
+| Версия Python-пакета | `pyproject.toml` → `[project].version` |
+| Docker-образ в CI | `$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG` (тег git) или `:latest` / `:SHORT_SHA` (`main`) |
+| Dokploy / prod compose | `WEB_IMAGE` — тег образа из registry (см. `docker-compose.prod.yml`) |
+| Git releases | Теги `vX.Y.Z` на GitLab |
+| Changelog | `CHANGELOG.md` |
+
+## Agent Notes
+
+- Не ссылаться на `kinetic-version.pri`, `sync_versions.py` и другие артефакты проекта Kinetic — они к этому репозиторию не относятся.
+- Релизные операции (tag, push) — в **`origin-glab`**, не в `origin`, если пользователь явно не просит синхронизировать GitHub.
+- Не bump'ить версию и не создавать теги без явного запроса пользователя.
+- При bump версии обновлять и `pyproject.toml`, и `CHANGELOG.md` в одном коммите.

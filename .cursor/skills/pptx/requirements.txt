@@ -1,0 +1,5 @@
+# Python deps for pptx skill scripts (see SKILL.md — Python venv)
+markitdown[pptx]
+Pillow
+defusedxml
+lxml

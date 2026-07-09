@@ -27,6 +27,8 @@ _EXEMPT_URL_NAMES = frozenset(
         'accounts:login',
         'accounts:logout',
         'accounts:profile',
+        'accounts:profile_edit',
+        'accounts:password_change',
         'workspaces:select',
         'workspaces:switch',
         'core:debug',

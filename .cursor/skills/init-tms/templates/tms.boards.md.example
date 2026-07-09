@@ -1,0 +1,42 @@
+# Kanban-доски TestRay/Jira — `<PROJECT_KEY>`
+
+Эталонные **три колонки** ниже совпадают с таблицей в **`docs/tms.panels.md`** (там же добавлены ссылки: панель проекта и **Rapid Board**).
+
+Важно: сам URL **`/secure/RapidBoard.jspa?rapidView=<board_id>`** не гарантирует правильные колонки. Скрипт **не создаёт статусы** и **не правит workflow** — только фильтры/доски. Колонки настраиваете в **Board settings → Columns** под статусы нужного типа из Jira (`GET /rest/api/2/project/<KEY>/statuses`). Опционально, после того как в проекте разные workflow по типам, можно один раз прогнать скрипт с **`--configure-board-columns`**.
+
+## Сводка (эталон)
+
+| Доска (название) | Тип issue (Jira) | JQL |
+|------------------|------------------|-----|
+| Требования | `Functional Requirement` | `project = <KEY> AND issuetype = "Functional Requirement" ORDER BY Rank ASC, updated DESC` |
+| Тест-кейсы | `Test Case` | `project = <KEY> AND issuetype = "Test Case" ORDER BY Rank ASC, updated DESC` |
+| Дефекты | `Defect` | `project = <KEY> AND issuetype = "Defect" ORDER BY Rank ASC, updated DESC` |
+| Тест-планы | `Test Plan` | `project = <KEY> AND issuetype = "Test Plan" ORDER BY Rank ASC, updated DESC` |
+
+Замените `<KEY>` на **`PROJECT_KEY`** из `docs/tms.project.yaml`.
+
+## Скрипт (фильтры + опционально доски)
+
+```bash
+python3 skills/init-tms/scripts/jira_create_testray_boards.py \
+  --project-key <PROJECT_KEY> \
+  --with-boards \
+  --state-file docs/tms.boards.state.json
+
+# Опционально: колонки 1:1 по GET /project/<KEY>/statuses (если уже разнесли workflow)
+python3 skills/init-tms/scripts/jira_create_testray_boards.py \
+  --project-key <PROJECT_KEY> \
+  --with-boards \
+  --configure-board-columns \
+  --state-file docs/tms.boards.state.json
+```
+
+Проверка: MCP `jira_get_agile_boards` по `project_key` или откройте Rapid Board по `rapidView` из `docs/tms.panels.md`.
+
+## Колонки доски
+
+Для каждой строки таблицы:
+
+1. В Jira взять статусы нужного `issue type` из `GET /rest/api/2/project/<KEY>/statuses`.
+2. В **Board settings → Columns** создать колонки по этому списку.
+3. Настроить mapping **одна колонка = один статус Jira**.

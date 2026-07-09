@@ -2,7 +2,7 @@ from django.contrib import messages
 
 from django.contrib.auth import get_user_model
 
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
 
 from django.db.models import Count
 
@@ -20,11 +20,19 @@ from django.views.generic import CreateView, DeleteView, ListView, TemplateView,
 
 from apps.workspaces.forms import (
 
+    UserAdminUpdateForm,
+
     UserCreateForm,
 
     UserMembershipAssignForm,
 
+    UserPasswordChangeForm,
+
+    UserProfileForm,
+
     WorkspaceForm,
+
+    WorkspaceLoginForm,
 
     WorkspaceGroupForm,
 
@@ -99,6 +107,8 @@ class WorkspaceLoginView(LoginView):
 
     template_name = 'registration/login.html'
 
+    form_class = WorkspaceLoginForm
+
     redirect_authenticated_user = True
 
     def get_success_url(self):
@@ -139,6 +149,76 @@ class UserProfileView(LoginRequiredMixin, TemplateView):
             workspace_rows.append({'workspace': workspace, 'groups': groups})
 
         context['workspace_rows'] = workspace_rows
+
+        return context
+
+
+
+
+
+class UserProfileUpdateView(LoginRequiredMixin, UpdateView):
+
+    model = User
+
+    form_class = UserProfileForm
+
+    template_name = 'accounts/profile_edit.html'
+
+    success_url = reverse_lazy('accounts:profile')
+
+
+
+    def get_object(self, queryset=None):
+
+        return self.request.user
+
+
+
+    def form_valid(self, form):
+
+        messages.success(self.request, 'Профиль обновлён.')
+
+        return super().form_valid(form)
+
+
+
+    def get_context_data(self, **kwargs):
+
+        context = super().get_context_data(**kwargs)
+
+        context['page_title'] = 'Редактирование профиля'
+
+        return context
+
+
+
+
+
+class UserPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
+
+    form_class = UserPasswordChangeForm
+
+    template_name = 'accounts/password_change.html'
+
+    success_url = reverse_lazy('accounts:profile')
+
+
+
+    def form_valid(self, form):
+
+        response = super().form_valid(form)
+
+        messages.success(self.request, 'Пароль изменён.')
+
+        return response
+
+
+
+    def get_context_data(self, **kwargs):
+
+        context = super().get_context_data(**kwargs)
+
+        context['page_title'] = 'Смена пароля'
 
         return context
 
@@ -980,33 +1060,11 @@ class AdminUserUpdateView(GlobalUserAdminRequiredMixin, UpdateView):
 
     model = User
 
-    fields = ('username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_superuser')
+    form_class = UserAdminUpdateForm
 
     template_name = 'administration/users/form.html'
 
     success_url = reverse_lazy('administration:admin_users')
-
-
-
-    def get_form(self, form_class=None):
-
-        form = super().get_form(form_class)
-
-        form.fields['username'].label = 'Логин'
-
-        form.fields['email'].label = 'E-mail'
-
-        form.fields['first_name'].label = 'Имя'
-
-        form.fields['last_name'].label = 'Фамилия'
-
-        form.fields['is_active'].label = 'Активен'
-
-        form.fields['is_staff'].label = 'Доступ в админку Django'
-
-        form.fields['is_superuser'].label = 'Системный администратор'
-
-        return form
 
 
 
