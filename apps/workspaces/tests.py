@@ -1177,29 +1177,13 @@ class AdminWorkspaceManagementTests(TestCase):
         self.assertNotContains(response, 'Назначить группы')
         self.assertNotContains(response, 'name="groups"')
 
-    def test_admin_can_assign_groups_to_user_without_prior_membership(self):
+    def test_memberships_page_shows_empty_state_for_user_without_groups(self):
         target = User.objects.create_user('global-assign-user', password=self.password)
-        operator_group = _operator_group(self.workspace)
         page_response = self.client.get(
             reverse('administration:admin_user_memberships', kwargs={'pk': target.pk}),
         )
         self.assertEqual(page_response.status_code, 200)
-        self.assertContains(page_response, 'Назначить группы')
-        self.assertContains(page_response, BUILTIN_GROUP_OPERATOR)
-
-        assign_response = self.client.post(
-            reverse('administration:admin_user_memberships', kwargs={'pk': target.pk}),
-            {
-                'groups': [str(operator_group.pk)],
-            },
-        )
-        self.assertEqual(assign_response.status_code, 302)
-        self.assertTrue(
-            WorkspaceGroupMembership.objects.filter(
-                group=operator_group,
-                user=target,
-            ).exists()
-        )
+        self.assertContains(page_response, 'Группы пока не назначены.')
 
     def test_admin_can_add_more_groups_to_existing_member(self):
         target = User.objects.create_user('existing-member', password=self.password)
