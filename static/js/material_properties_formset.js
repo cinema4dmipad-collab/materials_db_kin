@@ -68,42 +68,15 @@
         return label;
     }
 
-    function setRowUnitSuffix(row, unit) {
-        var valueCell = row.querySelector('.material-props-section__value');
-        if (!valueCell) {
-            return;
-        }
-        var valueRow = valueCell.querySelector('.material-props-section__value-row');
-        if (!valueRow) {
-            valueRow = document.createElement('div');
-            valueRow.className = 'material-props-section__value-row';
-            while (valueCell.firstChild) {
-                valueRow.appendChild(valueCell.firstChild);
-            }
-            valueCell.appendChild(valueRow);
-        }
-        var suffix = valueRow.querySelector('.material-props-section__unit-suffix');
-        unit = (unit || '').trim();
-        if (!unit) {
-            if (suffix) {
-                suffix.remove();
-            }
-            return;
-        }
-        if (!suffix) {
-            suffix = document.createElement('span');
-            suffix.className = 'material-props-section__unit-suffix';
-            valueRow.appendChild(suffix);
-        }
-        suffix.textContent = unit;
-    }
-
     function setRowPropertyMeta(row, label, unit) {
         var labelCell = row.querySelector('.material-props-section__name');
+        var unitCell = row.querySelector('.material-props-section__unit');
         if (labelCell) {
             labelCell.textContent = formatPropertyName(label, unit);
         }
-        setRowUnitSuffix(row, unit);
+        if (unitCell) {
+            unitCell.textContent = (unit || '').trim() || '—';
+        }
     }
 
     function materialPickerOptions() {
@@ -200,12 +173,10 @@
         setRowPropertyMeta(row, payload.label, payload.unit);
         if (payload.data_type === 'material_link') {
             ensureMaterialLinkValueField(row, payload.value || '');
-            setRowUnitSuffix(row, '');
+            setRowPropertyMeta(row, payload.label, '');
         } else if (payload.data_type === 'choice') {
             ensureChoiceValueField(row, payload.choices || [], payload.value || '');
-            setRowUnitSuffix(row, '');
-        } else {
-            setRowUnitSuffix(row, payload.unit);
+            setRowPropertyMeta(row, payload.label, '');
         }
     }
 

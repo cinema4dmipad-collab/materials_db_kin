@@ -133,6 +133,7 @@
                                 <tr>
                                     <th scope="col">Свойство</th>
                                     <th scope="col">Значение</th>
+                                    <th scope="col" class="material-properties-table__unit-col">Ед.</th>
                                     <th scope="col" class="text-end">Действия</th>
                                 </tr>
                             </thead>
@@ -143,7 +144,7 @@
                             </tbody>
                             <tbody>
                                 <tr id="material-form-properties-empty-row" class="material-props-section__empty{% if formset.forms %} d-none{% endif %}">
-                                    <td colspan="3" class="text-muted">Свойств пока нет — нажмите «Добавить», чтобы выбрать из справочника.</td>
+                                    <td colspan="4" class="text-muted">Свойств пока нет — нажмите «Добавить», чтобы выбрать из справочника.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -153,11 +154,8 @@
                         <tr class="property-form-row">
                             {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
                             <th scope="row" class="material-props-section__name">—</th>
-                            <td class="material-props-section__value">
-                                <div class="material-props-section__value-row">
-                                    {{ property_form.value }}
-                                </div>
-                            </td>
+                            <td class="material-props-section__value">{{ property_form.value }}</td>
+                            <td class="material-props-section__unit">—</td>
                             <td class="text-end text-nowrap">
                                 {% if formset.can_delete %}
                                 <span class="visually-hidden">{{ property_form.DELETE }}</span>

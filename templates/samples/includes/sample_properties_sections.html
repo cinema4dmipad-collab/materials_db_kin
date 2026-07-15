@@ -22,12 +22,13 @@
                                 <tr>
                                     <th scope="col">Свойство</th>
                                     <th scope="col">Значение</th>
+                                    <th scope="col" class="material-properties-table__unit-col">Ед.</th>
                                 </tr>
                             </thead>
-                            {% include 'includes/structure_properties_tbody.html' with structure_tbody_id='sample-structure-properties-section' %}
+                            {% include 'includes/structure_properties_tbody.html' with structure_tbody_id='sample-structure-properties-section' show_property_value_spacer=False %}
                             <tbody class="material-props-section">
                                 <tr class="material-props-section__header">
-                                    <th scope="colgroup" colspan="2">Из свойств материала</th>
+                                    <th scope="colgroup" colspan="3">Из свойств материала</th>
                                 </tr>
                             </tbody>
                             <tbody id="material-property-forms-container">
@@ -37,7 +38,7 @@
                             </tbody>
                             <tbody>
                                 <tr id="material-properties-empty-row" class="material-props-section__empty{% if material_property_forms %} d-none{% endif %}">
-                                    <td colspan="2" class="text-muted">{% if form.material.value %}У выбранного материала нет свойств.{% else %}Выберите материал — свойства подставятся автоматически.{% endif %}</td>
+                                    <td colspan="3" class="text-muted">{% if form.material.value %}У выбранного материала нет свойств.{% else %}Выберите материал — свойства подставятся автоматически.{% endif %}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -47,11 +48,8 @@
                         <tr class="property-form-row property-form-row--material">
                             {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
                             <th scope="row" class="material-props-section__name">—</th>
-                            <td class="material-props-section__value">
-                                <div class="material-props-section__value-row">
-                                    {{ property_form.value }}
-                                </div>
-                            </td>
+                            <td class="material-props-section__value">{{ property_form.value }}</td>
+                            <td class="material-props-section__unit">—</td>
                             <td class="visually-hidden">
                                 {{ property_form.property }}
                                 {% if formset.can_delete %}
@@ -77,6 +75,7 @@
                                 <tr>
                                     <th scope="col">Свойство</th>
                                     <th scope="col">Значение</th>
+                                    <th scope="col" class="material-properties-table__unit-col">Ед.</th>
                                     <th scope="col" class="text-end">Действия</th>
                                 </tr>
                             </thead>
@@ -87,7 +86,7 @@
                             </tbody>
                             <tbody>
                                 <tr id="extra-properties-empty-row" class="material-props-section__empty{% if extra_property_forms %} d-none{% endif %}">
-                                    <td colspan="3" class="text-muted">Дополнительных свойств пока нет.</td>
+                                    <td colspan="4" class="text-muted">Дополнительных свойств пока нет.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -97,11 +96,8 @@
                         <tr class="property-form-row property-form-row--extra">
                             {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
                             <th scope="row" class="material-props-section__name">—</th>
-                            <td class="material-props-section__value">
-                                <div class="material-props-section__value-row">
-                                    {{ property_form.value }}
-                                </div>
-                            </td>
+                            <td class="material-props-section__value">{{ property_form.value }}</td>
+                            <td class="material-props-section__unit">—</td>
                             <td class="text-end text-nowrap">
                                 {% if formset.can_delete %}
                                 <span class="visually-hidden">{{ property_form.DELETE }}</span>
