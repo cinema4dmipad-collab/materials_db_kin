@@ -19,6 +19,7 @@ STRUCTURE_FIELD_DELETE_LOCK_ERROR = (
     'Нельзя удалять поля после создания SQL-таблицы.'
 )
 MATERIAL_LINK_FIELD_TYPE = 'MaterialLink'
+CHOICE_FIELD_TYPE = 'ChoiceField'
 
 
 class StructureType(WorkspaceVisibilityMixin, models.Model):
@@ -163,6 +164,7 @@ class StructureField(models.Model):
         ('DateField', 'Дата'),
         ('DateTimeField', 'Дата и время'),
         (MATERIAL_LINK_FIELD_TYPE, 'Материал'),
+        (CHOICE_FIELD_TYPE, 'Выбор из списка'),
     ]
 
     structure_type = models.ForeignKey(
@@ -178,6 +180,12 @@ class StructureField(models.Model):
     max_digits = models.IntegerField(null=True, blank=True, default=10)
     decimal_places = models.IntegerField(null=True, blank=True, default=DEFAULT_DECIMAL_PLACES)
     max_length = models.IntegerField(null=True, blank=True, default=255)
+    choice_options = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Варианты выбора',
+        help_text='Список объектов {"value": "...", "label": "..."} для типа «Выбор из списка».',
+    )
     foreign_key_model = models.CharField(
         max_length=200,
         blank=True,
@@ -204,6 +212,7 @@ class StructureField(models.Model):
         'max_digits',
         'decimal_places',
         'max_length',
+        'choice_options',
         'foreign_key_model',
         'structure_type_id',
     )

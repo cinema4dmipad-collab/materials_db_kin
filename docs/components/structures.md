@@ -11,7 +11,7 @@ Dynamic **structure types**: configurable fields and per-type PostgreSQL tables.
 | `StructureType` | Name, code, `table_name`, `display_color`, `allow_layers`, `is_created`, `is_active` |
 | `StructureField` | Column metadata: name, label, type, defaults, sort order |
 
-Field types include `CharField`, `IntegerField`, `DecimalField`, `DateField`, `MaterialLink`. New `MaterialLink` columns are added by picking a reference property with type «Материал» (not via a dedicated structure shortcut).
+Field types include `CharField`, `IntegerField`, `DecimalField`, `DateField`, `MaterialLink`, `ChoiceField`. New `MaterialLink` / `ChoiceField` columns are added by picking a reference property with type «Материал» / «Выбор из списка» (not via a dedicated structure shortcut). Choice options are copied onto the structure field and rendered as a select on material forms.
 
 ## SQL Layer
 

@@ -9,13 +9,15 @@ from apps.core.number_utils import normalize_decimal_input, parse_decimal
 
 from apps.materials.form_widgets import material_select_widget_attrs
 from apps.materials.models import Material
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField
+from apps.structures.choice_options import choice_pairs, resolved_choice_options
+from apps.structures.models import CHOICE_FIELD_TYPE, MATERIAL_LINK_FIELD_TYPE, StructureField
 from apps.structures.sql_executor import SQLExecutor
 from apps.structures import table_storage
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _BOOTSTRAP_CHECK = {'class': 'form-check-input'}
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
+_CHOICE_SELECT = {**_BOOTSTRAP_SELECT, 'data-choice-picker': 'true'}
 
 
 class MaterialChoiceField(forms.ModelChoiceField):
@@ -88,6 +90,19 @@ def _build_dynamic_field(structure_field: StructureField, workspace=None) -> for
             initial=initial,
             queryset=materials_for_picker_queryset(workspace),
             widget=forms.Select(attrs=material_select_widget_attrs()),
+        )
+    choice_options = resolved_choice_options(structure_field)
+    if structure_field.field_type == CHOICE_FIELD_TYPE or choice_options:
+        options = choice_pairs(choice_options)
+        if initial not in (None, '') and str(initial) not in {item[0] for item in options}:
+            options = [(str(initial), str(initial))] + options
+        return forms.ChoiceField(
+            label=label,
+            required=required,
+            help_text=help_text,
+            initial=initial if initial not in (None,) else '',
+            choices=[('', '---------')] + options,
+            widget=forms.Select(attrs=_CHOICE_SELECT),
         )
     if structure_field.field_type == 'CharField':
         return forms.CharField(

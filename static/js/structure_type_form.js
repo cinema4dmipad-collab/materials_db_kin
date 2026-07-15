@@ -17,6 +17,7 @@
 
     const FIELD_TYPE_DEFAULTS = {
         CharField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
+        ChoiceField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
         DecimalField: { max_length: '', max_digits: '10', decimal_places: '4', default_value: '' },
         MaterialLink: { max_length: '', max_digits: '', decimal_places: '', default_value: '' },
     };
@@ -246,6 +247,8 @@
         if (data.max_digits != null && data.max_digits !== '') {
             setRowInputValue(row, 'max_digits', String(data.max_digits));
         }
+        const choices = data.choice_options || data.choices || [];
+        setRowInputValue(row, 'choice_options', JSON.stringify(choices));
         syncRowSummary(row);
     }
 
@@ -260,7 +263,10 @@
             getUsedColumnNames,
             metaLine(item) {
                 const escapeHtml = picker.escapeHtml;
-                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(fieldTypeLabel(item.field_type))}`;
+                const typeLabel = item.data_type === 'choice'
+                    ? (picker.DATA_TYPE_LABELS.choice || 'Выбор из списка')
+                    : fieldTypeLabel(item.field_type);
+                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(typeLabel)}`;
             },
         });
     }
@@ -449,7 +455,10 @@
             getUsedColumnNames,
             metaLine(item) {
                 const escapeHtml = picker.escapeHtml;
-                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(fieldTypeLabel(item.field_type))}`;
+                const typeLabel = item.data_type === 'choice'
+                    ? (picker.DATA_TYPE_LABELS.choice || 'Выбор из списка')
+                    : fieldTypeLabel(item.field_type);
+                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(typeLabel)}`;
             },
             onConfirm(payloads) {
                 payloads.forEach((payload) => {

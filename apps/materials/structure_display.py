@@ -3,7 +3,8 @@ from __future__ import annotations
 from apps.core.unit_display import split_label_and_unit
 from apps.structures.display_format import format_structure_field_display
 from apps.structures.forms import material_from_value
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
+from apps.structures.choice_options import choice_label_for_value, resolved_choice_options
+from apps.structures.models import CHOICE_FIELD_TYPE, MATERIAL_LINK_FIELD_TYPE
 
 STRUCTURE_SERVICE_COLUMNS = frozenset({'id', 'created_at', 'updated_at', 'created_by'})
 
@@ -16,6 +17,9 @@ def structure_field_display_value(field, value):
         if material is not None:
             return f'{material.code} - {material.name}'
         return value
+    options = resolved_choice_options(field)
+    if field.field_type == CHOICE_FIELD_TYPE or options:
+        return choice_label_for_value(options, value) or '—'
     return format_structure_field_display(field, value)
 
 
