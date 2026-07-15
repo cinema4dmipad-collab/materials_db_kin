@@ -132,7 +132,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         )
         item = build_structure_property_item(field, {'fiber_vol': '32.0'})
         self.assertEqual(item['unit'], '%')
-        self.assertEqual(item['label'], 'Объемное содержание волокна, %')
+        self.assertEqual(item['label'], 'Объемное содержание волокна')
 
     def test_get_structure_params_returns_dynamic_row(self):
         row_id = self.insert_structure_row(title='Laminate')
