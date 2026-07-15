@@ -54,7 +54,7 @@ Key modules:
 | `type_forms.py` / `type_views.py` | Public UI for type definition and table creation |
 | `property_mapping.py` | Map reference properties to structure fields |
 
-After a SQL table is created (`is_created=True`), field definitions are **immutable** until the table is dropped.
+After a SQL table is created (`is_created=True`), existing field definitions cannot be changed or deleted; new fields may still be added (`ALTER TABLE … ADD COLUMN`).
 
 ## Material ↔ Structure Link
 

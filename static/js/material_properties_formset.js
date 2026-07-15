@@ -53,29 +53,133 @@
         return ids;
     }
 
-    function formatPropertyLabel(label, unit) {
+    function formatPropertyName(label, unit) {
         label = (label || '').trim();
         unit = (unit || '').trim();
         if (!label) {
             return '—';
         }
+        if (unit && label.endsWith(', ' + unit)) {
+            return label.slice(0, -(unit.length + 2)).trim() || label;
+        }
+        if (unit && label.endsWith(',' + unit)) {
+            return label.slice(0, -(unit.length + 1)).trim() || label;
+        }
+        return label;
+    }
+
+    function setRowUnitSuffix(row, unit) {
+        var valueCell = row.querySelector('.material-props-section__value');
+        if (!valueCell) {
+            return;
+        }
+        var valueRow = valueCell.querySelector('.material-props-section__value-row');
+        if (!valueRow) {
+            valueRow = document.createElement('div');
+            valueRow.className = 'material-props-section__value-row';
+            while (valueCell.firstChild) {
+                valueRow.appendChild(valueCell.firstChild);
+            }
+            valueCell.appendChild(valueRow);
+        }
+        var suffix = valueRow.querySelector('.material-props-section__unit-suffix');
+        unit = (unit || '').trim();
         if (!unit) {
-            return label;
+            if (suffix) {
+                suffix.remove();
+            }
+            return;
         }
-        if (label.endsWith(', ' + unit) || label.endsWith(',' + unit)) {
-            return label;
+        if (!suffix) {
+            suffix = document.createElement('span');
+            suffix.className = 'material-props-section__unit-suffix';
+            valueRow.appendChild(suffix);
         }
-        return label + ', ' + unit;
+        suffix.textContent = unit;
     }
 
     function setRowPropertyMeta(row, label, unit) {
         var labelCell = row.querySelector('.material-props-section__name');
-        var unitCell = row.querySelector('.material-props-section__unit');
         if (labelCell) {
-            labelCell.textContent = formatPropertyLabel(label, unit);
+            labelCell.textContent = formatPropertyName(label, unit);
         }
-        if (unitCell) {
-            unitCell.textContent = unit || '—';
+        setRowUnitSuffix(row, unit);
+    }
+
+    function materialPickerOptions() {
+        if (!window.ReferenceMaterialsPicker || !window.ReferenceMaterialsPicker.getMaterials) {
+            return [];
+        }
+        return window.ReferenceMaterialsPicker.getMaterials();
+    }
+
+    function ensureMaterialLinkValueField(row, selectedMaterialId) {
+        var valueCell = row.querySelector('.material-props-section__value');
+        if (!valueCell) {
+            return;
+        }
+        var existing = valueCell.querySelector('[name$="-value"]');
+        var fieldName = existing ? existing.name : '';
+        var fieldId = existing ? existing.id : '';
+        valueCell.innerHTML = '';
+        var select = document.createElement('select');
+        select.name = fieldName;
+        if (fieldId) {
+            select.id = fieldId;
+        }
+        select.className = 'form-select js-material-select material-picker-select';
+        select.setAttribute('data-material-picker', 'true');
+        var empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = '---------';
+        select.appendChild(empty);
+        materialPickerOptions().forEach(function (item) {
+            var option = document.createElement('option');
+            option.value = item.material_id;
+            option.textContent = item.label || (item.code + ' - ' + item.name);
+            select.appendChild(option);
+        });
+        if (selectedMaterialId) {
+            select.value = selectedMaterialId;
+        }
+        valueCell.appendChild(select);
+        if (window.MaterialPickerFields && window.MaterialPickerFields.init) {
+            window.MaterialPickerFields.init(valueCell);
+        }
+    }
+
+    function ensureChoiceValueField(row, choices, selectedValue) {
+        var valueCell = row.querySelector('.material-props-section__value');
+        if (!valueCell) {
+            return;
+        }
+        var existing = valueCell.querySelector('[name$="-value"]');
+        var fieldName = existing ? existing.name : '';
+        var fieldId = existing ? existing.id : '';
+        valueCell.innerHTML = '';
+        var select = document.createElement('select');
+        select.name = fieldName;
+        if (fieldId) {
+            select.id = fieldId;
+        }
+        select.className = 'form-select';
+        select.setAttribute('data-choice-picker', 'true');
+        var empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = '---------';
+        select.appendChild(empty);
+        (choices || []).forEach(function (item) {
+            var option = document.createElement('option');
+            option.value = item.value;
+            option.textContent = item.label || item.value;
+            select.appendChild(option);
+        });
+        if (selectedValue) {
+            select.value = selectedValue;
+        }
+        valueCell.appendChild(select);
+        if (window.ChoicePickerFields && window.ChoicePickerFields.init) {
+            window.ChoicePickerFields.init(valueCell);
         }
     }
 
@@ -94,6 +198,15 @@
             propertySelect.value = payload.property_id;
         }
         setRowPropertyMeta(row, payload.label, payload.unit);
+        if (payload.data_type === 'material_link') {
+            ensureMaterialLinkValueField(row, payload.value || '');
+            setRowUnitSuffix(row, '');
+        } else if (payload.data_type === 'choice') {
+            ensureChoiceValueField(row, payload.choices || [], payload.value || '');
+            setRowUnitSuffix(row, '');
+        } else {
+            setRowUnitSuffix(row, payload.unit);
+        }
     }
 
     function appendPropertyFromTemplate(container, template, totalFormsInput) {
@@ -198,6 +311,135 @@
         focusPropertyValue(row);
     }
 
+    function entryMapForIndex(entries, index) {
+        var prefix = PREFIX + '-' + index + '-';
+        var map = {};
+        entries.forEach(function (entry) {
+            if (!entry || !entry.name || entry.name.indexOf(prefix) !== 0) {
+                return;
+            }
+            map[entry.name.slice(prefix.length)] = entry.value;
+        });
+        return map;
+    }
+
+    function collectDraftIndices(entries) {
+        var indices = new Set();
+        entries.forEach(function (entry) {
+            if (!entry || !entry.name) {
+                return;
+            }
+            var match = entry.name.match(/^properties-(\d+)-/);
+            if (match) {
+                indices.add(parseInt(match[1], 10));
+            }
+        });
+        return Array.from(indices).sort(function (a, b) {
+            return a - b;
+        });
+    }
+
+    function rebuildFromDraftEntries(entries) {
+        var container = document.getElementById('property-forms-container');
+        var template = document.getElementById('empty-property-form-template');
+        var totalFormsInput = document.getElementById('id_properties-TOTAL_FORMS');
+        if (!container || !template || !totalFormsInput || !Array.isArray(entries)) {
+            return false;
+        }
+
+        container.querySelectorAll('.property-form-row').forEach(function (row) {
+            row.remove();
+        });
+        totalFormsInput.value = '0';
+
+        var restored = 0;
+        var initialCount = 0;
+        collectDraftIndices(entries).forEach(function (index) {
+            var fields = entryMapForIndex(entries, index);
+            var propertyId = fields.property || '';
+            var isDeleted = fields.DELETE === 'on'
+                || fields.DELETE === 'true'
+                || fields.DELETE === '1';
+            if (!propertyId && !fields.id) {
+                return;
+            }
+            // Skip brand-new rows that were already deleted in the UI.
+            if (isDeleted && !fields.id) {
+                return;
+            }
+
+            var row = appendPropertyFromTemplate(container, template, totalFormsInput);
+            var payload = findPropertyPayload(propertyId) || {
+                property_id: propertyId,
+                label: fields.property || propertyId,
+                unit: '',
+                data_type: '',
+                choices: [],
+            };
+            payload = Object.assign({}, payload, {
+                property_id: propertyId || payload.property_id,
+                value: fields.value || '',
+            });
+            fillPropertyRow(row, payload);
+
+            var idInput = row.querySelector('input[name$="-id"]');
+            if (idInput && fields.id) {
+                idInput.value = fields.id;
+                initialCount += 1;
+            }
+            var deleteInput = row.querySelector('input[name$="-DELETE"]');
+            if (isDeleted && deleteInput) {
+                deleteInput.checked = true;
+                row.classList.add('d-none');
+            }
+            var valueInput = row.querySelector('[name$="-value"]');
+            if (valueInput && fields.value != null && !isDeleted) {
+                valueInput.value = fields.value;
+                if (window.ChoicePickerFields && window.ChoicePickerFields.syncSelect) {
+                    window.ChoicePickerFields.syncSelect(valueInput);
+                }
+                if (window.MaterialPickerFields && window.MaterialPickerFields.syncSelect) {
+                    window.MaterialPickerFields.syncSelect(valueInput);
+                }
+            }
+            restored += 1;
+        });
+
+        var initialFormsInput = document.getElementById('id_properties-INITIAL_FORMS');
+        if (initialFormsInput) {
+            initialFormsInput.value = String(initialCount);
+        }
+        updateEmptyState(container);
+        return restored > 0;
+    }
+
+    function enhanceExistingPropertyRows(container) {
+        container.querySelectorAll('.property-form-row').forEach(function (row) {
+            var propertySelect = row.querySelector('[name$="-property"]');
+            if (!propertySelect || !propertySelect.value) {
+                return;
+            }
+            var payload = findPropertyPayload(propertySelect.value);
+            if (!payload) {
+                return;
+            }
+            setRowPropertyMeta(row, payload.label, payload.unit);
+            if (payload.data_type === 'choice') {
+                var valueInput = row.querySelector('[name$="-value"]');
+                var needsChoiceSelect = !valueInput
+                    || valueInput.tagName !== 'SELECT'
+                    || valueInput.options.length <= 1;
+                if (needsChoiceSelect) {
+                    ensureChoiceValueField(
+                        row,
+                        payload.choices || [],
+                        valueInput ? valueInput.value : '',
+                    );
+                }
+            }
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var container = document.getElementById('property-forms-container');
         var template = document.getElementById('empty-property-form-template');
@@ -208,8 +450,19 @@
             return;
         }
 
+        var form = container.closest('form');
+        if (form && window.MaterialFormDraft && window.MaterialFormDraft.restore) {
+            window.MaterialFormDraft.restore(form);
+        }
+
         container.querySelectorAll('.property-form-row').forEach(function (row) {
             bindDeleteButton(container, row, totalFormsInput);
+            if (window.MaterialPickerFields && window.MaterialPickerFields.init) {
+                window.MaterialPickerFields.init(row);
+            }
+            if (window.ChoicePickerFields && window.ChoicePickerFields.init) {
+                window.ChoicePickerFields.init(row);
+            }
         });
 
         picker.bind({
@@ -225,7 +478,6 @@
             },
         });
 
-        var form = container.closest('form');
         if (form) {
             form.addEventListener('submit', function () {
                 var rows = container.querySelectorAll('.property-form-row');
@@ -235,21 +487,10 @@
 
         updateEmptyState(container);
         addCreatedPropertyFromUrl(container, template, totalFormsInput);
-
-        container.querySelectorAll('.property-form-row').forEach(function (row) {
-            var propertySelect = row.querySelector('[name$="-property"]');
-            var unitCell = row.querySelector('.material-props-section__unit');
-            if (!propertySelect || !propertySelect.value || !unitCell) {
-                return;
-            }
-            if ((unitCell.textContent || '').trim() !== '—') {
-                return;
-            }
-            var payload = findPropertyPayload(propertySelect.value);
-            if (!payload) {
-                return;
-            }
-            setRowPropertyMeta(row, payload.label, payload.unit);
-        });
+        enhanceExistingPropertyRows(container);
     });
+
+    window.MaterialPropertiesFormset = {
+        rebuildFromDraftEntries: rebuildFromDraftEntries,
+    };
 })();

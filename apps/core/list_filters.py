@@ -26,22 +26,24 @@ def build_choice_label_filter(choices: list[tuple[str, str]] | tuple[tuple[str, 
 
 def build_creator_filter(
     user_field: str = 'created_by_user',
-    label_field: str = 'created_by',
+    label_field: str | None = None,
 ):
     def filter_fn(query: str):
         q = query.strip()
         if not q:
             return None
-        condition = Q(**{f'{label_field}__icontains': q})
-        condition |= Q(**{f'{user_field}__username__icontains': q})
+        condition = Q(**{f'{user_field}__username__icontains': q})
         condition |= Q(**{f'{user_field}__first_name__icontains': q})
         condition |= Q(**{f'{user_field}__last_name__icontains': q})
+        if label_field:
+            condition |= Q(**{f'{label_field}__icontains': q})
         return condition
 
     return filter_fn
 
 
 DEFAULT_CREATOR_FILTER = build_creator_filter()
+CREATOR_WITH_LABEL_FILTER = build_creator_filter(label_field='created_by')
 UPLOADED_BY_CREATOR_FILTER = build_creator_filter('uploaded_by_user', 'uploaded_by')
 
 

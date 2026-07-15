@@ -14,9 +14,11 @@ from apps.core.fields import (
 )
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.materials.models import Material, MaterialProperty
+from apps.materials.picker_data import materials_for_picker_queryset
 from apps.materials.services import find_shared_materials_by_code, find_shared_materials_by_name
+from apps.references.models import Property
 from apps.structures.models import StructureType
-from apps.structures.forms import _build_dynamic_field, material_from_value
+from apps.structures.forms import MaterialChoiceField, _build_dynamic_field, material_from_value
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
 from apps.structures.sql_executor import SQLExecutor
 from apps.workspaces.visibility import VisibilityMode
@@ -46,6 +48,17 @@ _LAYER_NUMBER_WIDGET = {
 
 
 class MaterialPropertyInlineFormSet(forms.BaseInlineFormSet):
+    def __init__(self, *args, workspace=None, **kwargs):
+        self.workspace = workspace
+        super().__init__(*args, **kwargs)
+
+    def get_form_kwargs(self, index):
+        kwargs = super().get_form_kwargs(index)
+        kwargs['workspace'] = self.workspace
+        parent = self.instance if getattr(self.instance, 'pk', None) else None
+        kwargs['parent_material'] = parent
+        return kwargs
+
     def clean(self):
         super().clean()
         seen = {}
@@ -74,8 +87,97 @@ class MaterialPropertyForm(forms.ModelForm):
             'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
         }
 
+    def __init__(self, *args, workspace=None, parent_material=None, **kwargs):
+        self.workspace = workspace
+        self.parent_material = parent_material
+        super().__init__(*args, **kwargs)
+        prop = self._resolve_property()
+        if prop and prop.data_type == Property.MATERIAL_LINK_DATA_TYPE:
+            self._configure_material_link_value()
+        elif prop and prop.data_type == Property.CHOICE_DATA_TYPE:
+            self._configure_choice_value(prop)
+
+    def _resolve_property(self):
+        if self.is_bound:
+            raw = self.data.get(self.add_prefix('property'))
+            if raw:
+                return Property.objects.filter(pk=raw).first()
+        if getattr(self.instance, 'property_id', None):
+            return self.instance.property
+        initial = self.initial.get('property')
+        if initial is None:
+            return None
+        if isinstance(initial, Property):
+            return initial
+        return Property.objects.filter(pk=initial).first()
+
+    def _configure_material_link_value(self):
+        queryset = materials_for_picker_queryset(self.workspace)
+        if self.parent_material and self.parent_material.pk:
+            queryset = queryset.exclude(pk=self.parent_material.pk)
+
+        raw_value = None
+        if self.is_bound:
+            raw_value = self.data.get(self.add_prefix('value'))
+        if raw_value in (None, ''):
+            raw_value = self.initial.get('value')
+        if raw_value in (None, ''):
+            raw_value = getattr(self.instance, 'value', None)
+        current = material_from_value(raw_value)
+        if current and not queryset.filter(pk=current.pk).exists():
+            queryset = (Material.objects.filter(pk=current.pk) | queryset).distinct()
+
+        self.fields['value'] = MaterialChoiceField(
+            label=self.fields['value'].label,
+            required=False,
+            queryset=queryset,
+            initial=current,
+            widget=forms.Select(attrs=material_select_widget_attrs()),
+        )
+
+    def _configure_choice_value(self, prop):
+        options = [(item.value, item.label) for item in prop.choice_options()]
+        raw_value = None
+        if self.is_bound:
+            raw_value = self.data.get(self.add_prefix('value'))
+        if raw_value in (None, ''):
+            raw_value = self.initial.get('value')
+        if raw_value in (None, ''):
+            raw_value = getattr(self.instance, 'value', None) or ''
+        if raw_value and raw_value not in {item[0] for item in options}:
+            options = [(raw_value, raw_value)] + options
+        self.fields['value'] = forms.ChoiceField(
+            label=self.fields['value'].label,
+            required=False,
+            choices=[('', '---------')] + options,
+            initial=raw_value or '',
+            widget=forms.Select(
+                attrs={
+                    **_BOOTSTRAP_SELECT,
+                    'data-choice-picker': 'true',
+                }
+            ),
+        )
+
     def clean(self):
         cleaned_data = super().clean()
+        prop = cleaned_data.get('property') or self._resolve_property()
+        if prop and prop.data_type == Property.MATERIAL_LINK_DATA_TYPE:
+            value = cleaned_data.get('value')
+            if isinstance(value, Material):
+                cleaned_data['value'] = str(value.pk)
+            elif value in (None, ''):
+                cleaned_data['value'] = ''
+            else:
+                linked = material_from_value(value)
+                cleaned_data['value'] = str(linked.pk) if linked else ''
+            return cleaned_data
+        if prop and prop.data_type == Property.CHOICE_DATA_TYPE:
+            value = (cleaned_data.get('value') or '').strip()
+            if value and not prop.choices.filter(value=value).exists():
+                self.add_error('value', 'Выберите значение из списка вариантов свойства.')
+            cleaned_data['value'] = value
+            return cleaned_data
         clean_localized_number_value(self)
         return cleaned_data
 
@@ -92,7 +194,14 @@ MaterialPropertyFormSet = inlineformset_factory(
 )
 
 
-def build_material_property_formset(*, instance=None, initial=None, data=None, prefix='properties'):
+def build_material_property_formset(
+    *,
+    workspace=None,
+    instance=None,
+    initial=None,
+    data=None,
+    prefix='properties',
+):
     initial = list(initial or [])
     formset_class = inlineformset_factory(
         Material,
@@ -104,7 +213,11 @@ def build_material_property_formset(*, instance=None, initial=None, data=None, p
         formset=MaterialPropertyInlineFormSet,
         widgets={},
     )
-    kwargs = {'instance': instance or Material(), 'prefix': prefix}
+    kwargs = {
+        'instance': instance or Material(),
+        'prefix': prefix,
+        'workspace': workspace,
+    }
     if data is not None:
         kwargs['data'] = data
     else:

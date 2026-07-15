@@ -121,6 +121,8 @@ class StructureTypeCreateView(SystemAdminRequiredMixin, AppViewMixin, StructureT
         context = super().get_context_data(**kwargs)
         context['is_edit'] = False
         context['fields_locked'] = False
+        context['can_delete_fields'] = True
+        context['existing_fields_readonly'] = False
         return context
 
 
@@ -134,13 +136,6 @@ class StructureTypeUpdateView(AppViewMixin, StructureTypeEditableMixin, Structur
 
     def get_queryset(self):
         return structure_types_visible_in(self.request.active_workspace).filter(is_active=True)
-
-    def dispatch(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        if self.object.is_created:
-            messages.info(request, 'После создания SQL-таблицы редактирование полей недоступно.')
-            return redirect('structures:type_manage', type_code=self.object.code)
-        return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
         field_formset = self.get_field_formset()
@@ -162,7 +157,9 @@ class StructureTypeUpdateView(AppViewMixin, StructureTypeEditableMixin, Structur
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_edit'] = True
-        context['fields_locked'] = self.object.is_created
+        context['fields_locked'] = False
+        context['can_delete_fields'] = not self.object.is_created
+        context['existing_fields_readonly'] = self.object.is_created
         return context
 
 

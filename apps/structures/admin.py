@@ -76,8 +76,6 @@ class StructureFieldInline(admin.TabularInline):
         return bool(obj and obj.is_created)
 
     def has_add_permission(self, request, obj=None):
-        if self._is_locked(obj):
-            return False
         return super().has_add_permission(request, obj)
 
     def has_change_permission(self, request, obj=None):
@@ -91,19 +89,15 @@ class StructureFieldInline(admin.TabularInline):
         return super().has_delete_permission(request, obj)
 
     def get_readonly_fields(self, request, obj=None):
-        if self._is_locked(obj):
-            return list(self.fields)
         return super().get_readonly_fields(request, obj)
 
     def get_extra(self, request, obj=None, **kwargs):
         if self._is_locked(obj):
-            return 0
+            return 1
         return super().get_extra(request, obj, **kwargs)
 
     def get_max_num(self, request, obj=None, **kwargs):
-        if self._is_locked(obj):
-            return obj.fields.count()
-        return super().get_max_num(request, obj, **kwargs)
+        return None
 
 
 @admin.register(StructureType)
@@ -138,7 +132,8 @@ class StructureTypeAdmin(admin.ModelAdmin):
         if structure_type and structure_type.is_created:
             messages.warning(
                 request,
-                'SQL-таблица уже создана: поля структуры доступны только для чтения.',
+                'SQL-таблица уже создана: можно добавлять новые поля, '
+                'но нельзя изменять или удалять существующие.',
             )
         return super().change_view(request, object_id, form_url, extra_context)
 
@@ -228,8 +223,6 @@ class StructureFieldAdmin(admin.ModelAdmin):
         )
 
     def has_add_permission(self, request):
-        if self._is_structure_type_locked(self._request_structure_type_id(request)):
-            return False
         return super().has_add_permission(request)
 
     def has_change_permission(self, request, obj=None):

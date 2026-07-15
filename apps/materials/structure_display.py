@@ -22,9 +22,9 @@ def structure_field_display_value(field, value):
 def build_structure_property_item(field, structure_params):
     value = structure_params.get(field.name)
     label = field.label or field.name
-    _, unit = split_label_and_unit(label)
+    base_label, unit = split_label_and_unit(label)
     return {
-        'label': label,
+        'label': base_label or label,
         'unit': unit,
         'name': field.name,
         'field_type': field.field_type,

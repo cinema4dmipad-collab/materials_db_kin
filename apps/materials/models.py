@@ -185,5 +185,17 @@ class MaterialProperty(models.Model):
     def __str__(self):
         return f"{self.material.code} - {self.property.display_name}: {self.value}"
 
+    def linked_material(self):
+        if getattr(self.property, 'data_type', None) != Property.MATERIAL_LINK_DATA_TYPE:
+            return None
+        from apps.structures.forms import material_from_value
+
+        return material_from_value(self.value)
+
+    def choice_display_value(self):
+        if getattr(self.property, 'data_type', None) != Property.CHOICE_DATA_TYPE:
+            return self.value
+        return self.property.choice_label_for_value(self.value)
+
     class Meta:
         unique_together = ['material', 'property']

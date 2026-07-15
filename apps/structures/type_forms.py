@@ -13,7 +13,12 @@ from apps.structures.identifiers import (
     validate_table_name,
 )
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
+from apps.structures.models import (
+    MATERIAL_LINK_FIELD_TYPE,
+    STRUCTURE_FIELD_DELETE_LOCK_ERROR,
+    StructureField,
+    StructureType,
+)
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
@@ -256,6 +261,16 @@ class StructureFieldForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['name'].required = False
+        if (
+            self.instance.pk
+            and self.instance.structure_type_id
+            and StructureType.objects.filter(
+                pk=self.instance.structure_type_id,
+                is_created=True,
+            ).exists()
+        ):
+            for field in self.fields.values():
+                field.disabled = True
 
     def clean(self):
         cleaned_data = super().clean()
@@ -375,12 +390,14 @@ class StructureFieldFormSet(forms.BaseInlineFormSet):
 
     def clean(self):
         super().clean()
-        if self.instance and self.instance.is_created:
-            return
-
+        table_created = bool(self.instance and self.instance.is_created)
         seen_names: set[str] = set()
         for form in self.forms:
-            if not form.cleaned_data or form.cleaned_data.get('DELETE'):
+            if not form.cleaned_data:
+                continue
+            if form.cleaned_data.get('DELETE'):
+                if table_created and form.instance.pk:
+                    form.add_error(None, STRUCTURE_FIELD_DELETE_LOCK_ERROR)
                 continue
             name = (form.cleaned_data.get('name') or '').strip().lower()
             if not name:

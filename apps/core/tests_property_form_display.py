@@ -27,7 +27,7 @@ class PropertyFormDisplayTests(TestCase):
         form = MaterialPropertyForm(initial={'property': prop.pk, 'value': '1.0'})
         enrich_property_form_display(form)
         self.assertEqual(form.property_unit, 'g/cm3')
-        self.assertEqual(form.property_label, 'Density, g/cm3')
+        self.assertEqual(form.property_label, 'Density')
 
     def test_enrich_sets_unit_from_legacy_display_name(self):
         prop = Property.objects.create(
@@ -39,4 +39,4 @@ class PropertyFormDisplayTests(TestCase):
         form = MaterialPropertyForm(initial={'property': prop.pk, 'value': '1.0'})
         enrich_property_form_display(form)
         self.assertEqual(form.property_unit, 'г/см³')
-        self.assertEqual(form.property_label, 'Плотность, г/см³')
+        self.assertEqual(form.property_label, 'Плотность')

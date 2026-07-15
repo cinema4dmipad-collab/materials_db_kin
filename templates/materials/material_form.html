@@ -7,6 +7,7 @@
 
 {% block content %}
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
+<link href="{% static 'css/choice_picker.css' %}" rel="stylesheet">
 {% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}" rel="stylesheet">{% endif %}
 <div class="card mb-4 sticky-form-page">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -132,7 +133,6 @@
                                 <tr>
                                     <th scope="col">Свойство</th>
                                     <th scope="col">Значение</th>
-                                    <th scope="col" class="material-properties-table__unit-col">Единица</th>
                                     <th scope="col" class="text-end">Действия</th>
                                 </tr>
                             </thead>
@@ -143,7 +143,7 @@
                             </tbody>
                             <tbody>
                                 <tr id="material-form-properties-empty-row" class="material-props-section__empty{% if formset.forms %} d-none{% endif %}">
-                                    <td colspan="4" class="text-muted">Свойств пока нет — нажмите «Добавить», чтобы выбрать из справочника.</td>
+                                    <td colspan="3" class="text-muted">Свойств пока нет — нажмите «Добавить», чтобы выбрать из справочника.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -153,8 +153,11 @@
                         <tr class="property-form-row">
                             {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
                             <th scope="row" class="material-props-section__name">—</th>
-                            <td class="material-props-section__value">{{ property_form.value }}</td>
-                            <td class="material-props-section__unit">—</td>
+                            <td class="material-props-section__value">
+                                <div class="material-props-section__value-row">
+                                    {{ property_form.value }}
+                                </div>
+                            </td>
                             <td class="text-end text-nowrap">
                                 {% if formset.can_delete %}
                                 <span class="visually-hidden">{{ property_form.DELETE }}</span>
@@ -299,6 +302,7 @@
 <script src="{% static 'js/reference_structure_types_picker.js' %}"></script>
 <script src="{% static 'js/structure_type_picker_field.js' %}"></script>
 <script src="{% static 'js/material_picker_fields.js' %}"></script>
+<script src="{% static 'js/choice_picker_fields.js' %}"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
 <script src="{% static 'js/composite_layer_diagram_live.js' %}"></script>
 <script src="{% static 'js/composite_layers_formset.js' %}"></script>

@@ -38,8 +38,8 @@ docker compose exec web python manage.py seed_data
 - Form renderer: `django.forms.renderers.DjangoTemplates` (not default)
 - `Material.code` uniqueness is scoped to workspace (`unique_material_code_per_workspace`), not global
 - `Sample.code` uniqueness is scoped to workspace
-- `StructureField` is locked after `StructureType.is_created=True` — fields cannot be added/modified/deleted after table creation
-- `MaterialLink` field type in dynamic structures creates a UUID FK to `materials_material(id)` ON DELETE SET NULL
+- After `StructureType.is_created=True`, new `StructureField` rows can be added (`ALTER TABLE … ADD COLUMN`); existing fields cannot be modified or deleted
+- Material links: create a reference property with `data_type=material_link`, then add it to a structure via the properties picker (creates a `MaterialLink` column). There is no separate «Ссылка на материал» shortcut on the structure form.
 
 ## CI / Deploy
 

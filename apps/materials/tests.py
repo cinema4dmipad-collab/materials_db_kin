@@ -314,9 +314,10 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Свойства')
         self.assertContains(response, 'Из параметров структуры')
         self.assertContains(response, 'Дополнительные свойства')
-        self.assertContains(response, 'Density, g/cm3')
+        self.assertContains(response, 'Density')
         self.assertContains(response, '1,55')
         self.assertContains(response, 'g/cm3')
+        self.assertNotContains(response, '>Единица<')
         self.assertContains(response, 'Test Panel')
         self.assertContains(response, 'Title')
         self.assertContains(response, 'Laminate panel')
@@ -904,8 +905,9 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'material-properties-table')
         self.assertContains(response, 'material-props-section__name')
-        self.assertContains(response, 'Readonly density, g/cm3')
+        self.assertContains(response, 'Readonly density')
         self.assertContains(response, 'g/cm3')
+        self.assertContains(response, 'material-props-section__unit-suffix')
         self.assertContains(response, 'id="add-property-btn"')
         self.assertContains(response, 'reference-properties-modal')
         self.assertNotContains(response, 'id="id_properties-0-property" class="form-select"')
@@ -959,6 +961,131 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             MaterialProperty.objects.get(material=material, property=density).value,
             '1.62',
         )
+
+    def test_material_property_form_saves_material_link_as_uuid(self):
+        target = self.create_material(code='MAT-TARGET-LINK', name='Target link material')
+        link_prop = Property.objects.create(
+            name='base_material_link',
+            display_name='Базовый материал',
+            data_type='material_link',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._property_formset_management_data(),
+                **self._property_formset_data(
+                    link_prop,
+                    **{'properties-0-value': str(target.pk)},
+                ),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        link = MaterialProperty.objects.get(material=material, property=link_prop)
+        self.assertEqual(link.value, str(target.pk))
+        self.assertEqual(link.linked_material(), target)
+
+    def test_material_detail_renders_material_link_property(self):
+        target = self.create_material(code='MAT-DETAIL-LINK', name='Detail link target')
+        link_prop = Property.objects.create(
+            name='detail_material_link',
+            display_name='Связанный материал',
+            data_type='material_link',
+        )
+        material = self.create_material(code='MAT-WITH-LINK', name='Material with link')
+        MaterialProperty.objects.create(
+            material=material,
+            property=link_prop,
+            value=str(target.pk),
+        )
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Связанный материал')
+        self.assertContains(response, target.code)
+        self.assertContains(
+            response,
+            reverse('materials:detail', kwargs={'pk': target.pk}),
+        )
+
+    def test_material_edit_form_uses_material_picker_for_link_property(self):
+        target = self.create_material(code='MAT-EDIT-LINK', name='Edit link target')
+        link_prop = Property.objects.create(
+            name='edit_material_link',
+            display_name='Редактируемая ссылка',
+            data_type='material_link',
+        )
+        material = self.create_material(code='MAT-EDIT-WITH-LINK', name='Edit with link')
+        MaterialProperty.objects.create(
+            material=material,
+            property=link_prop,
+            value=str(target.pk),
+        )
+        response = self.client.get(reverse('materials:edit', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-material-picker="true"')
+        self.assertContains(response, str(target.pk))
+
+    def test_material_property_form_saves_choice_value(self):
+        from apps.references.models import PropertyChoice
+
+        choice_prop = Property.objects.create(
+            name='weave_type_mat',
+            display_name='Тип сплетения',
+            data_type='choice',
+        )
+        PropertyChoice.objects.create(
+            property=choice_prop,
+            label='Саржа',
+            value='twill',
+            sort_order=0,
+        )
+        PropertyChoice.objects.create(
+            property=choice_prop,
+            label='Полотно',
+            value='plain',
+            sort_order=1,
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._property_formset_management_data(),
+                **self._property_formset_data(
+                    choice_prop,
+                    **{'properties-0-value': 'twill'},
+                ),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        saved = MaterialProperty.objects.get(material=material, property=choice_prop)
+        self.assertEqual(saved.value, 'twill')
+        self.assertEqual(saved.choice_display_value(), 'Саржа')
+
+    def test_material_detail_renders_choice_label(self):
+        from apps.references.models import PropertyChoice
+
+        choice_prop = Property.objects.create(
+            name='weave_type_detail',
+            display_name='Тип сплетения',
+            data_type='choice',
+        )
+        PropertyChoice.objects.create(
+            property=choice_prop,
+            label='Саржа 2/2',
+            value='twill_2_2',
+            sort_order=0,
+        )
+        material = self.create_material(code='MAT-WITH-CHOICE', name='Material with choice')
+        MaterialProperty.objects.create(
+            material=material,
+            property=choice_prop,
+            value='twill_2_2',
+        )
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Тип сплетения')
+        self.assertContains(response, 'Саржа 2/2')
+        self.assertNotContains(response, 'twill_2_2')
 
     def test_public_material_create_view_saves_layer_formset_and_detail_shows_layers(self):
         layer_material = self.create_material(

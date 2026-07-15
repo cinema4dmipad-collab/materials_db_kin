@@ -637,6 +637,29 @@ a:hover {
     width: 8rem;
 }
 
+.material-properties-table .material-props-section__value-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.material-properties-table .material-props-section__value-row > .form-control,
+.material-properties-table .material-props-section__value-row > .form-select,
+.material-properties-table .material-props-section__value-row > .choice-picker,
+.material-properties-table .material-props-section__value-row > .material-picker-field {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.material-properties-table .material-props-section__unit-suffix {
+    flex: 0 0 auto;
+    color: var(--kx-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
 .material-properties-table .material-props-section__header th {
     background: var(--kx-surface-muted);
     border-top: 2px solid var(--kx-border-strong);

@@ -1,7 +1,7 @@
 {% if structure_properties or structure_message %}
 <tbody class="material-props-section"{% if structure_tbody_id %} id="{{ structure_tbody_id }}"{% endif %}>
     <tr class="material-props-section__header">
-        <th scope="colgroup" colspan="3">{{ structure_section_title|default:"Из параметров структуры" }}</th>
+        <th scope="colgroup" colspan="2">{{ structure_section_title|default:"Из параметров структуры" }}</th>
     </tr>
     {% if structure_properties %}
     {% for prop in structure_properties %}
@@ -11,15 +11,14 @@
             {% if prop.field_type == 'MaterialLink' and prop.value %}
             <a href="{% url 'materials:detail' prop.value %}">{{ prop.display_value }}</a>
             {% else %}
-            {{ prop.display_value }}
+            {% include 'includes/property_value_with_unit.html' with value=prop.display_value unit=prop.unit %}
             {% endif %}
         </td>
-        <td class="material-props-section__unit">{{ prop.unit|default:"—" }}</td>
     </tr>
     {% endfor %}
     {% else %}
     <tr class="material-props-section__empty structure-properties-empty-row">
-        <td colspan="3">{{ structure_message }}</td>
+        <td colspan="2">{{ structure_message }}</td>
     </tr>
     {% endif %}
 </tbody>

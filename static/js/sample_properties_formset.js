@@ -129,30 +129,57 @@
         });
     }
 
-    function formatPropertyLabel(label, unit) {
+    function formatPropertyName(label, unit) {
         label = (label || '').trim();
         unit = (unit || '').trim();
         if (!label) {
             return '—';
         }
+        if (unit && label.endsWith(', ' + unit)) {
+            return label.slice(0, -(unit.length + 2)).trim() || label;
+        }
+        if (unit && label.endsWith(',' + unit)) {
+            return label.slice(0, -(unit.length + 1)).trim() || label;
+        }
+        return label;
+    }
+
+    function setRowUnitSuffix(row, unit) {
+        var valueCell = row.querySelector('.material-props-section__value');
+        if (!valueCell) {
+            return;
+        }
+        var valueRow = valueCell.querySelector('.material-props-section__value-row');
+        if (!valueRow) {
+            valueRow = document.createElement('div');
+            valueRow.className = 'material-props-section__value-row';
+            while (valueCell.firstChild) {
+                valueRow.appendChild(valueCell.firstChild);
+            }
+            valueCell.appendChild(valueRow);
+        }
+        var suffix = valueRow.querySelector('.material-props-section__unit-suffix');
+        unit = (unit || '').trim();
         if (!unit) {
-            return label;
+            if (suffix) {
+                suffix.remove();
+            }
+            return;
         }
-        if (label.endsWith(', ' + unit) || label.endsWith(',' + unit)) {
-            return label;
+        if (!suffix) {
+            suffix = document.createElement('span');
+            suffix.className = 'material-props-section__unit-suffix';
+            valueRow.appendChild(suffix);
         }
-        return label + ', ' + unit;
+        suffix.textContent = unit;
     }
 
     function setRowPropertyMeta(row, label, unit) {
         var labelCell = row.querySelector('.material-props-section__name');
-        var unitCell = row.querySelector('.material-props-section__unit');
         if (labelCell) {
-            labelCell.textContent = formatPropertyLabel(label, unit);
+            labelCell.textContent = formatPropertyName(label, unit);
         }
-        if (unitCell) {
-            unitCell.textContent = unit || '—';
-        }
+        setRowUnitSuffix(row, unit);
     }
 
     function fillPropertyRow(row, propertyId, value, label, unit) {
@@ -267,7 +294,15 @@
             );
             return '<a href="' + escapeHtml(detailUrl) + '">' + escapeHtml(prop.display_value || prop.value) + '</a>';
         }
-        return escapeHtml(prop.display_value || '—');
+        var valueHtml = '<span class="material-props-section__value-text">'
+            + escapeHtml(prop.display_value || '—')
+            + '</span>';
+        if (prop.unit) {
+            valueHtml += '<span class="material-props-section__unit-suffix">'
+                + escapeHtml(prop.unit)
+                + '</span>';
+        }
+        return valueHtml;
     }
 
     function renderStructurePropertiesSection(data, materialDetailUrlTemplate) {
@@ -297,7 +332,7 @@
         tbody.id = 'sample-structure-properties-section';
 
         var rowsHtml = '<tr class="material-props-section__header">'
-            + '<th scope="colgroup" colspan="3">Из параметров структуры</th>'
+            + '<th scope="colgroup" colspan="2">Из параметров структуры</th>'
             + '</tr>';
 
         if (properties.length) {
@@ -305,12 +340,11 @@
                 rowsHtml += '<tr class="structure-property-row">'
                     + '<th scope="row" class="material-props-section__name">' + escapeHtml(prop.label || prop.name || '—') + '</th>'
                     + '<td class="material-props-section__value">' + buildStructurePropertyValueCell(prop, materialDetailUrlTemplate) + '</td>'
-                    + '<td class="material-props-section__unit">' + escapeHtml(prop.unit || '—') + '</td>'
                     + '</tr>';
             });
         } else {
             rowsHtml += '<tr class="material-props-section__empty structure-properties-empty-row">'
-                + '<td colspan="3">' + escapeHtml(message) + '</td>'
+                + '<td colspan="2">' + escapeHtml(message) + '</td>'
                 + '</tr>';
         }
 

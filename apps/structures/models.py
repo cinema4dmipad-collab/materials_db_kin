@@ -10,7 +10,13 @@ from apps.workspaces.visibility import VisibilityMode, WorkspaceVisibilityMixin
 
 
 STRUCTURE_FIELD_LOCK_ERROR = (
-    'Нельзя добавлять, изменять или удалять поля после создания SQL-таблицы.'
+    'Нельзя изменять или удалять поля после создания SQL-таблицы.'
+)
+STRUCTURE_FIELD_CHANGE_LOCK_ERROR = (
+    'Нельзя изменять существующие поля после создания SQL-таблицы.'
+)
+STRUCTURE_FIELD_DELETE_LOCK_ERROR = (
+    'Нельзя удалять поля после создания SQL-таблицы.'
 )
 MATERIAL_LINK_FIELD_TYPE = 'MaterialLink'
 
@@ -86,50 +92,57 @@ class StructureFieldQuerySet(models.QuerySet):
             )
         )
 
-    def _raise_if_locked_queryset(self):
+    def _raise_if_locked_queryset(self, *, for_delete=False):
         if self.filter(structure_type__is_created=True).exists():
-            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+            raise ValidationError(
+                STRUCTURE_FIELD_DELETE_LOCK_ERROR
+                if for_delete
+                else STRUCTURE_FIELD_CHANGE_LOCK_ERROR
+            )
 
-    def _raise_if_locked_objects(self, objs, include_existing=False):
+    def _raise_if_existing_locked(self, objs):
         object_list = list(objs)
-        locked_ids = self._locked_structure_type_ids(
-            obj.structure_type_id for obj in object_list
-        )
-        if locked_ids:
-            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
-
-        if include_existing:
-            pks = [obj.pk for obj in object_list if obj.pk]
-            if pks and self.model.objects.filter(
-                pk__in=pks, structure_type__is_created=True
-            ).exists():
-                raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
-
+        pks = [obj.pk for obj in object_list if obj.pk]
+        if pks and self.model.objects.filter(
+            pk__in=pks, structure_type__is_created=True
+        ).exists():
+            raise ValidationError(STRUCTURE_FIELD_CHANGE_LOCK_ERROR)
         return object_list
 
     def update(self, **kwargs):
-        self._raise_if_locked_queryset()
+        self._raise_if_locked_queryset(for_delete=False)
         if 'structure_type' in kwargs:
             structure_type = kwargs['structure_type']
             structure_type_id = getattr(structure_type, 'pk', structure_type)
             if self._locked_structure_type_ids([structure_type_id]):
-                raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+                raise ValidationError(STRUCTURE_FIELD_CHANGE_LOCK_ERROR)
         if 'structure_type_id' in kwargs and self._locked_structure_type_ids(
             [kwargs['structure_type_id']]
         ):
-            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+            raise ValidationError(STRUCTURE_FIELD_CHANGE_LOCK_ERROR)
         return super().update(**kwargs)
 
     def delete(self):
-        self._raise_if_locked_queryset()
+        self._raise_if_locked_queryset(for_delete=True)
         return super().delete()
 
     def bulk_create(self, objs, **kwargs):
-        object_list = self._raise_if_locked_objects(objs)
-        return super().bulk_create(object_list, **kwargs)
+        from apps.structures.sql_executor import SQLExecutor
+
+        object_list = list(objs)
+        created = super().bulk_create(object_list, **kwargs)
+        for obj in created:
+            if not self._locked_structure_type_ids([obj.structure_type_id]):
+                continue
+            result = SQLExecutor.add_column(obj.structure_type, obj)
+            if not result.get('success'):
+                raise ValidationError(
+                    result.get('error') or 'Не удалось добавить колонку в SQL-таблицу.'
+                )
+        return created
 
     def bulk_update(self, objs, fields, **kwargs):
-        object_list = self._raise_if_locked_objects(objs, include_existing=True)
+        object_list = self._raise_if_existing_locked(objs)
         return super().bulk_update(object_list, fields, **kwargs)
 
 
@@ -180,7 +193,22 @@ class StructureField(models.Model):
     def __str__(self):
         return f'{self.structure_type.name}.{self.name}'
 
-    def _has_locked_structure_type(self):
+    _LOCKABLE_FIELDS = (
+        'name',
+        'label',
+        'field_type',
+        'is_required',
+        'default_value',
+        'help_text',
+        'sort_order',
+        'max_digits',
+        'decimal_places',
+        'max_length',
+        'foreign_key_model',
+        'structure_type_id',
+    )
+
+    def _structure_type_is_created(self):
         if self.structure_type_id and StructureType.objects.filter(
             pk=self.structure_type_id, is_created=True
         ).exists():
@@ -191,17 +219,45 @@ class StructureField(models.Model):
             return True
         return False
 
+    def _is_dirty_vs_database(self):
+        if not self.pk:
+            return True
+        db_values = (
+            StructureField.objects.filter(pk=self.pk)
+            .values(*self._LOCKABLE_FIELDS)
+            .first()
+        )
+        if db_values is None:
+            return True
+        for field_name, db_value in db_values.items():
+            if getattr(self, field_name) != db_value:
+                return True
+        return False
+
     def clean(self):
         super().clean()
-        if self._has_locked_structure_type():
-            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+        if (
+            self.pk
+            and self._structure_type_is_created()
+            and self._is_dirty_vs_database()
+        ):
+            raise ValidationError(STRUCTURE_FIELD_CHANGE_LOCK_ERROR)
 
     def save(self, *args, **kwargs):
+        is_new = self.pk is None
         self.full_clean()
         super().save(*args, **kwargs)
+        if is_new and self._structure_type_is_created():
+            from apps.structures.sql_executor import SQLExecutor
+
+            result = SQLExecutor.add_column(self.structure_type, self)
+            if not result.get('success'):
+                raise ValidationError(
+                    result.get('error') or 'Не удалось добавить колонку в SQL-таблицу.'
+                )
 
     def delete(self, *args, **kwargs):
-        if self._has_locked_structure_type():
-            raise ValidationError(STRUCTURE_FIELD_LOCK_ERROR)
+        if self._structure_type_is_created():
+            raise ValidationError(STRUCTURE_FIELD_DELETE_LOCK_ERROR)
         return super().delete(*args, **kwargs)
 

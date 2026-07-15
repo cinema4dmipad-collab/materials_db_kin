@@ -5,10 +5,14 @@
         {% if property_form.property.errors %}<div class="text-danger small">{{ property_form.property.errors }}</div>{% endif %}
     </th>
     <td class="material-props-section__value">
-        {{ property_form.value }}
+        <div class="material-props-section__value-row">
+            {{ property_form.value }}
+            {% if property_form.property_unit %}
+            <span class="material-props-section__unit-suffix">{{ property_form.property_unit }}</span>
+            {% endif %}
+        </div>
         {% if property_form.value.errors %}<div class="text-danger small">{{ property_form.value.errors }}</div>{% endif %}
     </td>
-    <td class="material-props-section__unit">{{ property_form.property_unit|default:"—" }}</td>
     <td class="text-end text-nowrap">
         {% if formset.can_delete %}
         <span class="visually-hidden">{{ property_form.DELETE }}</span>
@@ -17,6 +21,6 @@
     </td>
     <td class="visually-hidden">{{ property_form.property }}</td>
     {% if property_form.non_field_errors %}
-    <td colspan="4"><div class="text-danger small">{{ property_form.non_field_errors }}</div></td>
+    <td colspan="3"><div class="text-danger small">{{ property_form.non_field_errors }}</div></td>
     {% endif %}
 </tr>

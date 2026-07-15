@@ -11,7 +11,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
     CREATOR_SEARCH_SCOPE,
-    DEFAULT_CREATOR_FILTER,
+    CREATOR_WITH_LABEL_FILTER,
     STRUCT_TYPE_SEARCH_SCOPE,
     TAG_SEARCH_SCOPE,
     QuerySetFilterMixin,
@@ -153,8 +153,13 @@ class MaterialFormsetMixin:
         )
 
     def get_formset(self):
+        workspace = self.request.active_workspace
         if getattr(self, 'object', None):
-            kwargs = {'prefix': 'properties', 'instance': self.object}
+            kwargs = {
+                'prefix': 'properties',
+                'instance': self.object,
+                'workspace': workspace,
+            }
             if self.request.method == 'POST':
                 kwargs['data'] = self.request.POST
             return MaterialPropertyFormSet(**kwargs)
@@ -166,12 +171,14 @@ class MaterialFormsetMixin:
                     self.request.POST,
                     instance=Material(),
                     prefix='properties',
+                    workspace=workspace,
                 )
             return build_material_property_formset(
+                workspace=workspace,
                 initial=material_property_formset_initial(template_material),
             )
 
-        kwargs = {'prefix': 'properties'}
+        kwargs = {'prefix': 'properties', 'workspace': workspace}
         if self.request.method == 'POST':
             kwargs['data'] = self.request.POST
         return MaterialPropertyFormSet(**kwargs)
@@ -295,6 +302,7 @@ class MaterialFormsetMixin:
         template_material = self.get_template_material()
         if template_material is not None and 'properties-TOTAL_FORMS' not in self.request.POST:
             formset = build_material_property_formset(
+                workspace=self.request.active_workspace,
                 instance=instance or Material(),
                 initial=material_property_formset_initial(template_material),
             )
@@ -303,6 +311,7 @@ class MaterialFormsetMixin:
                 self.request.POST,
                 instance=instance,
                 prefix='properties',
+                workspace=self.request.active_workspace,
             )
         layer_formset = None
         if self.layers_allowed():
@@ -349,6 +358,7 @@ class MaterialFormsetMixin:
                     self.request.POST,
                     instance=self.object,
                     prefix='properties',
+                    workspace=self.request.active_workspace,
                 )
                 if self.layers_allowed():
                     layer_kwargs = {
@@ -494,7 +504,7 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
 
     def get_custom_search_scope_filters(self):
         return {
-            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
+            CREATOR_SEARCH_SCOPE: CREATOR_WITH_LABEL_FILTER,
         }
 
     def get_choice_filter_options(self):
@@ -567,7 +577,9 @@ class MaterialDetailView(AppViewMixin, DetailView):
             active_ws,
         )[:5]
         context['properties'] = (
-            self.object.properties.select_related('property', 'property__group').order_by(
+            self.object.properties.select_related('property', 'property__group')
+            .prefetch_related('property__choices')
+            .order_by(
                 'property__group__sort_order',
                 'property__name',
             )
@@ -664,6 +676,29 @@ class MaterialDeleteView(AppViewMixin, PermissionRequiredMixin, MaterialEditable
             return redirect('materials:detail', pk=self.object.pk)
 
 
+def _serialize_material_property(item):
+    from apps.references.models import Property
+
+    linked = None
+    value = item.value
+    if item.property.data_type == 'number':
+        value = format_decimal_display(item.value)
+    elif item.property.data_type == Property.MATERIAL_LINK_DATA_TYPE:
+        linked = item.linked_material()
+        if linked is not None:
+            value = f'{linked.code} - {linked.name}'
+    elif item.property.data_type == Property.CHOICE_DATA_TYPE:
+        value = item.choice_display_value()
+    return {
+        'property_id': str(item.property_id),
+        'display_name': item.property.display_name,
+        'unit': item.property.effective_unit(),
+        'data_type': item.property.data_type,
+        'value': value,
+        'material_id': str(linked.pk) if linked is not None else None,
+    }
+
+
 class MaterialPropertiesJSONView(AppViewMixin, View):
     def get(self, request, pk):
         material = get_object_or_404(
@@ -677,19 +712,7 @@ class MaterialPropertiesJSONView(AppViewMixin, View):
         structure_context = get_material_structure_context(material)
         return JsonResponse(
             {
-                'properties': [
-                    {
-                        'property_id': str(item.property_id),
-                        'display_name': item.property.display_name,
-                        'unit': item.property.effective_unit(),
-                        'value': (
-                            format_decimal_display(item.value)
-                            if item.property.data_type == 'number'
-                            else item.value
-                        ),
-                    }
-                    for item in properties
-                ],
+                'properties': [_serialize_material_property(item) for item in properties],
                 **serialize_structure_context(structure_context),
             }
         )
