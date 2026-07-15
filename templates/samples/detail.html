@@ -64,8 +64,9 @@
                 <thead>
                     <tr>
                         <th scope="col">Свойство</th>
-                        <th scope="col">Значение</th>
-                        <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                        <th scope="col" class="material-properties-table__value-col">Значение</th>
+                        <th scope="col" class="material-properties-table__unit-col">Ед.</th>
+                        <th scope="col" class="material-properties-table__spacer-col" aria-hidden="true"></th>
                     </tr>
                 </thead>
                 {% if structure_properties or structure_message %}
@@ -74,13 +75,16 @@
                 {% if material_properties %}
                 <tbody class="material-props-section">
                     <tr class="material-props-section__header">
-                        <th scope="colgroup" colspan="3">Из свойств материала</th>
+                        <th scope="colgroup" colspan="4">Из свойств материала</th>
                     </tr>
                     {% for sp in material_properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ sp.property.label_with_unit }}</th>
-                        <td class="material-props-section__value">{% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}</td>
+                        <th scope="row" class="material-props-section__name">{{ sp.property.base_display_name }}</th>
+                        <td class="material-props-section__value">
+                            {% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}
+                        </td>
                         <td class="material-props-section__unit">{{ sp.property.effective_unit|default:"—" }}</td>
+                        <td class="material-props-section__spacer" aria-hidden="true"></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -88,13 +92,16 @@
                 {% if extra_properties %}
                 <tbody class="material-props-section">
                     <tr class="material-props-section__header">
-                        <th scope="colgroup" colspan="3">Дополнительные свойства</th>
+                        <th scope="colgroup" colspan="4">Дополнительные свойства</th>
                     </tr>
                     {% for sp in extra_properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ sp.property.label_with_unit }}</th>
-                        <td class="material-props-section__value">{% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}</td>
+                        <th scope="row" class="material-props-section__name">{{ sp.property.base_display_name }}</th>
+                        <td class="material-props-section__value">
+                            {% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}
+                        </td>
                         <td class="material-props-section__unit">{{ sp.property.effective_unit|default:"—" }}</td>
+                        <td class="material-props-section__spacer" aria-hidden="true"></td>
                     </tr>
                     {% endfor %}
                 </tbody>

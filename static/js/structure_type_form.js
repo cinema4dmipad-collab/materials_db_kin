@@ -249,33 +249,6 @@
         syncRowSummary(row);
     }
 
-    function suggestMaterialLinkName() {
-        const used = getUsedColumnNames();
-        if (!used.has('material')) {
-            return 'material';
-        }
-        let index = 2;
-        while (used.has(`material_${index}`)) {
-            index += 1;
-        }
-        return `material_${index}`;
-    }
-
-    function appendMaterialLinkRow() {
-        const row = appendRowFromTemplate();
-        if (!row) {
-            return null;
-        }
-        delete row.dataset.referencePropertyId;
-        setRowInputValue(row, 'label', 'Материал');
-        setRowInputValue(row, 'name', suggestMaterialLinkName());
-        setRowInputValue(row, 'field_type', 'MaterialLink');
-        setRowInputValue(row, 'sort_order', String(getNextSortOrder()));
-        applyHiddenFieldDefaults(row, 'MaterialLink');
-        syncRowSummary(row);
-        return row;
-    }
-
     function renderReferencePropertiesList(filterText = '') {
         const picker = window.ReferencePropertiesPicker;
         if (!picker) {
@@ -516,17 +489,6 @@
         form.addEventListener('submit', clearFormDraft);
     }
 
-    function bindMaterialLinkButton() {
-        const button = document.getElementById('add-material-link-btn');
-        if (!button || button.dataset.bound === 'true') {
-            return;
-        }
-        button.dataset.bound = 'true';
-        button.addEventListener('click', () => {
-            appendMaterialLinkRow();
-        });
-    }
-
     function bindFieldRows() {
         document.querySelectorAll('[data-structure-field-row]').forEach((row) => {
             bindDeleteButtons(row);
@@ -548,7 +510,6 @@
         const modal = bindPropertiesModal();
         bindCreatePropertyLink();
         bindFormSubmitClearDraft();
-        bindMaterialLinkButton();
 
         if (shouldOpenPropertiesModal()) {
             cleanupOpenPropertiesParam();

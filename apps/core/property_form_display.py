@@ -26,7 +26,7 @@ def enrich_property_form_display(form):
     prop_id = form_property_id(form)
     if prop_id:
         prop = Property.objects.filter(pk=prop_id).first()
-        form.property_label = prop.label_with_unit() if prop else EMPTY_LABEL
+        form.property_label = prop.base_display_name() if prop else EMPTY_LABEL
         form.property_unit = prop.effective_unit() if prop else ''
     else:
         form.property_label = EMPTY_LABEL

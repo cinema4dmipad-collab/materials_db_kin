@@ -21,8 +21,10 @@
             {% if structure_type.is_created %}
             <a href="{% url 'structures:list' structure_type.code %}" class="btn btn-primary btn-sm">Записи</a>
             {% endif %}
-            {% if not structure_type.is_created and not structure_type_is_readonly %}
-            <a href="{% url 'structures:type_edit' structure_type.code %}" class="btn btn-outline-primary btn-sm">Изменить</a>
+            {% if not structure_type_is_readonly %}
+            <a href="{% url 'structures:type_edit' structure_type.code %}" class="btn btn-outline-primary btn-sm">
+                {% if structure_type.is_created %}Добавить поля{% else %}Изменить{% endif %}
+            </a>
             {% endif %}
             {% if can_publish_structure_type %}
             <a href="{% url 'structures:type_visibility' structure_type.code %}" class="btn btn-outline-secondary btn-sm">Видимость</a>
@@ -116,7 +118,7 @@
             Нажмите кнопку, когда тип готов: система создаст таблицу со служебными колонками
             <code>id</code>, <code>created_at</code>, <code>updated_at</code>, <code>created_by</code>
             и колонками из списка свойств выше (если они добавлены).
-            После создания состав колонок изменить нельзя — только удалить таблицу и начать заново.
+            После создания можно добавлять новые колонки; удалять и менять существующие нельзя.
         </p>
 
         {% if can_create_table %}
@@ -126,7 +128,10 @@
             <button type="submit" class="btn btn-success">Создать</button>
         </form>
         {% elif structure_type.is_created %}
-        <p class="mb-3">Таблица <code>{{ structure_type.table_name }}</code> создана. Поля заблокированы для редактирования.</p>
+        <p class="mb-3">
+            Таблица <code>{{ structure_type.table_name }}</code> создана.
+            Существующие поля нельзя изменять или удалять — можно только добавить новые.
+        </p>
         <a href="{% url 'structures:type_drop_table' structure_type.code %}" class="btn btn-outline-danger">Удалить таблицу из БД</a>
         {% endif %}
     </div>
@@ -154,9 +159,9 @@
                     Будут созданы колонки для {{ fields|length }} свойств и служебные поля
                     <code>id</code>, <code>created_at</code>, <code>updated_at</code>, <code>created_by</code>.
                     {% else %}
-                    Таблица будет создана только со служебными колонками — свойства можно добавить позже, но после создания таблицы их состав изменить нельзя.
+                    Таблица будет создана только со служебными колонками — свойства можно добавить позже.
                     {% endif %}
-                    После создания таблицы редактирование полей будет недоступно.
+                    После создания таблицы существующие поля нельзя будет изменять или удалять, но новые поля добавить можно.
                 </p>
                 <form method="post" action="{% url 'structures:type_create_table' structure_type.code %}" id="create-table-modal-form">
                     {% csrf_token %}

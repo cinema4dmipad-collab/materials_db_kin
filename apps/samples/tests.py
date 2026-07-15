@@ -287,7 +287,8 @@ class SampleViewsTests(TestCase):
 
         self.assertContains(response, 'Свойства')
         self.assertContains(response, 'Из свойств материала')
-        self.assertContains(response, 'Density, g/cm3')
+        self.assertContains(response, 'Density')
+        self.assertContains(response, 'g/cm3')
         self.assertContains(response, '2,10')
         self.assertNotContains(response, 'client_filter_bar')
 

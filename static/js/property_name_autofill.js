@@ -37,15 +37,50 @@
         return slug;
     }
 
+    function syncPropertyTypeUi(form) {
+        if (!form) {
+            return;
+        }
+        var dataType = form.querySelector('[data-property-data-type]') || form.querySelector('#id_data_type');
+        var unitInput = form.querySelector('#id_unit');
+        var unitGroup = form.querySelector('[data-property-unit-group]')
+            || (unitInput ? unitInput.closest('.mb-3') : null);
+        var choicesSection = form.querySelector('[data-property-choices-section]');
+        if (!dataType) {
+            return;
+        }
+        var hideUnit = dataType.value === 'material_link' || dataType.value === 'choice';
+        var showChoices = dataType.value === 'choice';
+        if (unitGroup) {
+            unitGroup.classList.toggle('d-none', hideUnit);
+        }
+        if (hideUnit && unitInput) {
+            unitInput.value = '';
+        }
+        if (choicesSection) {
+            choicesSection.classList.toggle('d-none', !showChoices);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var sourceInput = document.querySelector('[data-property-name-source]');
         var targetInput = document.querySelector('[data-property-name-target]');
+        var form = sourceInput ? sourceInput.form : document.querySelector('form[data-property-form-mode]');
+
+        if (form) {
+            var dataType = form.querySelector('[data-property-data-type]') || form.querySelector('#id_data_type');
+            syncPropertyTypeUi(form);
+            if (dataType) {
+                dataType.addEventListener('change', function () {
+                    syncPropertyTypeUi(form);
+                });
+            }
+        }
 
         if (!sourceInput || !targetInput) {
             return;
         }
 
-        var form = sourceInput.form;
         var isCreate = form && form.getAttribute('data-property-form-mode') === 'create';
         var nameEditedManually = !isCreate;
 
@@ -60,4 +95,8 @@
             targetInput.value = normalizeIdentifier(sourceInput.value, 100);
         });
     });
+
+    window.PropertyNameAutofill = {
+        normalizeIdentifier: normalizeIdentifier,
+    };
 })();

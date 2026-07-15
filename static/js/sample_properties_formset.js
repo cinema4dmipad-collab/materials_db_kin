@@ -129,29 +129,29 @@
         });
     }
 
-    function formatPropertyLabel(label, unit) {
+    function formatPropertyName(label, unit) {
         label = (label || '').trim();
         unit = (unit || '').trim();
         if (!label) {
             return '—';
         }
-        if (!unit) {
-            return label;
+        if (unit && label.endsWith(', ' + unit)) {
+            return label.slice(0, -(unit.length + 2)).trim() || label;
         }
-        if (label.endsWith(', ' + unit) || label.endsWith(',' + unit)) {
-            return label;
+        if (unit && label.endsWith(',' + unit)) {
+            return label.slice(0, -(unit.length + 1)).trim() || label;
         }
-        return label + ', ' + unit;
+        return label;
     }
 
     function setRowPropertyMeta(row, label, unit) {
         var labelCell = row.querySelector('.material-props-section__name');
         var unitCell = row.querySelector('.material-props-section__unit');
         if (labelCell) {
-            labelCell.textContent = formatPropertyLabel(label, unit);
+            labelCell.textContent = formatPropertyName(label, unit);
         }
         if (unitCell) {
-            unitCell.textContent = unit || '—';
+            unitCell.textContent = (unit || '').trim() || '—';
         }
     }
 

@@ -78,8 +78,9 @@
                 <thead>
                     <tr>
                         <th scope="col">Свойство</th>
-                        <th scope="col">Значение</th>
-                        <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                        <th scope="col" class="material-properties-table__value-col">Значение</th>
+                        <th scope="col" class="material-properties-table__unit-col">Ед.</th>
+                        <th scope="col" class="material-properties-table__spacer-col" aria-hidden="true"></th>
                     </tr>
                 </thead>
                 {% if structure_properties or structure_message %}
@@ -88,13 +89,30 @@
                 {% if properties %}
                 <tbody class="material-props-section">
                     <tr class="material-props-section__header">
-                        <th scope="colgroup" colspan="3">Дополнительные свойства</th>
+                        <th scope="colgroup" colspan="4">Дополнительные свойства</th>
                     </tr>
                     {% for mp in properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ mp.property.label_with_unit }}</th>
-                        <td class="material-props-section__value">{% if mp.property.data_type == 'number' %}{{ mp.value|decimal_comma }}{% else %}{{ mp.value }}{% endif %}</td>
+                        <th scope="row" class="material-props-section__name">{{ mp.property.base_display_name }}</th>
+                        <td class="material-props-section__value">
+                            {% if mp.property.data_type == 'number' %}
+                            {{ mp.value|decimal_comma }}
+                            {% elif mp.property.data_type == 'material_link' %}
+                            {% with linked=mp.linked_material %}
+                            {% if linked %}
+                            <a href="{% url 'materials:detail' linked.pk %}">{{ linked.code }} — {{ linked.name }}</a>
+                            {% else %}
+                            {{ mp.value|default:"—" }}
+                            {% endif %}
+                            {% endwith %}
+                            {% elif mp.property.data_type == 'choice' %}
+                            {{ mp.choice_display_value|default:"—" }}
+                            {% else %}
+                            {{ mp.value }}
+                            {% endif %}
+                        </td>
                         <td class="material-props-section__unit">{{ mp.property.effective_unit|default:"—" }}</td>
+                        <td class="material-props-section__spacer" aria-hidden="true"></td>
                     </tr>
                     {% endfor %}
                 </tbody>

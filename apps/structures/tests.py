@@ -76,6 +76,28 @@ class PropertyMappingTests(TestCase):
 
         self.assertEqual(property_to_structure_field_data(prop)['field_type'], 'CharField')
 
+    def test_property_choice_maps_to_char_field_with_choices(self):
+        from apps.references.models import PropertyChoice
+
+        prop = Property.objects.create(
+            name='weave_type',
+            display_name='Тип сплетения',
+            data_type='choice',
+        )
+        PropertyChoice.objects.create(property=prop, label='Саржа', value='twill', sort_order=0)
+        PropertyChoice.objects.create(property=prop, label='Полотно', value='plain', sort_order=1)
+
+        data = property_to_structure_field_data(prop)
+        self.assertEqual(data['field_type'], 'CharField')
+        self.assertEqual(data['data_type'], 'choice')
+        self.assertEqual(
+            data['choices'],
+            [
+                {'value': 'twill', 'label': 'Саржа'},
+                {'value': 'plain', 'label': 'Полотно'},
+            ],
+        )
+
     def test_reserved_sql_name_gets_safe_suffix(self):
         prop = Property.objects.create(
             name='select',
@@ -412,7 +434,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'add-from-properties-btn')
-        self.assertContains(response, 'add-material-link-btn')
+        self.assertNotContains(response, 'add-material-link-btn')
         self.assertContains(response, 'structure-field-empty')
         self.assertContains(response, 'reference-properties-data')
 
@@ -786,7 +808,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertTrue(SQLExecutor.table_exists(empty_type))
         SQLExecutor.drop_table(empty_type)
 
-    def test_structure_field_validation_rejects_create_change_and_delete_when_created(self):
+    def test_structure_field_allows_create_but_rejects_change_and_delete_when_created(self):
         field = self.structure_type.fields.get(name='title')
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
 
@@ -797,10 +819,15 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             field_type='CharField',
             sort_order=4,
         )
-        with self.assertRaises(ValidationError):
-            new_field.full_clean()
-        with self.assertRaises(ValidationError):
-            new_field.save()
+        new_field.full_clean()
+        new_field.save()
+        self.assertTrue(self.structure_type.fields.filter(name='status').exists())
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT * FROM {SQLExecutor.quote_identifier(self.structure_type.table_name)} LIMIT 0'
+            )
+            columns = [column[0] for column in cursor.description]
+        self.assertIn('status', columns)
 
         field.label = 'Changed title'
         with self.assertRaises(ValidationError):
@@ -821,27 +848,32 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             field_type='CharField',
             sort_order=4,
         )
-
+        # Table flag is set but physical table may be missing — add_column should fail.
         with self.assertRaises(ValidationError):
-            new_field.full_clean()
+            new_field.save()
 
-    def test_structure_field_bulk_create_rejects_created_structure_type(self):
+    def test_structure_field_bulk_create_adds_column_for_created_structure_type(self):
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
 
-        with self.assertRaises(ValidationError):
-            StructureField.objects.bulk_create(
-                [
-                    StructureField(
-                        structure_type=self.structure_type,
-                        name='status',
-                        label='Status',
-                        field_type='CharField',
-                        sort_order=4,
-                    )
-                ]
-            )
+        StructureField.objects.bulk_create(
+            [
+                StructureField(
+                    structure_type=self.structure_type,
+                    name='status',
+                    label='Status',
+                    field_type='CharField',
+                    sort_order=4,
+                )
+            ]
+        )
 
-        self.assertFalse(self.structure_type.fields.filter(name='status').exists())
+        self.assertTrue(self.structure_type.fields.filter(name='status').exists())
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT * FROM {SQLExecutor.quote_identifier(self.structure_type.table_name)} LIMIT 0'
+            )
+            columns = [column[0] for column in cursor.description]
+        self.assertIn('status', columns)
 
     def test_structure_field_bulk_update_rejects_created_structure_type(self):
         field = self.structure_type.fields.get(name='title')
@@ -873,16 +905,17 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
 
         self.assertTrue(StructureField.objects.filter(pk=field.pk).exists())
 
-    def test_structure_field_inline_is_locked_when_table_created(self):
+    def test_structure_field_inline_allows_add_but_locks_change_delete_when_created(self):
         site = AdminSite()
         inline = StructureFieldInline(StructureType, site)
         self.structure_type.is_created = True
+        request = RequestFactory().get('/')
+        request.user = PermissiveAdminUser()
 
-        self.assertFalse(inline.has_add_permission(None, self.structure_type))
-        self.assertFalse(inline.has_change_permission(None, self.structure_type))
-        self.assertFalse(inline.has_delete_permission(None, self.structure_type))
-        self.assertEqual(inline.get_extra(None, self.structure_type), 0)
-        self.assertEqual(set(inline.get_readonly_fields(None, self.structure_type)), set(inline.fields))
+        self.assertTrue(inline.has_add_permission(request, self.structure_type))
+        self.assertFalse(inline.has_change_permission(request, self.structure_type))
+        self.assertFalse(inline.has_delete_permission(request, self.structure_type))
+        self.assertEqual(inline.get_extra(request, self.structure_type), 1)
 
     def test_field_type_choices_include_material_link_but_not_foreign_key(self):
         field_type_values = [value for value, _ in StructureField.FIELD_TYPES]
@@ -1004,8 +1037,8 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         actions_request = factory.get('/')
         actions_request.user = PermissiveAdminUser()
 
-        self.assertFalse(admin_model.has_add_permission(get_request))
-        self.assertFalse(admin_model.has_add_permission(post_request))
+        self.assertTrue(admin_model.has_add_permission(get_request))
+        self.assertTrue(admin_model.has_add_permission(post_request))
         self.assertFalse(admin_model.has_change_permission(actions_request, field))
         self.assertFalse(admin_model.has_delete_permission(actions_request, field))
         self.assertNotIn('delete_selected', admin_model.get_actions(actions_request))

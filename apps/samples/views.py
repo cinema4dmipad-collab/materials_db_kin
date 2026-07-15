@@ -13,7 +13,7 @@ from apps.core.file_download import build_file_download_response
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
     CREATOR_SEARCH_SCOPE,
-    DEFAULT_CREATOR_FILTER,
+    CREATOR_WITH_LABEL_FILTER,
     OBJECT_TYPE_SEARCH_SCOPE,
     TAG_SEARCH_SCOPE,
     UPLOADED_BY_CREATOR_FILTER,
@@ -226,7 +226,7 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
                 Sample.OBJECT_TYPES,
                 'object_type',
             ),
-            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
+            CREATOR_SEARCH_SCOPE: CREATOR_WITH_LABEL_FILTER,
         }
 
 

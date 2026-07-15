@@ -7,6 +7,7 @@
 
 {% block content %}
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
+<link href="{% static 'css/choice_picker.css' %}" rel="stylesheet">
 {% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}" rel="stylesheet">{% endif %}
 <div class="card mb-4 sticky-form-page">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -132,7 +133,7 @@
                                 <tr>
                                     <th scope="col">Свойство</th>
                                     <th scope="col">Значение</th>
-                                    <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                                    <th scope="col" class="material-properties-table__unit-col">Ед.</th>
                                     <th scope="col" class="text-end">Действия</th>
                                 </tr>
                             </thead>
@@ -299,6 +300,7 @@
 <script src="{% static 'js/reference_structure_types_picker.js' %}"></script>
 <script src="{% static 'js/structure_type_picker_field.js' %}"></script>
 <script src="{% static 'js/material_picker_fields.js' %}"></script>
+<script src="{% static 'js/choice_picker_fields.js' %}"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
 <script src="{% static 'js/composite_layer_diagram_live.js' %}"></script>
 <script src="{% static 'js/composite_layers_formset.js' %}"></script>

@@ -11,7 +11,7 @@ Dynamic **structure types**: configurable fields and per-type PostgreSQL tables.
 | `StructureType` | Name, code, `table_name`, `display_color`, `allow_layers`, `is_created`, `is_active` |
 | `StructureField` | Column metadata: name, label, type, defaults, sort order |
 
-Field types include `CharField`, `IntegerField`, `DecimalField`, `DateField`, `MaterialLink`.
+Field types include `CharField`, `IntegerField`, `DecimalField`, `DateField`, `MaterialLink`. New `MaterialLink` columns are added by picking a reference property with type «Материал» (not via a dedicated structure shortcut).
 
 ## SQL Layer
 
@@ -35,7 +35,7 @@ After save, modal prompts to create SQL table. Manage page shows table name inpu
 
 Once `is_created=True`:
 
-* Field definitions locked
+* Existing field definitions locked (new fields may still be added)
 * Table name locked
 * Type name locked
 

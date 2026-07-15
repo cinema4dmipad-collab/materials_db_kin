@@ -1,5 +1,7 @@
 from django.contrib import messages
-from django.db.models import Count
+from django.db import transaction
+from django.db.models import Count, Prefetch
+from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
@@ -11,10 +13,43 @@ from apps.core.list_filters import (
     QuerySetFilterMixin,
 )
 from apps.core.creator import assign_creator
-from apps.references.forms import PropertyForm
-from apps.references.models import Property, PropertyGroup
+from apps.references.forms import PropertyChoiceInlineFormSet, PropertyForm
+from apps.references.models import Property, PropertyChoice, PropertyGroup
 from apps.workspaces.mixins import AppViewMixin, PermissionRequiredMixin, SystemAdminRequiredMixin
 from apps.workspaces.permissions import WorkspacePerm
+
+
+class PropertyChoiceFormMixin:
+    def get_choice_formset(self):
+        instance = getattr(self, 'object', None) or Property()
+        kwargs = {'prefix': 'choices', 'instance': instance}
+        if self.request.method == 'POST':
+            kwargs['data'] = self.request.POST
+        return PropertyChoiceInlineFormSet(**kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if 'choice_formset' not in context:
+            context['choice_formset'] = self.get_choice_formset()
+        return context
+
+    def _save_with_choices(self, form):
+        is_choice = form.cleaned_data.get('data_type') == Property.CHOICE_DATA_TYPE
+        choice_formset = None
+        if is_choice:
+            choice_formset = self.get_choice_formset()
+            choice_formset.property_form = form
+            if not choice_formset.is_valid():
+                return None, choice_formset
+
+        with transaction.atomic():
+            self.object = form.save()
+            if is_choice:
+                choice_formset.instance = self.object
+                choice_formset.save()
+            elif self.object.pk:
+                self.object.choices.all().delete()
+        return self.object, choice_formset
 
 
 class PropertyListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, ListView):
@@ -57,7 +92,7 @@ class PropertyListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixi
         }
 
 
-class PropertyCreateView(SystemAdminRequiredMixin, AppViewMixin, CreateView):
+class PropertyCreateView(PropertyChoiceFormMixin, SystemAdminRequiredMixin, AppViewMixin, CreateView):
     model = Property
     form_class = PropertyForm
     template_name = 'references/property_form.html'
@@ -92,15 +127,25 @@ class PropertyCreateView(SystemAdminRequiredMixin, AppViewMixin, CreateView):
 
     def form_valid(self, form):
         assign_creator(form.instance, self.request.user)
-        messages.success(self.request, f'Свойство «{form.instance.display_name}» создано.')
-        return super().form_valid(form)
+        saved, choice_formset = self._save_with_choices(form)
+        if saved is None:
+            return self.render_to_response(
+                self.get_context_data(form=form, choice_formset=choice_formset)
+            )
+        messages.success(self.request, f'Свойство «{self.object.display_name}» создано.')
+        return HttpResponseRedirect(self.get_success_url())
 
 
-class PropertyUpdateView(SystemAdminRequiredMixin, AppViewMixin, UpdateView):
+class PropertyUpdateView(PropertyChoiceFormMixin, SystemAdminRequiredMixin, AppViewMixin, UpdateView):
     model = Property
     form_class = PropertyForm
     template_name = 'references/property_form.html'
     context_object_name = 'property_obj'
+
+    def get_queryset(self):
+        return Property.objects.prefetch_related(
+            Prefetch('choices', queryset=PropertyChoice.objects.order_by('sort_order', 'label'))
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -108,8 +153,13 @@ class PropertyUpdateView(SystemAdminRequiredMixin, AppViewMixin, UpdateView):
         return context
 
     def form_valid(self, form):
-        messages.success(self.request, f'Свойство «{form.instance.display_name}» сохранено.')
-        return super().form_valid(form)
+        saved, choice_formset = self._save_with_choices(form)
+        if saved is None:
+            return self.render_to_response(
+                self.get_context_data(form=form, choice_formset=choice_formset)
+            )
+        messages.success(self.request, f'Свойство «{self.object.display_name}» сохранено.')
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse_lazy('references:list')

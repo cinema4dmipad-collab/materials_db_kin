@@ -3,7 +3,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.references.forms import PropertyForm
-from apps.references.models import Property, PropertyGroup
+from apps.references.models import Property, PropertyChoice, PropertyGroup
 from apps.workspaces.models import BUILTIN_GROUP_OPERATOR, Workspace
 from apps.workspaces.services import assign_user_to_groups, ensure_default_groups
 from apps.workspaces.test_utils import login_test_client
@@ -26,6 +26,36 @@ class PropertyFormTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['name'], 'predel_prochnosti')
+
+    def test_material_link_data_type_clears_unit(self):
+        form = PropertyForm(
+            data={
+                'display_name': 'Базовый материал',
+                'name': 'base_material',
+                'unit': 'should-be-cleared',
+                'data_type': 'material_link',
+                'group': '',
+                'description': '',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['data_type'], 'material_link')
+        self.assertEqual(form.cleaned_data['unit'], '')
+
+    def test_choice_data_type_clears_unit(self):
+        form = PropertyForm(
+            data={
+                'display_name': 'Тип сплетения',
+                'name': 'weave_type',
+                'unit': 'should-be-cleared',
+                'data_type': 'choice',
+                'group': '',
+                'description': '',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['data_type'], 'choice')
+        self.assertEqual(form.cleaned_data['unit'], '')
 
     def test_effective_unit_uses_unit_field(self):
         prop = Property(
@@ -85,6 +115,20 @@ class PropertyViewsTests(TestCase):
             'description': 'Test property',
         }
         data.update(overrides)
+        return data
+
+    def _choice_formset_payload(self, *options):
+        data = {
+            'choices-TOTAL_FORMS': str(len(options)),
+            'choices-INITIAL_FORMS': '0',
+            'choices-MIN_NUM_FORMS': '0',
+            'choices-MAX_NUM_FORMS': '1000',
+        }
+        for index, option in enumerate(options):
+            data[f'choices-{index}-label'] = option['label']
+            data[f'choices-{index}-value'] = option.get('value', '')
+            data[f'choices-{index}-sort_order'] = str(option.get('sort_order', index))
+            data[f'choices-{index}-DELETE'] = ''
         return data
 
     def test_property_list_renders_for_operator(self):
@@ -216,3 +260,80 @@ class PropertyViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Property.objects.filter(pk=self.property.pk).exists())
+
+    def test_property_create_choice_with_options(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
+        response = self.client.post(
+            reverse('references:create'),
+            {
+                **self._property_payload(
+                    display_name='Тип сплетения',
+                    name='weave_type',
+                    unit='',
+                    data_type='choice',
+                    description='',
+                ),
+                **self._choice_formset_payload(
+                    {'label': 'Саржа', 'value': 'twill', 'sort_order': 0},
+                    {'label': 'Полотно', 'value': 'plain', 'sort_order': 1},
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created = Property.objects.get(name='weave_type')
+        self.assertEqual(created.data_type, 'choice')
+        self.assertEqual(created.unit, '')
+        labels = list(created.choices.order_by('sort_order').values_list('label', 'value'))
+        self.assertEqual(labels, [('Саржа', 'twill'), ('Полотно', 'plain')])
+
+    def test_property_create_choice_requires_options(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
+        response = self.client.post(
+            reverse('references:create'),
+            {
+                **self._property_payload(
+                    display_name='Пустой выбор',
+                    name='empty_choice',
+                    unit='',
+                    data_type='choice',
+                    description='',
+                ),
+                **self._choice_formset_payload(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Property.objects.filter(name='empty_choice').exists())
+        self.assertContains(response, 'хотя бы один вариант')
+
+    def test_property_update_clears_choices_when_type_changes(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
+        choice_prop = Property.objects.create(
+            name='old_choice',
+            display_name='Old choice',
+            data_type='choice',
+            group=self.group,
+        )
+        PropertyChoice.objects.create(
+            property=choice_prop,
+            label='A',
+            value='a',
+            sort_order=0,
+        )
+        response = self.client.post(
+            reverse('references:edit', kwargs={'pk': choice_prop.pk}),
+            {
+                'name': 'old_choice',
+                'display_name': 'Now string',
+                'unit': '',
+                'data_type': 'string',
+                'group': str(self.group.pk),
+                'description': '',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        choice_prop.refresh_from_db()
+        self.assertEqual(choice_prop.data_type, 'string')
+        self.assertEqual(choice_prop.choices.count(), 0)

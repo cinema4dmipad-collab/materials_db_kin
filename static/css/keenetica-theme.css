@@ -633,8 +633,21 @@ a:hover {
     --bs-table-hover-bg: rgba(0, 118, 121, 0.08);
 }
 
+.material-properties-table__value-col {
+    width: 1%;
+    text-align: right;
+}
+
 .material-properties-table__unit-col {
-    width: 8rem;
+    width: 1%;
+    text-align: left;
+}
+
+.material-properties-table__spacer-col,
+.material-properties-table .material-props-section__spacer {
+    width: 99%;
+    padding: 0;
+    border: 0;
 }
 
 .material-properties-table .material-props-section__header th {
@@ -667,21 +680,52 @@ a:hover {
 }
 
 .material-properties-table .material-props-section__name {
-    width: 38%;
+    width: 1%;
+    padding-right: 1.25rem;
     font-weight: 600;
     color: var(--kx-text);
     background: transparent;
+    white-space: nowrap;
+}
+
+.material-properties-table thead .material-properties-table__value-col {
+    text-align: right;
+}
+
+.material-properties-table thead .material-properties-table__unit-col {
+    text-align: left;
 }
 
 .material-properties-table .material-props-section__value {
+    width: 1%;
+    padding-right: 0.35rem;
+    text-align: right;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .material-properties-table .material-props-section__unit {
+    width: 1%;
+    padding-left: 0.35rem;
+    text-align: left;
     color: var(--kx-text-muted);
     font-size: 0.875rem;
+    font-weight: 500;
     white-space: nowrap;
+}
+
+/* Forms: value field grows; unit stays immediately after it. */
+.material-properties-table .property-form-row .material-props-section__name {
+    white-space: normal;
+}
+
+.material-properties-table .property-form-row .material-props-section__value {
+    width: auto;
+    min-width: 12rem;
+    text-align: left;
+    white-space: normal;
+    padding-right: 0.5rem;
 }
 
 .material-properties-table .material-props-section__empty td {

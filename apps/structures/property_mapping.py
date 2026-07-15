@@ -9,6 +9,8 @@ PROPERTY_DATA_TYPE_TO_FIELD_TYPE = {
     'string': 'CharField',
     'boolean': 'BooleanField',
     'date': 'DateField',
+    'material_link': 'MaterialLink',
+    'choice': 'CharField',
 }
 
 
@@ -51,14 +53,31 @@ def property_to_structure_field_data(property_obj: Property) -> dict:
     if field_type == 'DecimalField':
         result['max_digits'] = DEFAULT_MAX_DIGITS
         result['decimal_places'] = DEFAULT_DECIMAL_PLACES
+    if property_obj.data_type == Property.CHOICE_DATA_TYPE:
+        result['choices'] = [
+            {'value': item.value, 'label': item.label}
+            for item in property_obj.choice_options()
+        ]
     return result
 
 
-def reference_properties_for_picker() -> list[dict]:
-    properties = Property.objects.select_related('group').order_by(
-        'group__sort_order',
-        'group__name',
-        'display_name',
-        'name',
+def reference_properties_for_picker(
+    *,
+    exclude_data_types: set[str] | frozenset[str] | None = None,
+) -> list[dict]:
+    properties = (
+        Property.objects.select_related('group')
+        .prefetch_related('choices')
+        .order_by(
+            'group__sort_order',
+            'group__name',
+            'display_name',
+            'name',
+        )
     )
-    return [property_to_structure_field_data(item) for item in properties]
+    excluded = exclude_data_types or frozenset()
+    return [
+        property_to_structure_field_data(item)
+        for item in properties
+        if item.data_type not in excluded
+    ]

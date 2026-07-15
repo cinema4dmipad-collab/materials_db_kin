@@ -25,7 +25,11 @@ class Property(models.Model):
         ('string', 'Строка'),
         ('boolean', 'Да/Нет'),
         ('date', 'Дата'),
+        ('material_link', 'Материал'),
+        ('choice', 'Выбор из списка'),
     ]
+    MATERIAL_LINK_DATA_TYPE = 'material_link'
+    CHOICE_DATA_TYPE = 'choice'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
@@ -47,6 +51,8 @@ class Property(models.Model):
         return f"{self.display_name} ({self.unit})" if self.unit else self.display_name
 
     def effective_unit(self) -> str:
+        if self.data_type in {self.MATERIAL_LINK_DATA_TYPE, self.CHOICE_DATA_TYPE}:
+            return ''
         unit = (self.unit or '').strip()
         if unit:
             return unit
@@ -74,5 +80,39 @@ class Property(models.Model):
             return f'{display_name}, {unit}'
         return display_name
 
+    def choice_options(self):
+        return self.choices.order_by('sort_order', 'label', 'value')
+
+    def choice_label_for_value(self, value: str) -> str:
+        raw = (value or '').strip()
+        if not raw:
+            return ''
+        for choice in self.choices.all():
+            if choice.value == raw:
+                return choice.label
+        return raw
+
     class Meta:
         ordering = ['group__sort_order', 'display_name', 'name']
+
+
+class PropertyChoice(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name='choices',
+        verbose_name='Свойство',
+    )
+    label = models.CharField(max_length=200, verbose_name='Название')
+    value = models.CharField(max_length=100, verbose_name='Код')
+    sort_order = models.IntegerField(default=0, verbose_name='Порядок')
+
+    class Meta:
+        ordering = ['sort_order', 'label', 'value']
+        unique_together = [('property', 'value')]
+        verbose_name = 'Вариант свойства'
+        verbose_name_plural = 'Варианты свойства'
+
+    def __str__(self):
+        return f'{self.property.display_name}: {self.label}'
