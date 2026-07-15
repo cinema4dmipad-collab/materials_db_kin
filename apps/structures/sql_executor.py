@@ -10,7 +10,12 @@ from apps.core.number_utils import normalize_decimal_input
 from apps.structures.default_values import validate_structure_field_model
 from apps.structures.display_format import normalize_structure_field_value
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
+from apps.structures.models import (
+    CHOICE_FIELD_TYPE,
+    MATERIAL_LINK_FIELD_TYPE,
+    StructureField,
+    StructureType,
+)
 
 IDENTIFIER_RE = re.compile(r'^[a-z][a-z0-9_]*$')
 UNSUPPORTED_FOREIGN_KEY_FIELD_ERROR = (
@@ -388,7 +393,7 @@ class SQLExecutor:
 
     @classmethod
     def _field_sql_type(cls, field: StructureField) -> str:
-        if field.field_type == 'CharField':
+        if field.field_type in {'CharField', CHOICE_FIELD_TYPE}:
             return cls._text_type(field.max_length or 255)
         if field.field_type == 'TextField':
             return 'TEXT'

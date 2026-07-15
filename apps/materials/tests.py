@@ -392,8 +392,8 @@ class MaterialStructureLinkTests(TransactionTestCase):
                 INSERT INTO structures_structurefield
                     (structure_type_id, name, label, field_type, is_required, default_value,
                      help_text, sort_order, max_digits, decimal_places, max_length,
-                     foreign_key_model)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     choice_options, foreign_key_model)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 [
                     self.structure_type.pk,
@@ -407,6 +407,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
                     10,
                     2,
                     255,
+                    '[]',
                     'materials.Material',
                 ],
             )

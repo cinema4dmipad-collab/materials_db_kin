@@ -12,8 +12,10 @@ from apps.structures.identifiers import (
     validate_structure_code,
     validate_table_name,
 )
+from apps.structures.choice_options import normalize_choice_options
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
 from apps.structures.models import (
+    CHOICE_FIELD_TYPE,
     MATERIAL_LINK_FIELD_TYPE,
     STRUCTURE_FIELD_DELETE_LOCK_ERROR,
     StructureField,
@@ -205,6 +207,7 @@ class StructureFieldForm(forms.ModelForm):
             'decimal_places',
             'default_value',
             'help_text',
+            'choice_options',
         ]
         labels = {
             'name': 'Имя колонки',
@@ -247,6 +250,9 @@ class StructureFieldForm(forms.ModelForm):
             'help_text': forms.TextInput(
                 attrs={**_BOOTSTRAP_INPUT, 'placeholder': 'Текст под полем для оператора'},
             ),
+            'choice_options': forms.HiddenInput(
+                attrs={'data-structure-field-choices': 'true'},
+            ),
         }
         help_texts = {
             'name': 'Латиница, цифры и _. Начинается с буквы. Заполняется из подписи, можно править.',
@@ -261,6 +267,7 @@ class StructureFieldForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['name'].required = False
+        self.fields['choice_options'].required = False
         if (
             self.instance.pk
             and self.instance.structure_type_id
@@ -305,7 +312,15 @@ class StructureFieldForm(forms.ModelForm):
         field_type = cleaned_data.get('field_type')
         cleaned_data = _apply_field_type_constraints(cleaned_data)
         field_type = cleaned_data.get('field_type')
-        if field_type == 'CharField':
+        cleaned_data['choice_options'] = normalize_choice_options(
+            cleaned_data.get('choice_options')
+        )
+        if field_type == CHOICE_FIELD_TYPE and not cleaned_data['choice_options']:
+            self.add_error(
+                'field_type',
+                'Для типа «Выбор из списка» нужны варианты. Добавьте свойство из справочника.',
+            )
+        if field_type in {'CharField', CHOICE_FIELD_TYPE}:
             max_length = cleaned_data.get('max_length') or 255
             if max_length < 1 or max_length > 4000:
                 self.add_error('max_length', 'Длина строки — от 1 до 4000.')
@@ -341,20 +356,26 @@ class StructureFieldForm(forms.ModelForm):
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.foreign_key_model = ''
+        instance.choice_options = normalize_choice_options(instance.choice_options)
         if instance.field_type == MATERIAL_LINK_FIELD_TYPE:
             instance.max_length = None
             instance.max_digits = None
             instance.decimal_places = None
             instance.default_value = ''
-        elif instance.field_type == 'CharField':
+            instance.choice_options = []
+        elif instance.field_type in {'CharField', CHOICE_FIELD_TYPE}:
             instance.max_digits = None
             instance.decimal_places = None
+            if instance.field_type == 'CharField':
+                instance.choice_options = []
         elif instance.field_type == 'DecimalField':
             instance.max_length = None
+            instance.choice_options = []
         else:
             instance.max_length = None
             instance.max_digits = None
             instance.decimal_places = None
+            instance.choice_options = []
         if commit:
             instance.save()
             self.save_m2m()
@@ -371,15 +392,20 @@ def _apply_field_type_constraints(cleaned_data: dict) -> dict:
         cleaned_data['max_digits'] = None
         cleaned_data['decimal_places'] = None
         cleaned_data['default_value'] = ''
-    elif field_type == 'CharField':
+        cleaned_data['choice_options'] = []
+    elif field_type in {'CharField', CHOICE_FIELD_TYPE}:
         cleaned_data['max_digits'] = None
         cleaned_data['decimal_places'] = None
+        if field_type == 'CharField':
+            cleaned_data['choice_options'] = []
     elif field_type == 'DecimalField':
         cleaned_data['max_length'] = None
+        cleaned_data['choice_options'] = []
     else:
         cleaned_data['max_length'] = None
         cleaned_data['max_digits'] = None
         cleaned_data['decimal_places'] = None
+        cleaned_data['choice_options'] = []
 
     return cleaned_data
 

@@ -6,7 +6,7 @@ Shared catalog of measurable **properties** used in materials, samples, and stru
 
 ## Model
 
-**Property** — name, code, unit, data type (`CharField`, `IntegerField`, `DecimalField`, `BooleanField`, `DateField`), optional group, description, creator.
+**Property** — name, code, unit, data type (`number`, `string`, `boolean`, `date`, `material_link`, `choice`), optional group, description, creator. For `choice`, options live in related `PropertyChoice` rows (`label` / `value`).
 
 Codes are generated from names (transliteration + snake_case) with validation against SQL reserved words.
 

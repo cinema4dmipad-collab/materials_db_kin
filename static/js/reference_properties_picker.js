@@ -20,6 +20,7 @@
         DateField: 'Дата',
         DateTimeField: 'Дата и время',
         MaterialLink: 'Материал',
+        ChoiceField: 'Выбор из списка',
     };
 
     function escapeHtml(text) {

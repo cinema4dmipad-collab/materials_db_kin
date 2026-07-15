@@ -76,7 +76,7 @@ class PropertyMappingTests(TestCase):
 
         self.assertEqual(property_to_structure_field_data(prop)['field_type'], 'CharField')
 
-    def test_property_choice_maps_to_char_field_with_choices(self):
+    def test_property_choice_maps_to_choice_field_with_options(self):
         from apps.references.models import PropertyChoice
 
         prop = Property.objects.create(
@@ -88,7 +88,7 @@ class PropertyMappingTests(TestCase):
         PropertyChoice.objects.create(property=prop, label='Полотно', value='plain', sort_order=1)
 
         data = property_to_structure_field_data(prop)
-        self.assertEqual(data['field_type'], 'CharField')
+        self.assertEqual(data['field_type'], 'ChoiceField')
         self.assertEqual(data['data_type'], 'choice')
         self.assertEqual(
             data['choices'],
@@ -97,6 +97,7 @@ class PropertyMappingTests(TestCase):
                 {'value': 'plain', 'label': 'Полотно'},
             ],
         )
+        self.assertEqual(data['choice_options'], data['choices'])
 
     def test_reserved_sql_name_gets_safe_suffix(self):
         prop = Property.objects.create(
@@ -920,6 +921,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
     def test_field_type_choices_include_material_link_but_not_foreign_key(self):
         field_type_values = [value for value, _ in StructureField.FIELD_TYPES]
         self.assertIn('MaterialLink', field_type_values)
+        self.assertIn('ChoiceField', field_type_values)
         self.assertNotIn('ForeignKey', field_type_values)
 
         site = AdminSite()
@@ -1224,6 +1226,50 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertFalse(form_field.required)
         self.assertEqual(list(form_field.queryset), [material, other_material])
         self.assertEqual(form_field.label_from_instance(material), 'MAT-FORM-001 - Form material')
+
+    def test_choice_field_dynamic_form_uses_select_with_options(self):
+        from apps.structures.forms import _build_dynamic_field
+        from apps.structures.models import CHOICE_FIELD_TYPE
+
+        choice_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='weave_type',
+            label='Тип сплетения',
+            field_type=CHOICE_FIELD_TYPE,
+            choice_options=[
+                {'value': 'twill', 'label': 'Саржа'},
+                {'value': 'plain', 'label': 'Полотно'},
+            ],
+            sort_order=4,
+        )
+        form_field = _build_dynamic_field(choice_field)
+        self.assertIsInstance(form_field, forms.ChoiceField)
+        self.assertEqual(
+            list(form_field.choices),
+            [('', '---------'), ('twill', 'Саржа'), ('plain', 'Полотно')],
+        )
+        self.assertEqual(form_field.widget.attrs.get('data-choice-picker'), 'true')
+
+    def test_char_field_falls_back_to_reference_choice_property(self):
+        from apps.references.models import Property, PropertyChoice
+        from apps.structures.forms import _build_dynamic_field
+
+        prop = Property.objects.create(
+            name='legacy_weave',
+            display_name='Тип сплетения',
+            data_type='choice',
+        )
+        PropertyChoice.objects.create(property=prop, label='Саржа', value='twill', sort_order=0)
+        char_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='legacy_weave',
+            label='Тип сплетения',
+            field_type='CharField',
+            sort_order=4,
+        )
+        form_field = _build_dynamic_field(char_field)
+        self.assertIsInstance(form_field, forms.ChoiceField)
+        self.assertIn(('twill', 'Саржа'), list(form_field.choices))
 
     def test_unlimited_offset_pagination_uses_postgresql_compatible_sql(self):
         with mock.patch.object(connection, 'vendor', 'postgresql'):

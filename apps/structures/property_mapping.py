@@ -10,7 +10,7 @@ PROPERTY_DATA_TYPE_TO_FIELD_TYPE = {
     'boolean': 'BooleanField',
     'date': 'DateField',
     'material_link': 'MaterialLink',
-    'choice': 'CharField',
+    'choice': 'ChoiceField',
 }
 
 
@@ -58,6 +58,7 @@ def property_to_structure_field_data(property_obj: Property) -> dict:
             {'value': item.value, 'label': item.label}
             for item in property_obj.choice_options()
         ]
+        result['choice_options'] = result['choices']
     return result
 
 
