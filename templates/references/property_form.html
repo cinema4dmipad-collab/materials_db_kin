@@ -25,7 +25,7 @@
                     {% endif %}
 
                     {% for field in form %}
-                    <div class="mb-3"{% if field.name == 'unit' %} data-property-unit-group{% endif %}>
+                    <div class="mb-3"{% if field.name == 'unit' %} data-property-unit-group{% if form.data_type.value == 'material_link' or form.data_type.value == 'choice' %} d-none{% endif %}{% elif field.name == 'decimal_places' %} data-property-decimal-places-group{% if form.data_type.value != 'number' %} d-none{% endif %}{% endif %}>
                         <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.help_text %}

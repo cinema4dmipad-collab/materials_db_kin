@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from apps.references.models import Property
 from apps.structures.identifiers import normalize_identifier, validate_field_column_name
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
+from apps.structures.constants import DEFAULT_MAX_DIGITS
 
 PROPERTY_DATA_TYPE_TO_FIELD_TYPE = {
     'number': 'DecimalField',
@@ -52,7 +52,7 @@ def property_to_structure_field_data(property_obj: Property) -> dict:
     }
     if field_type == 'DecimalField':
         result['max_digits'] = DEFAULT_MAX_DIGITS
-        result['decimal_places'] = DEFAULT_DECIMAL_PLACES
+        result['decimal_places'] = property_obj.effective_decimal_places()
     if property_obj.data_type == Property.CHOICE_DATA_TYPE:
         result['choices'] = [
             {'value': item.value, 'label': item.label}

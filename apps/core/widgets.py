@@ -1,11 +1,12 @@
-import json
+import uuid
 
 from django import forms
 from django.forms.utils import flatatt
 from django.template.loader import render_to_string
-from django.utils.html import escape
+from django.utils.html import json_script
 
 from apps.core.models import Tag
+from apps.core.tag_utils import active_tags_queryset
 
 
 class TagNamesWidget(forms.TextInput):
@@ -26,15 +27,22 @@ class TagNamesWidget(forms.TextInput):
     def get_tag_suggestions(self):
         if self.tag_suggestions is not None:
             return self.tag_suggestions
-        return list(Tag.objects.order_by('name').values('name', 'slug'))
+        return list(
+            active_tags_queryset(Tag.objects.all()).order_by('name').values(
+                'name',
+                'slug',
+                'color',
+                'description',
+            )
+        )
 
     def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
         suggestions = self.get_tag_suggestions()
+        script_id = f'tag-suggestions-{uuid.uuid4().hex}'
         context['widget']['tag_suggestions'] = suggestions
-        context['widget']['tag_suggestions_json'] = escape(
-            json.dumps(suggestions, ensure_ascii=False),
-        )
+        context['widget']['tag_suggestions_script_id'] = script_id
+        context['widget']['tag_suggestions_json_script'] = json_script(suggestions, script_id)
         context['widget']['extra_attrs'] = flatatt(context['widget']['attrs'])
         return context
 

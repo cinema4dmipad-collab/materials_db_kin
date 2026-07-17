@@ -14,6 +14,7 @@ from apps.structures.identifiers import (
 )
 from apps.structures.choice_options import normalize_choice_options
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
+from apps.structures.colors import DEFAULT_STRUCTURE_DISPLAY_COLOR, normalize_display_color, validate_display_color
 from apps.structures.models import (
     CHOICE_FIELD_TYPE,
     MATERIAL_LINK_FIELD_TYPE,
@@ -25,9 +26,17 @@ from apps.structures.models import (
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
 _BOOTSTRAP_CHECK = {'class': 'form-check-input'}
+_BOOTSTRAP_COLOR = {'class': 'form-control', 'placeholder': DEFAULT_STRUCTURE_DISPLAY_COLOR, 'maxlength': '7'}
 
 
-class StructureTypeForm(forms.ModelForm):
+class StructureDisplayColorFormMixin:
+    def clean_display_color(self):
+        color = normalize_display_color(self.cleaned_data.get('display_color', ''))
+        validate_display_color(color)
+        return color
+
+
+class StructureTypeForm(StructureDisplayColorFormMixin, forms.ModelForm):
     class Meta:
         model = StructureType
         fields = ['name', 'description', 'display_color', 'allow_layers', 'table_name']
@@ -53,7 +62,7 @@ class StructureTypeForm(forms.ModelForm):
                     'placeholder': 'Кратко: для каких материалов и параметров используется этот тип.',
                 }
             ),
-            'display_color': forms.RadioSelect(choices=StructureType._meta.get_field('display_color').choices),
+            'display_color': forms.TextInput(attrs=_BOOTSTRAP_COLOR),
             'allow_layers': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECK),
             'table_name': forms.TextInput(
                 attrs={
@@ -72,8 +81,7 @@ class StructureTypeForm(forms.ModelForm):
                 'Если оставить пустым — имя построится автоматически из названия.'
             ),
             'display_color': (
-                'Один цвет для всех материалов этого типа — инженеру проще '
-                'отличать классы структур, не путая похожие материалы.'
+                'Один цвет для всех материалов этого типа — выберите из палитры или укажите свой (#RRGGBB).'
             ),
             'allow_layers': 'Включите, если материалы этого типа могут иметь слои композита.',
         }
@@ -260,7 +268,7 @@ class StructureFieldForm(forms.ModelForm):
             'field_type': 'Строка — текст; Число — целое; Десятичная — размеры с дробной частью.',
             'max_length': 'Для строки: сколько символов хранить (обычно 255).',
             'max_digits': 'Для десятичного числа: всего цифр, включая дробную часть.',
-            'decimal_places': 'Сколько знаков после запятой (например 4 для 1,6518).',
+            'decimal_places': 'Сколько знаков после запятой (например 2 для 1,65).',
             'default_value': 'Необязательно. Для чисел используйте точку (12.5), для даты — ГГГГ-ММ-ДД.',
         }
 
@@ -443,12 +451,12 @@ StructureFieldInlineFormSet = inlineformset_factory(
 )
 
 
-class StructureTypeDisplayColorForm(forms.ModelForm):
+class StructureTypeDisplayColorForm(StructureDisplayColorFormMixin, forms.ModelForm):
     class Meta:
         model = StructureType
         fields = ['display_color']
         labels = {'display_color': 'Цвет в списке материалов'}
-        widgets = {'display_color': forms.RadioSelect(choices=StructureType._meta.get_field('display_color').choices)}
+        widgets = {'display_color': forms.TextInput(attrs=_BOOTSTRAP_COLOR)}
 
 
 class StructureTypeVisibilityForm(forms.ModelForm):

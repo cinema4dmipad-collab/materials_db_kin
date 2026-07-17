@@ -33,7 +33,7 @@
                     <tr>
                         <td>{{ property.display_name }}</td>
                         <td><code>{{ property.name }}</code></td>
-                        <td>{{ property.unit|default:"—" }}</td>
+                        <td>{{ property.unit }}</td>
                         <td>{% include 'includes/type_badge.html' with label=property.get_data_type_display value=property.data_type %}</td>
                         <td>{{ property.group.name|default:"—" }}</td>
                         <td>{% include 'includes/creator_filter_link.html' with obj=property %}</td>

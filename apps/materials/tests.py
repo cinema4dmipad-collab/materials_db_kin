@@ -109,9 +109,39 @@ class MaterialStructureLinkTests(TransactionTestCase):
             'skin_material': '',
         }
         data.update(overrides)
+        payload = {}
+        for field in structure_type.fields.exclude(field_type='ForeignKey'):
+            if field.field_type == 'DecimalField':
+                value = data[field.name]
+                base = f'structure_field_{field.pk}'
+                if isinstance(value, dict):
+                    payload.update(value)
+                    payload.setdefault(base, value.get('value', ''))
+                else:
+                    payload[base] = value
+                    payload[f'{base}__b'] = ''
+                    payload[f'{base}__kind'] = 'scalar'
+            else:
+                payload[f'structure_field_{field.pk}'] = data[field.name]
+        return payload
+
+    def structure_decimal_range_data(self, structure_type, field_name, *, min_value, max_value):
+        field = structure_type.fields.get(name=field_name)
+        base = f'structure_field_{field.pk}'
         return {
-            f'structure_field_{field.pk}': data[field.name]
-            for field in structure_type.fields.exclude(field_type='ForeignKey')
+            base: '',
+            f'{base}__min': min_value,
+            f'{base}__max': max_value,
+            f'{base}__is_range': 'on',
+        }
+
+    def structure_decimal_tolerance_data(self, structure_type, field_name, *, nominal, tolerance):
+        field = structure_type.fields.get(name=field_name)
+        base = f'structure_field_{field.pk}'
+        return {
+            base: nominal,
+            f'{base}__tolerance': tolerance,
+            f'{base}__is_tolerance': 'on',
         }
 
     def insert_structure_row(self, **overrides):
@@ -680,7 +710,11 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
     def _property_formset_data(self, property_obj, prefix='properties-0', **overrides):
         data = {
             f'{prefix}-property': str(property_obj.pk),
+            f'{prefix}-value_kind': 'scalar',
             f'{prefix}-value': '1.55',
+            f'{prefix}-value_min': '',
+            f'{prefix}-value_max': '',
+            f'{prefix}-value_tolerance': '',
         }
         data.update(overrides)
         return data
@@ -940,7 +974,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
         self.assertEqual(response.status_code, 302)
         link = MaterialProperty.objects.get(material=material, property=density)
-        self.assertEqual(link.value, '2.10')
+        self.assertEqual(link.value, '2.1')
 
     def test_public_material_form_accepts_comma_in_number_property_value(self):
         density = Property.objects.create(
@@ -1149,7 +1183,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             self._post_data(
                 **self.structure_field_data(
                     self.structure_type,
-                    **{f'structure_field_{thickness_field.pk}': '12,50'},
+                    thickness='12,50',
                 ),
             ),
         )
@@ -1160,6 +1194,84 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
         detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
         self.assertContains(detail_response, '12,50')
+
+    def test_public_material_create_saves_structure_decimal_range(self):
+        range_data = self.structure_decimal_range_data(
+            self.structure_type,
+            'thickness',
+            min_value='900',
+            max_value='1900',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(**range_data),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        params = material.get_structure_params()
+        self.assertEqual(params['thickness__kind'], 'range')
+        self.assertEqual(str(params['thickness']), '900.00')
+        self.assertEqual(str(params['thickness__b']), '1900.00')
+
+        detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertContains(detail_response, '900,00')
+        self.assertContains(detail_response, '1900,00')
+
+    def test_public_material_create_saves_structure_decimal_tolerance(self):
+        tolerance_data = self.structure_decimal_tolerance_data(
+            self.structure_type,
+            'thickness',
+            nominal='0,27',
+            tolerance='0,03',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(**tolerance_data),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        params = material.get_structure_params()
+        self.assertEqual(params['thickness__kind'], 'tolerance')
+        self.assertEqual(str(params['thickness']), '0.27')
+        self.assertEqual(str(params['thickness__b']), '0.03')
+
+        detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertContains(detail_response, '0,27±0,03')
+
+    def test_material_properties_json_includes_structure_decimal_range(self):
+        from apps.core.property_number_value import VALUE_KIND_RANGE
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        packed = pack_decimal_field_data(
+            'thickness',
+            value_kind=VALUE_KIND_RANGE,
+            value='900',
+            value_b='1900',
+        )
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'JSON range panel', **packed},
+        )['id']
+        material = self.create_material(
+            code='MAT-JSON-RANGE',
+            name='Material with range structure',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.get(
+            reverse('materials:properties_json', kwargs={'pk': material.pk}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        thickness = next(
+            item for item in response.json()['structure_properties'] if item['name'] == 'thickness'
+        )
+        self.assertEqual(thickness['value_kind'], 'range')
+        self.assertEqual(thickness['value'], '900.00')
+        self.assertEqual(thickness['value_b'], '1900.00')
+        self.assertIn('900', thickness['display_value'])
+        self.assertIn('900', thickness['display_value'].replace('\xa0', ''))
 
     def test_public_material_create_view_auto_numbers_multiple_layers(self):
         first_layer_material = self.create_material(

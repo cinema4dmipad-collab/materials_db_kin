@@ -1,5 +1,6 @@
 from django import template
 from django.http import QueryDict
+from django.utils.safestring import mark_safe
 
 from apps.core.list_filters import (
     CREATOR_SEARCH_SCOPE,
@@ -38,6 +39,44 @@ def tag_filter_link(context, tag_slug: str, base_path: str | None = None) -> str
     params.pop('page', None)
     encoded = params.urlencode()
     return f'{target_path}?{encoded}' if encoded else target_path
+
+
+@register.simple_tag
+def tag_badge_style(tag):
+    color = getattr(tag, 'color', '') or ''
+    if not color:
+        return ''
+    text_color = getattr(tag, 'badge_text_color', None)
+    if not text_color:
+        from apps.core.tag_utils import contrast_text_color
+
+        text_color = contrast_text_color(color)
+    return mark_safe(
+        f'style="--label-background-color:{color};--label-text-color:{text_color};"'
+    )
+
+
+@register.filter
+def is_scoped_tag(name):
+    from apps.core.tag_utils import split_scoped_tag_display
+
+    scope, value, _plain_name = split_scoped_tag_display(str(name or ''))
+    return scope is not None and value is not None
+
+
+@register.filter
+def scoped_tag_label(name):
+    from django.utils.html import escape
+
+    from apps.core.tag_utils import split_scoped_tag_display
+
+    scope, value, plain_name = split_scoped_tag_display(str(name or ''))
+    if scope is None or value is None:
+        return mark_safe(f'<span class="entity-tag__text">{escape(plain_name)}</span>')
+    return mark_safe(
+        f'<span class="entity-tag__text">{escape(scope)}</span>'
+        f'<span class="entity-tag__text-scoped">{escape(value)}</span>'
+    )
 
 
 @register.simple_tag(takes_context=True)

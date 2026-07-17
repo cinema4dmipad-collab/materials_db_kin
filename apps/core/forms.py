@@ -2,9 +2,15 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from apps.core.models import Tag
-from apps.core.tag_utils import normalize_tag_name, tag_slug_from_name, validate_tag_names
+from apps.core.tag_utils import (
+    normalize_tag_name,
+    tag_slug_from_name,
+    validate_tag_color,
+    validate_tag_names,
+)
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
+_BOOTSTRAP_TEXTAREA = {'class': 'form-control', 'rows': 3}
 _BOOTSTRAP_CHECKBOX = {'class': 'form-check-input'}
 
 
@@ -27,18 +33,31 @@ class TagForm(forms.ModelForm):
             self.fields['is_global'].disabled = True
         else:
             self.fields['is_global'].initial = False
+        self.fields['color'].widget = forms.TextInput(
+            attrs={**_BOOTSTRAP_INPUT, 'placeholder': '#336699', 'maxlength': '7'},
+        )
 
     class Meta:
         model = Tag
-        fields = ['name']
+        fields = ['name', 'description', 'color', 'is_archived']
         widgets = {
             'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
+            'description': forms.Textarea(attrs=_BOOTSTRAP_TEXTAREA),
+            'is_archived': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECKBOX),
         }
         labels = {
             'name': 'Название',
+            'description': 'Описание',
+            'color': 'Цвет',
+            'is_archived': 'В архиве',
         }
         help_texts = {
-            'name': 'Название должно быть уникальным в пределах области тега.',
+            'name': (
+                'Уникально в пределах области тега. '
+                'Для взаимоисключающих меток используйте «область::значение».'
+            ),
+            'description': 'Когда и зачем ставить этот тег.',
+            'is_archived': 'Скрывает тег из выбора, но сохраняет на уже помеченных записях.',
         }
 
     def clean_name(self):
@@ -47,6 +66,11 @@ class TagForm(forms.ModelForm):
             raise ValidationError('Укажите название тега.')
         validate_tag_names([name])
         return name
+
+    def clean_color(self):
+        color = (self.cleaned_data.get('color') or '').strip()
+        validate_tag_color(color)
+        return color.upper() if color else ''
 
     def clean_is_global(self):
         if not self.allow_global:

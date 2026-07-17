@@ -1,3 +1,4 @@
+{% load list_filter_tags %}
 <form method="get" class="list-filter-panel">
     {% for name, value in list_filter_preserve_params %}
     <input type="hidden" name="{{ name }}" value="{{ value }}">
@@ -85,7 +86,7 @@
            title="Убрать тег из фильтра"
            aria-label="Убрать тег «{{ tag.label }}» из фильтра">
             <span class="list-filter-chip__key">Тег</span>
-            {{ tag.label }}
+            {{ tag.label|scoped_tag_label }}
             <span class="list-filter-chip__remove" aria-hidden="true">&times;</span>
         </a>
         {% endfor %}

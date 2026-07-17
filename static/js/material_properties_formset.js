@@ -75,7 +75,7 @@
             labelCell.textContent = formatPropertyName(label, unit);
         }
         if (unitCell) {
-            unitCell.textContent = (unit || '').trim() || '—';
+            unitCell.textContent = (unit || '').trim();
         }
     }
 
@@ -177,6 +177,10 @@
         } else if (payload.data_type === 'choice') {
             ensureChoiceValueField(row, payload.choices || [], payload.value || '');
             setRowPropertyMeta(row, payload.label, '');
+        } else if (payload.data_type === 'number') {
+            if (window.PropertyNumberValue && window.PropertyNumberValue.initRow) {
+                window.PropertyNumberValue.initRow(row);
+            }
         }
     }
 
@@ -190,6 +194,9 @@
         totalFormsInput.value = String(formIndex + 1);
         bindDeleteButton(container, row, totalFormsInput);
         updateEmptyState(container);
+        if (window.PropertyNumberValue && window.PropertyNumberValue.initRow) {
+            window.PropertyNumberValue.initRow(row);
+        }
         return row;
     }
 

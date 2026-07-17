@@ -18,7 +18,7 @@
     const FIELD_TYPE_DEFAULTS = {
         CharField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
         ChoiceField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
-        DecimalField: { max_length: '', max_digits: '10', decimal_places: '4', default_value: '' },
+        DecimalField: { max_length: '', max_digits: '10', decimal_places: '2', default_value: '' },
         MaterialLink: { max_length: '', max_digits: '', decimal_places: '', default_value: '' },
     };
 
@@ -107,7 +107,7 @@
         if (typeNode) {
             let typeLabel = fieldTypeLabel(fieldType);
             if (fieldType === 'DecimalField') {
-                const places = row.querySelector('[name$="-decimal_places"]')?.value || '4';
+                const places = row.querySelector('[name$="-decimal_places"]')?.value || '2';
                 typeLabel = `${typeLabel} · ${places} зн.`;
             }
             typeNode.textContent = typeLabel;

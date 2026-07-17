@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from apps.structures.colors import DEFAULT_STRUCTURE_DISPLAY_COLOR, STRUCTURE_DISPLAY_COLOR_CHOICES
+from apps.structures.colors import DEFAULT_STRUCTURE_DISPLAY_COLOR
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES
 from apps.workspaces.visibility import VisibilityMode, WorkspaceVisibilityMixin
 
@@ -35,11 +35,10 @@ class StructureType(WorkspaceVisibilityMixin, models.Model):
         help_text='Разрешить добавление слоёв композита для материалов этого типа.',
     )
     display_color = models.CharField(
-        max_length=20,
-        choices=STRUCTURE_DISPLAY_COLOR_CHOICES,
+        max_length=7,
         default=DEFAULT_STRUCTURE_DISPLAY_COLOR,
         verbose_name='Цвет в интерфейсе',
-        help_text='Отображается в списке материалов и карточках с этим типом структуры.',
+        help_text='Hex-цвет (#RRGGBB) для бейджей материалов и карточек с этим типом структуры.',
     )
     is_active = models.BooleanField(default=True)
     is_created = models.BooleanField(default=False)

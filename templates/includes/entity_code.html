@@ -1,4 +1,7 @@
-<a href="{{ url }}" class="entity-code-link {{ tone|default:'tone-slate' }}">
-    <span class="entity-code-link__mark" aria-hidden="true"></span>
+{% load ui_tags %}
+<a href="{{ url }}"
+   class="entity-code-link{% if tone|structure_is_hex_color %}{% else %} {{ tone|default:'tone-slate' }}{% endif %}"
+   {% if tone|structure_is_hex_color %}{% entity_code_link_style tone %}{% endif %}>
+    <span class="entity-code-link__mark" aria-hidden="true"{% if tone|structure_is_hex_color %} {% entity_code_mark_style tone %}{% endif %}></span>
     <span>{{ code }}</span>
 </a>

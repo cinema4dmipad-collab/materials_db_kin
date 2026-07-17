@@ -456,7 +456,9 @@
 }
 
 .workspace-sidebar__home-link {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
     padding: 0.35rem 0.5rem;
     border-radius: 0.25rem;
     font-size: 0.8125rem;
@@ -468,6 +470,15 @@
 .workspace-sidebar__home-link:hover {
     background: var(--kx-brand-soft);
     color: var(--kx-brand-dark);
+}
+
+.workspace-sidebar__icon {
+    flex: 0 0 auto;
+    width: 1.25rem;
+    font-size: 1.0625rem;
+    line-height: 1;
+    text-align: center;
+    color: inherit;
 }
 
 .workspace-sidebar__footer-workspace {
@@ -511,6 +522,7 @@
 .workspace-sidebar__link {
     display: flex;
     align-items: center;
+    gap: 0.55rem;
     min-height: 2.125rem;
     padding: 0.35rem 0.75rem;
     color: var(--kx-text);
@@ -544,22 +556,64 @@
     color: var(--kx-text-muted);
 }
 
-/* Collapsed desktop sidebar (icons area reserved for future) */
+/* Collapsed desktop sidebar: icons + native tooltips (title) */
 .app-shell--sidebar-collapsed .workspace-sidebar {
     width: 56px;
 }
 
-.app-shell--sidebar-collapsed .workspace-sidebar__header,
+.app-shell--sidebar-collapsed .workspace-sidebar__notice,
 .app-shell--sidebar-collapsed .workspace-sidebar__section-title,
 .app-shell--sidebar-collapsed .workspace-sidebar__link-text,
 .app-shell--sidebar-collapsed .workspace-sidebar__role,
 .app-shell--sidebar-collapsed .workspace-sidebar__footer-workspace,
-.app-shell--sidebar-collapsed .workspace-sidebar__home-link {
+.app-shell--sidebar-collapsed .workspace-sidebar__home-label {
     display: none;
 }
 
+.app-shell--sidebar-collapsed .workspace-sidebar__header {
+    padding: 0.5rem 0.35rem;
+    display: flex;
+    justify-content: center;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__home-link {
+    justify-content: center;
+    gap: 0;
+    padding: 0.25rem;
+    width: 100%;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__icon {
+    width: 1.375rem;
+    font-size: 1.25rem;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__link {
+    justify-content: center;
+    gap: 0;
+    padding: 0.35rem 0.25rem;
+    border-left-width: 0;
+    border-right: 3px solid transparent;
+}
+
 .app-shell--sidebar-collapsed .workspace-sidebar__link.is-active {
-    border-left-width: 3px;
+    border-left-width: 0;
+    border-right-color: var(--kx-brand);
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__footer {
+    padding: 0.5rem 0.25rem;
+    min-height: 0.5rem;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__section {
+    margin-bottom: 0.15rem;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__section + .workspace-sidebar__section {
+    margin-top: 0.35rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--kx-border);
 }
 
 /* Legacy helper kept for templates */

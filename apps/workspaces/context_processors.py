@@ -28,42 +28,49 @@ def workspace_navigation(request):
     main_nav_items = [
         {
             'label': 'Материалы',
+            'icon': 'bi-box-seam',
             'url': reverse('materials:list'),
             'visible': can(WorkspacePerm.MATERIAL_VIEW),
             'is_active': lambda n, u: n == 'materials',
         },
         {
             'label': 'Свойства',
+            'icon': 'bi-sliders',
             'url': reverse('references:list'),
             'visible': can(WorkspacePerm.PROPERTY_VIEW),
             'is_active': lambda n, u: n == 'references',
         },
         {
             'label': 'Теги',
+            'icon': 'bi-tags',
             'url': reverse('core:tag_list'),
             'visible': can(WorkspacePerm.TAG_VIEW),
             'is_active': lambda n, u: n == 'core' and u.startswith('tag_'),
         },
         {
             'label': 'Структуры',
+            'icon': 'bi-diagram-3',
             'url': reverse('structures:select_type'),
             'visible': can(WorkspacePerm.STRUCTURE_VIEW),
             'is_active': lambda n, u: n == 'structures',
         },
         {
             'label': 'Образцы',
+            'icon': 'bi-collection',
             'url': reverse('samples:list'),
             'visible': can(WorkspacePerm.SAMPLE_VIEW),
             'is_active': lambda n, u: n in ('samples', 'attachments'),
         },
         {
             'label': 'Сканы',
+            'icon': 'bi-hdd-stack',
             'url': reverse('scans_all'),
             'visible': can(WorkspacePerm.SCAN_VIEW),
             'is_active': lambda n, u: u == 'scans_all' or n == 'scans',
         },
         {
             'label': 'Справка',
+            'icon': 'bi-question-circle',
             'url': reverse('core:help'),
             'visible': True,
             'is_active': lambda n, u: n == 'core' and u == 'help',
@@ -86,6 +93,7 @@ def workspace_navigation(request):
         workspace_items.append(
             {
                 'label': 'Настройки',
+                'icon': 'bi-gear',
                 'url': reverse('workspaces:settings', kwargs={'pk': active_workspace.pk}),
                 'active': nav_namespace == 'workspaces' and nav_url_name == 'settings',
                 'visible': True,
@@ -95,6 +103,7 @@ def workspace_navigation(request):
         workspace_items.append(
             {
                 'label': 'Участники',
+                'icon': 'bi-people',
                 'url': reverse('workspaces:members', kwargs={'pk': active_workspace.pk}),
                 'active': nav_namespace == 'workspaces' and nav_url_name in (
                     'members',
@@ -113,6 +122,7 @@ def workspace_navigation(request):
         admin_items.append(
             {
                 'label': 'Пользователи',
+                'icon': 'bi-person-badge',
                 'url': reverse('administration:admin_users'),
                 'active': _admin_active('admin_users', 'admin_user_create', 'admin_user_edit', 'admin_user_memberships'),
                 'visible': True,
@@ -122,6 +132,7 @@ def workspace_navigation(request):
         admin_items.append(
             {
                 'label': 'Пространства',
+                'icon': 'bi-globe2',
                 'url': reverse('administration:admin_workspaces'),
                 'active': _admin_active(
                     'admin_workspaces',
@@ -136,6 +147,7 @@ def workspace_navigation(request):
         admin_items.append(
             {
                 'label': 'Группы',
+                'icon': 'bi-shield-lock',
                 'url': reverse('workspaces:groups', kwargs={'pk': active_workspace.pk}),
                 'active': nav_namespace == 'workspaces' and nav_url_name in (
                     'groups',

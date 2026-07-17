@@ -64,8 +64,22 @@ class PropertyMappingTests(TestCase):
         self.assertEqual(data['field_type'], 'DecimalField')
         self.assertEqual(data['label'], 'Предел прочности, МПа')
         self.assertEqual(data['name'], 'tensile_strength')
-        self.assertEqual(data['decimal_places'], 4)
+        self.assertEqual(data['decimal_places'], 2)
         self.assertEqual(data['max_digits'], 10)
+
+    def test_property_maps_to_decimal_field_with_custom_decimal_places(self):
+        prop = Property.objects.create(
+            name='density',
+            display_name='Плотность',
+            unit='g/cm3',
+            data_type='number',
+            decimal_places=2,
+            group=self.group,
+        )
+
+        data = property_to_structure_field_data(prop)
+
+        self.assertEqual(data['decimal_places'], 2)
 
     def test_property_string_maps_to_char_field(self):
         prop = Property.objects.create(
@@ -146,19 +160,31 @@ class StructureIdentifierTests(TestCase):
             data={
                 'name': 'UI Sandwich',
                 'description': '',
-                'display_color': 'tone-teal',
+                'display_color': '#007679',
                 'table_name': 'structures_custom_panel',
             }
         )
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['table_name'], 'structures_custom_panel')
 
+    def test_structure_type_form_rejects_invalid_display_color(self):
+        form = StructureTypeForm(
+            data={
+                'name': 'UI Sandwich',
+                'description': '',
+                'display_color': 'red',
+                'table_name': 'structures_custom_panel',
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('display_color', form.errors)
+
     def test_structure_type_form_rejects_invalid_table_name(self):
         form = StructureTypeForm(
             data={
                 'name': 'UI Sandwich',
                 'description': '',
-                'display_color': 'tone-teal',
+                'display_color': '#007679',
                 'table_name': 'structures_bad-name',
             }
         )
@@ -170,7 +196,7 @@ class StructureIdentifierTests(TestCase):
             data={
                 'name': 'UI Sandwich',
                 'description': '',
-                'display_color': 'tone-teal',
+                'display_color': '#007679',
             }
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -446,7 +472,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
             {
                 'name': 'UI Sandwich',
                 'description': 'Created from public UI',
-                'display_color': 'tone-blue',
+                'display_color': '#6A8FC0',
                 'allow_layers': 'on',
                 'fields-TOTAL_FORMS': '1',
                 'fields-INITIAL_FORMS': '0',
@@ -463,7 +489,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         self.assertEqual(response.status_code, 302)
         structure_type = StructureType.objects.get(code='ui_sandwich')
         self.assertFalse(structure_type.is_created)
-        self.assertEqual(structure_type.display_color, 'tone-blue')
+        self.assertEqual(structure_type.display_color, '#6A8FC0')
         self.assertEqual(structure_type.fields.count(), 1)
 
         manage_url = reverse('structures:type_manage', args=[structure_type.code])
@@ -493,7 +519,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
             {
                 'name': 'UI Empty',
                 'description': '',
-                'display_color': 'tone-blue',
+                'display_color': '#6A8FC0',
                 'fields-TOTAL_FORMS': '0',
                 'fields-INITIAL_FORMS': '0',
                 'fields-MIN_NUM_FORMS': '0',
@@ -519,7 +545,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type = StructureType.objects.create(
             name='UI Custom Table',
             code='ui_custom_table',
-            display_color='tone-blue',
+            display_color='#6A8FC0',
         )
         table_response = self.client.post(
             reverse('structures:type_create_table', args=[structure_type.code]),
@@ -538,7 +564,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type = StructureType.objects.create(
             name='UI Bad Table',
             code='ui_bad_table',
-            display_color='tone-blue',
+            display_color='#6A8FC0',
         )
         table_response = self.client.post(
             reverse('structures:type_create_table', args=[structure_type.code]),
@@ -553,7 +579,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type = StructureType.objects.create(
             name='UI Prompt Existing',
             code='ui_prompt_existing',
-            display_color='tone-blue',
+            display_color='#6A8FC0',
         )
         manage_url = reverse('structures:type_manage', args=[structure_type.code])
         response = self.client.get(manage_url)
@@ -623,7 +649,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
             {
                 'name': 'UI Duplicate Fields',
                 'description': '',
-                'display_color': 'tone-teal',
+                'display_color': '#007679',
                 'fields-TOTAL_FORMS': '2',
                 'fields-INITIAL_FORMS': '0',
                 'fields-MIN_NUM_FORMS': '0',
@@ -650,13 +676,13 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type = StructureType.objects.create(
             name='UI Color',
             code='ui_color_type',
-            display_color='tone-teal',
+            display_color='#007679',
         )
         manage_url = reverse('structures:type_manage', args=[structure_type.code])
-        response = self.client.post(manage_url, {'display_color': 'tone-violet'})
+        response = self.client.post(manage_url, {'display_color': '#8B5CF6'})
         self.assertRedirects(response, manage_url)
         structure_type.refresh_from_db()
-        self.assertEqual(structure_type.display_color, 'tone-violet')
+        self.assertEqual(structure_type.display_color, '#8B5CF6')
 
 
 class SQLOnlyDynamicStructureTests(TransactionTestCase):
@@ -1566,3 +1592,250 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             CommandError, 'Dynamic Django model generation is disabled'
         ):
             call_command('generate_structure_model', self.structure_type.pk)
+
+
+class StructureDecimalRangeTests(TransactionTestCase):
+    def setUp(self):
+        self.structure_type = StructureType.objects.create(
+            name='Decimal range panel',
+            code='decimal_range_panel',
+            table_name='structures_decimal_range_panel',
+        )
+        StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            is_required=True,
+            sort_order=1,
+        )
+        StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='thickness',
+            label='Thickness',
+            field_type='DecimalField',
+            max_digits=8,
+            decimal_places=2,
+            sort_order=2,
+        )
+        create_result = SQLExecutor.create_table(self.structure_type)
+        self.assertTrue(create_result['success'], create_result.get('error'))
+
+    def tearDown(self):
+        SQLExecutor.drop_table(self.structure_type)
+
+    def _field_name(self, field_name):
+        field = self.structure_type.fields.get(name=field_name)
+        return f'structure_field_{field.pk}'
+
+    def _decimal_post_data(self, field_name, *, scalar='', min_value='', max_value='', tolerance_value='', is_range=False, is_tolerance=False):
+        field = self.structure_type.fields.get(name=field_name)
+        base = f'structure_field_{field.pk}'
+        data = {
+            base: scalar,
+            f'{base}__min': min_value,
+            f'{base}__max': max_value,
+            f'{base}__tolerance': tolerance_value,
+        }
+        if is_range:
+            data[f'{base}__is_range'] = 'on'
+        if is_tolerance:
+            data[f'{base}__is_tolerance'] = 'on'
+        return data
+
+    def test_create_table_creates_decimal_companion_columns(self):
+        for column_name in (
+            'thickness',
+            'thickness__kind',
+            'thickness__b',
+        ):
+            self.assertTrue(
+                SQLExecutor.column_exists(self.structure_type, column_name),
+                column_name,
+            )
+
+    def test_insert_scalar_writes_companion_columns(self):
+        from apps.core.property_number_value import VALUE_KIND_SCALAR
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        packed = pack_decimal_field_data(
+            'thickness',
+            value_kind=VALUE_KIND_SCALAR,
+            value='12.50',
+            value_b=None,
+        )
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Scalar panel', **packed},
+        )['id']
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'scalar')
+        self.assertEqual(str(record['thickness']), '12.50')
+        self.assertIsNone(record['thickness__b'])
+
+    def test_insert_range_writes_companion_columns(self):
+        from apps.core.property_number_value import VALUE_KIND_RANGE
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        packed = pack_decimal_field_data(
+            'thickness',
+            value_kind=VALUE_KIND_RANGE,
+            value='900',
+            value_b='1900',
+        )
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Range panel', **packed},
+        )['id']
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'range')
+        self.assertEqual(str(record['thickness']), '900.00')
+        self.assertEqual(str(record['thickness__b']), '1900.00')
+
+    def test_backfill_populates_companion_columns_for_legacy_scalar(self):
+        table_name = SQLExecutor.quote_identifier(self.structure_type.table_name)
+        row_id = str(uuid.uuid4())
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'INSERT INTO {table_name} '
+                f'({SQLExecutor.quote_identifier("id")}, '
+                f'{SQLExecutor.quote_identifier("title")}, '
+                f'{SQLExecutor.quote_identifier("thickness")}) '
+                f'VALUES (%s, %s, %s)',
+                [row_id, 'Legacy panel', '7.25'],
+            )
+
+        result = SQLExecutor.backfill_decimal_companion_columns(self.structure_type)
+        self.assertTrue(result['success'], result.get('error'))
+        self.assertEqual(result['updated'], 1)
+
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'scalar')
+        self.assertEqual(str(record['thickness']), '7.25')
+        self.assertIsNone(record['thickness__b'])
+
+    def test_insert_tolerance_writes_companion_columns(self):
+        from apps.core.property_number_value import VALUE_KIND_TOLERANCE
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        packed = pack_decimal_field_data(
+            'thickness',
+            value_kind=VALUE_KIND_TOLERANCE,
+            value=Decimal('0.27'),
+            value_b=Decimal('0.03'),
+        )
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Tolerance panel', **packed},
+        )['id']
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'tolerance')
+        self.assertEqual(str(record['thickness']), '0.27')
+        self.assertEqual(str(record['thickness__b']), '0.03')
+
+    def test_structure_record_form_saves_decimal_tolerance(self):
+        create_url = reverse('structures:create', args=[self.structure_type.code])
+        post_data = {
+            self._field_name('title'): 'Tolerance form panel',
+            **self._decimal_post_data(
+                'thickness',
+                scalar='0,27',
+                tolerance_value='0,03',
+                is_tolerance=True,
+            ),
+        }
+        response = self.client.post(create_url, post_data)
+        self.assertEqual(response.status_code, 302)
+
+        records = SQLExecutor.get_structure_instances(self.structure_type)
+        record = records[0]
+        self.assertEqual(record['thickness__kind'], 'tolerance')
+        self.assertEqual(str(record['thickness__b']), '0.03')
+
+        detail_response = self.client.get(
+            reverse('structures:detail', args=[self.structure_type.code, record['id']])
+        )
+        self.assertContains(detail_response, '0,27±0,03')
+
+    def test_insert_auto_adds_missing_companion_columns(self):
+        table_name = SQLExecutor.quote_identifier(self.structure_type.table_name)
+        with connection.cursor() as cursor:
+            for column_name in (
+                'thickness__kind',
+                'thickness__b',
+            ):
+                cursor.execute(
+                    f'ALTER TABLE {table_name} DROP COLUMN '
+                    f'{SQLExecutor.quote_identifier(column_name)}'
+                )
+
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Legacy auto-migrate', 'thickness': '1.50'},
+        )['id']
+        self.assertTrue(SQLExecutor.column_exists(self.structure_type, 'thickness__kind'))
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(str(record['thickness']), '1.50')
+
+    def test_migrate_structure_decimal_ranges_command(self):
+        table_name = SQLExecutor.quote_identifier(self.structure_type.table_name)
+        with connection.cursor() as cursor:
+            for column_name in (
+                'thickness__kind',
+                'thickness__b',
+            ):
+                if SQLExecutor.column_exists(self.structure_type, column_name):
+                    cursor.execute(
+                        f'ALTER TABLE {table_name} DROP COLUMN '
+                        f'{SQLExecutor.quote_identifier(column_name)}'
+                    )
+            row_id = str(uuid.uuid4())
+            cursor.execute(
+                f'INSERT INTO {table_name} '
+                f'({SQLExecutor.quote_identifier("id")}, '
+                f'{SQLExecutor.quote_identifier("title")}, '
+                f'{SQLExecutor.quote_identifier("thickness")}) '
+                f'VALUES (%s, %s, %s)',
+                [row_id, 'Migrate panel', '3.50'],
+            )
+
+        output = io.StringIO()
+        call_command('migrate_structure_decimal_ranges', stdout=output)
+
+        for column_name in (
+            'thickness',
+            'thickness__kind',
+            'thickness__b',
+        ):
+            self.assertTrue(SQLExecutor.column_exists(self.structure_type, column_name))
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'scalar')
+        self.assertEqual(str(record['thickness']), '3.50')
+        self.assertIn('Готово', output.getvalue())
+
+    def test_structure_record_form_saves_decimal_range(self):
+        create_url = reverse('structures:create', args=[self.structure_type.code])
+        post_data = {
+            self._field_name('title'): 'Range form panel',
+            **self._decimal_post_data(
+                'thickness',
+                min_value='1.25',
+                max_value='3.25',
+                is_range=True,
+            ),
+        }
+        response = self.client.post(create_url, post_data)
+        self.assertEqual(response.status_code, 302)
+
+        records = SQLExecutor.get_structure_instances(self.structure_type)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['thickness__kind'], 'range')
+        self.assertEqual(str(record['thickness']), '1.25')
+        self.assertEqual(str(record['thickness__b']), '3.25')
+
+        detail_response = self.client.get(
+            reverse('structures:detail', args=[self.structure_type.code, record['id']])
+        )
+        self.assertContains(detail_response, '1,25')
+        self.assertContains(detail_response, '3,25')

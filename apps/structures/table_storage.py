@@ -2,7 +2,8 @@ import uuid
 from decimal import Decimal
 
 from apps.materials.models import Material
-from apps.structures.display_format import format_structure_field_display
+from apps.structures.constants import DEFAULT_DECIMAL_PLACES
+from apps.structures.decimal_range import format_decimal_field_display, read_decimal_field_state
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 
@@ -10,9 +11,10 @@ from apps.structures.sql_executor import SQLExecutor
 class DisplayValue:
     """Обёртка для отображения значения в шаблонах."""
 
-    def __init__(self, field: StructureField, value):
+    def __init__(self, field: StructureField, value, row: dict | None = None):
         self.field = field
         self._value = value
+        self._row = row or {}
 
     def get_value(self):
         if self.field.field_type == MATERIAL_LINK_FIELD_TYPE and self._value not in (None, ''):
@@ -23,7 +25,13 @@ class DisplayValue:
                 return f'{material.code} - {material.name}'
             return self._value
         if self.field.field_type == 'DecimalField':
-            return format_structure_field_display(self.field, self._value)
+            state = read_decimal_field_state(self._row, self.field.name)
+            return format_decimal_field_display(
+                value_kind=state['value_kind'],
+                value=state['value'],
+                value_b=state['value_b'],
+                decimal_places=self.field.decimal_places or DEFAULT_DECIMAL_PLACES,
+            )
         return self._value
 
     @property
@@ -57,7 +65,7 @@ def get_display_values(structure_type: StructureType, row_id: uuid.UUID) -> list
     if not row:
         return []
     return [
-        DisplayValue(field, row.get(field.name))
+        DisplayValue(field, row.get(field.name), row=row)
         for field in _supported_fields(structure_type)
     ]
 
@@ -123,6 +131,17 @@ SERVICE_COLUMNS = {'id', 'created_at', 'updated_at', 'created_by'}
 
 def structure_record_label(record: dict, structure_type: StructureType) -> str:
     for field in _supported_fields(structure_type):
+        if field.field_type == 'DecimalField':
+            state = read_decimal_field_state(record, field.name)
+            text = format_decimal_field_display(
+                value_kind=state['value_kind'],
+                value=state['value'],
+                value_b=state['value_b'],
+                decimal_places=field.decimal_places or DEFAULT_DECIMAL_PLACES,
+            )
+            if text != '—':
+                return text
+            continue
         value = record.get(field.name)
         if value not in (None, ''):
             if field.field_type == MATERIAL_LINK_FIELD_TYPE:

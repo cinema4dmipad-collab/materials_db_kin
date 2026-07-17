@@ -7,6 +7,21 @@ from django.db import connection
 from django.utils import timezone
 
 from apps.core.number_utils import normalize_decimal_input
+from apps.core.property_number_value import VALUE_KIND_RANGE, VALUE_KIND_SCALAR
+from apps.structures.decimal_range import (
+    LEGACY_DECIMAL_A_SUFFIX,
+    LEGACY_DECIMAL_MAX_SUFFIX,
+    LEGACY_DECIMAL_MIN_SUFFIX,
+    LEGACY_DECIMAL_TOLERANCE_SUFFIX,
+    decimal_b_column,
+    decimal_base_column_name,
+    decimal_companion_columns,
+    decimal_kind_column,
+    decimal_storage_columns,
+    is_decimal_companion_column,
+    legacy_decimal_column_names,
+    read_decimal_field_state,
+)
 from apps.structures.default_values import validate_structure_field_model
 from apps.structures.display_format import normalize_structure_field_value
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
@@ -45,7 +60,11 @@ class SQLExecutor:
 
             table_name = cls.quote_identifier(structure_type.table_name)
             columns = [cls._id_column_sql()]
-            columns.extend(cls._column_definition(field) for field in cls._sql_fields(fields))
+            for field in cls._sql_fields(fields):
+                if field.field_type == 'DecimalField':
+                    columns.extend(cls._decimal_storage_column_sql(field))
+                else:
+                    columns.append(cls._column_definition(field))
             columns.extend(
                 [
                     cls._timestamp_column_sql('created_at'),
@@ -104,8 +123,73 @@ class SQLExecutor:
             return cursor.fetchone() is not None
 
     @classmethod
+    def _ensure_decimal_companion_columns(cls, structure_type: StructureType) -> None:
+        if not structure_type.is_created or not cls.table_exists(structure_type):
+            return
+        add_result = cls.add_companion_columns_for_decimal_fields(structure_type)
+        if not add_result['success']:
+            raise ValueError(
+                add_result.get('error') or 'Не удалось добавить companion-колонки для DecimalField.'
+            )
+        backfill_result = cls.backfill_decimal_companion_columns(structure_type)
+        if not backfill_result['success']:
+            raise ValueError(
+                backfill_result.get('error')
+                or 'Не удалось выполнить backfill companion-колонок для DecimalField.'
+            )
+        migrate_result = cls.migrate_legacy_decimal_columns(structure_type)
+        if not migrate_result['success']:
+            raise ValueError(
+                migrate_result.get('error')
+                or 'Не удалось мигрировать legacy-колонки DecimalField.'
+            )
+
+    @classmethod
+    def _expand_decimal_field_data(cls, structure_type: StructureType, data: dict) -> dict:
+        from apps.structures.decimal_range import backfill_scalar_row, pack_decimal_field_data
+
+        expanded = dict(data)
+        for field in cls._sql_fields(structure_type.fields.all()):
+            if field.field_type != 'DecimalField':
+                continue
+            value_col, kind_col, b_col = decimal_storage_columns(field.name)
+            legacy_a = f'{field.name}{LEGACY_DECIMAL_A_SUFFIX}'
+            if kind_col in expanded and (value_col in expanded or b_col in expanded):
+                continue
+            if legacy_a in expanded:
+                state = read_decimal_field_state(expanded, field.name)
+                expanded.update(
+                    pack_decimal_field_data(
+                        field.name,
+                        value_kind=state['value_kind'],
+                        value=state['value'],
+                        value_b=state['value_b'],
+                    )
+                )
+                continue
+            legacy_min = f'{field.name}{LEGACY_DECIMAL_MIN_SUFFIX}'
+            legacy_tolerance = f'{field.name}{LEGACY_DECIMAL_TOLERANCE_SUFFIX}'
+            if legacy_min in expanded or legacy_tolerance in expanded:
+                state = read_decimal_field_state(expanded, field.name)
+                expanded.update(
+                    pack_decimal_field_data(
+                        field.name,
+                        value_kind=state['value_kind'],
+                        value=state['value'],
+                        value_b=state['value_b'],
+                    )
+                )
+                continue
+            if value_col in expanded and not cls._is_empty_value(expanded[value_col]):
+                if kind_col not in expanded:
+                    expanded.update(backfill_scalar_row(field.name, expanded[value_col]))
+        return expanded
+
+    @classmethod
     def insert(cls, structure_type: StructureType, data: dict) -> dict:
         try:
+            cls._ensure_decimal_companion_columns(structure_type)
+            data = cls._expand_decimal_field_data(structure_type, data)
             table_name = cls.quote_identifier(structure_type.table_name)
             row_id = str(data.get('id') or uuid.uuid4())
             now = timezone.now()
@@ -114,6 +198,15 @@ class SQLExecutor:
             values = [row_id, now, now, data.get('created_by', '')]
 
             for field in cls._sql_fields(structure_type.fields.all()):
+                if field.field_type == 'DecimalField':
+                    cls._append_decimal_field_values(
+                        field,
+                        data,
+                        columns,
+                        values,
+                        required_on_empty=field.is_required,
+                    )
+                    continue
                 value = data.get(field.name)
                 if field.name in data and not cls._is_empty_value(value):
                     cls.validate_identifier(field.name)
@@ -212,10 +305,10 @@ class SQLExecutor:
     @classmethod
     def update(cls, structure_type: StructureType, record_id: str | uuid.UUID, data: dict) -> dict:
         try:
+            cls._ensure_decimal_companion_columns(structure_type)
+            data = cls._expand_decimal_field_data(structure_type, data)
             table_name = cls.quote_identifier(structure_type.table_name)
-            fields_by_name = {
-                field.name: field for field in cls._sql_fields(structure_type.fields.all())
-            }
+            fields_by_name = cls._fields_by_name(structure_type)
             assignments = [f'{cls.quote_identifier("updated_at")} = %s']
             values = [timezone.now()]
 
@@ -226,13 +319,22 @@ class SQLExecutor:
                 if field is None:
                     continue
                 if (
-                    field.is_required
+                    field.field_type == 'DecimalField'
+                    and name == field.name
+                    and cls._is_empty_value(value)
+                    and field.is_required
+                ):
+                    raise ValueError(f'Field {field.name!r} is required.')
+                elif (
+                    not is_decimal_companion_column(name)
+                    and field.field_type != 'DecimalField'
+                    and field.is_required
                     and field.field_type != MATERIAL_LINK_FIELD_TYPE
                     and cls._is_empty_value(value)
                 ):
                     raise ValueError(f'Field {field.name!r} is required.')
                 assignments.append(f'{cls.quote_identifier(name)} = %s')
-                values.append(cls._coerce_for_db(field, value))
+                values.append(cls._coerce_column_value(field, name, value))
 
             values.append(str(record_id))
             with connection.cursor() as cursor:
@@ -292,16 +394,31 @@ class SQLExecutor:
                     field.field_type == MATERIAL_LINK_FIELD_TYPE
                     or (row_count and field.is_required and has_default)
                 )
-                cursor.execute(
-                    f'ALTER TABLE {table_name} ADD COLUMN '
-                    f'{cls._column_definition(field, force_nullable=force_nullable)}'
-                )
-                if row_count and has_default:
+                if field.field_type == 'DecimalField':
+                    for storage_sql in cls._decimal_storage_column_sql(field):
+                        cursor.execute(
+                            f'ALTER TABLE {table_name} ADD COLUMN {storage_sql}'
+                        )
+                    if row_count and has_default:
+                        default_value = cls._default_for_db(field)
+                        value_col = cls.quote_identifier(field.name)
+                        kind_col = cls.quote_identifier(decimal_kind_column(field.name))
+                        cursor.execute(
+                            f'UPDATE {table_name} SET {kind_col} = %s, {value_col} = %s '
+                            f'WHERE {kind_col} IS NULL',
+                            [VALUE_KIND_SCALAR, default_value],
+                        )
+                else:
                     cursor.execute(
-                        f'UPDATE {table_name} SET {column_name} = %s '
-                        f'WHERE {column_name} IS NULL',
-                        [cls._default_for_db(field)],
+                        f'ALTER TABLE {table_name} ADD COLUMN '
+                        f'{cls._column_definition(field, force_nullable=force_nullable)}'
                     )
+                    if row_count and has_default:
+                        cursor.execute(
+                            f'UPDATE {table_name} SET {column_name} = %s '
+                            f'WHERE {column_name} IS NULL',
+                            [cls._default_for_db(field)],
+                        )
             return {'success': True, 'error': None}
         except Exception as exc:
             return {'success': False, 'error': str(exc)}
@@ -425,14 +542,273 @@ class SQLExecutor:
         return pk
 
     @classmethod
+    def _fields_by_name(cls, structure_type: StructureType) -> dict[str, StructureField]:
+        mapping: dict[str, StructureField] = {}
+        for field in cls._sql_fields(structure_type.fields.all()):
+            mapping[field.name] = field
+            if field.field_type == 'DecimalField':
+                for companion_name in decimal_companion_columns(field.name):
+                    mapping[companion_name] = field
+        return mapping
+
+    @classmethod
+    def _decimal_storage_column_sql(cls, field: StructureField) -> list[str]:
+        """Три колонки: value (base), __kind, __b."""
+        decimal_type = cls._field_sql_type(field)
+        return [
+            (
+                f'{cls.quote_identifier(field.name)} '
+                f'{decimal_type} NULL'
+            ),
+            (
+                f'{cls.quote_identifier(decimal_kind_column(field.name))} '
+                f'{cls._text_type(10)} NULL'
+            ),
+            (
+                f'{cls.quote_identifier(decimal_b_column(field.name))} '
+                f'{decimal_type} NULL'
+            ),
+        ]
+
+    @classmethod
+    def _decimal_companion_column_sql(cls, field: StructureField) -> list[str]:
+        """Только companion-колонки __kind/__b (base уже может существовать)."""
+        decimal_type = cls._field_sql_type(field)
+        return [
+            (
+                f'{cls.quote_identifier(decimal_kind_column(field.name))} '
+                f'{cls._text_type(10)} NULL'
+            ),
+            (
+                f'{cls.quote_identifier(decimal_b_column(field.name))} '
+                f'{decimal_type} NULL'
+            ),
+        ]
+
+    @classmethod
+    def _append_decimal_field_values(
+        cls,
+        field: StructureField,
+        data: dict,
+        columns: list[str],
+        values: list,
+        *,
+        required_on_empty: bool,
+    ) -> None:
+        value_col, kind_col, b_col = decimal_storage_columns(field.name)
+        has_any = any(
+            key in data and not cls._is_empty_value(data.get(key))
+            for key in (value_col, kind_col, b_col)
+        )
+        if not has_any:
+            if required_on_empty:
+                raise ValueError(f'Field {field.name!r} is required.')
+            return
+        for col_name in (value_col, kind_col, b_col):
+            if col_name not in data:
+                continue
+            cls.validate_identifier(col_name)
+            columns.append(col_name)
+            values.append(cls._coerce_column_value(field, col_name, data[col_name]))
+
+    @classmethod
+    def _coerce_column_value(cls, field: StructureField, column_name: str, value):
+        if column_name.endswith('__kind'):
+            raw = (value or VALUE_KIND_SCALAR).strip()
+            return raw or VALUE_KIND_SCALAR
+        if (
+            column_name.endswith(('__a', '__b', '__min', '__max', '__tolerance'))
+            or field.field_type == 'DecimalField'
+        ):
+            if value in (None, ''):
+                return None
+            return Decimal(normalize_decimal_input(str(value)))
+        return cls._coerce_for_db(field, value)
+
+    @classmethod
+    def column_exists(cls, structure_type: StructureType, column_name: str) -> bool:
+        cls.validate_identifier(column_name)
+        table_name = structure_type.table_name
+        with connection.cursor() as cursor:
+            if connection.vendor == 'postgresql':
+                cursor.execute(
+                    """
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = %s
+                      AND column_name = %s
+                    """,
+                    [table_name, column_name],
+                )
+            else:
+                cursor.execute(f'PRAGMA table_info({cls.quote_identifier(table_name)})')
+                columns = {row[1] for row in cursor.fetchall()}
+                return column_name in columns
+            return cursor.fetchone() is not None
+
+    @classmethod
+    def add_companion_columns_for_decimal_fields(cls, structure_type: StructureType) -> dict:
+        if not structure_type.is_created or not cls.table_exists(structure_type):
+            return {'success': True, 'added': [], 'error': None}
+        added: list[str] = []
+        try:
+            table_name = cls.quote_identifier(structure_type.table_name)
+            decimal_fields = [
+                field
+                for field in cls._sql_fields(structure_type.fields.all())
+                if field.field_type == 'DecimalField'
+            ]
+            with connection.cursor() as cursor:
+                for field in decimal_fields:
+                    for column_name, single_sql in zip(
+                        decimal_storage_columns(field.name),
+                        cls._decimal_storage_column_sql(field),
+                        strict=True,
+                    ):
+                        if cls.column_exists(structure_type, column_name):
+                            continue
+                        cursor.execute(
+                            f'ALTER TABLE {table_name} ADD COLUMN {single_sql}'
+                        )
+                        added.append(column_name)
+            return {'success': True, 'added': added, 'error': None}
+        except Exception as exc:
+            return {'success': False, 'added': added, 'error': str(exc)}
+
+    @classmethod
+    def backfill_decimal_companion_columns(cls, structure_type: StructureType) -> dict:
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        if not structure_type.is_created:
+            return {'success': True, 'updated': 0, 'error': None}
+        updated = 0
+        try:
+            table_name = cls.quote_identifier(structure_type.table_name)
+            decimal_fields = [
+                field
+                for field in cls._sql_fields(structure_type.fields.all())
+                if field.field_type == 'DecimalField'
+            ]
+            with connection.cursor() as cursor:
+                for field in decimal_fields:
+                    value_col = field.name
+                    kind_col = decimal_kind_column(field.name)
+                    b_col = decimal_b_column(field.name)
+                    a_col = f'{field.name}{LEGACY_DECIMAL_A_SUFFIX}'
+                    if not cls.column_exists(structure_type, kind_col):
+                        continue
+                    if not cls.column_exists(structure_type, value_col):
+                        continue
+
+                    select_names = ['id', kind_col, value_col]
+                    optional = []
+                    if cls.column_exists(structure_type, b_col):
+                        optional.append(b_col)
+                    if cls.column_exists(structure_type, a_col):
+                        optional.append(a_col)
+                    for suffix in (
+                        LEGACY_DECIMAL_MIN_SUFFIX,
+                        LEGACY_DECIMAL_MAX_SUFFIX,
+                        LEGACY_DECIMAL_TOLERANCE_SUFFIX,
+                    ):
+                        legacy_name = f'{field.name}{suffix}'
+                        if cls.column_exists(structure_type, legacy_name):
+                            optional.append(legacy_name)
+
+                    quoted = [cls.quote_identifier(name) for name in select_names + optional]
+                    cursor.execute(f'SELECT {", ".join(quoted)} FROM {table_name}')
+                    rows = cursor.fetchall()
+                    for row in rows:
+                        record = {
+                            kind_col: row[1],
+                            value_col: row[2],
+                        }
+                        for idx, name in enumerate(optional, start=3):
+                            record[name] = row[idx]
+                        kind_empty = record.get(kind_col) in (None, '')
+                        value_empty = record.get(value_col) in (None, '')
+                        has_legacy_primary = (
+                            record.get(a_col) not in (None, '')
+                            or record.get(f'{field.name}{LEGACY_DECIMAL_MIN_SUFFIX}')
+                            not in (None, '')
+                        )
+                        if not kind_empty and not (value_empty and has_legacy_primary):
+                            continue
+                        state = read_decimal_field_state(record, field.name)
+                        if state['value'] in (None, ''):
+                            continue
+                        packed = pack_decimal_field_data(
+                            field.name,
+                            value_kind=state['value_kind'] or VALUE_KIND_SCALAR,
+                            value=state['value'],
+                            value_b=state['value_b'],
+                        )
+                        cursor.execute(
+                            f'UPDATE {table_name} SET '
+                            f'{cls.quote_identifier(kind_col)} = %s, '
+                            f'{cls.quote_identifier(value_col)} = %s, '
+                            f'{cls.quote_identifier(b_col)} = %s '
+                            f'WHERE {cls.quote_identifier("id")} = %s',
+                            [
+                                packed[kind_col],
+                                packed[value_col],
+                                packed[b_col],
+                                row[0],
+                            ],
+                        )
+                        updated += 1
+            return {'success': True, 'updated': updated, 'error': None}
+        except Exception as exc:
+            return {'success': False, 'updated': updated, 'error': str(exc)}
+
+    @classmethod
+    def migrate_legacy_decimal_columns(cls, structure_type: StructureType) -> dict:
+        if not structure_type.is_created or not cls.table_exists(structure_type):
+            return {'success': True, 'dropped': [], 'error': None}
+        dropped: list[str] = []
+        try:
+            table_name = cls.quote_identifier(structure_type.table_name)
+            decimal_fields = [
+                field
+                for field in cls._sql_fields(structure_type.fields.all())
+                if field.field_type == 'DecimalField'
+            ]
+            with connection.cursor() as cursor:
+                for field in decimal_fields:
+                    if not cls.column_exists(structure_type, field.name):
+                        continue
+                    if not cls.column_exists(structure_type, decimal_kind_column(field.name)):
+                        continue
+                    for legacy_name in legacy_decimal_column_names(field.name):
+                        if not cls.column_exists(structure_type, legacy_name):
+                            continue
+                        cursor.execute(
+                            f'ALTER TABLE {table_name} DROP COLUMN '
+                            f'{cls.quote_identifier(legacy_name)}'
+                        )
+                        dropped.append(legacy_name)
+            return {'success': True, 'dropped': dropped, 'error': None}
+        except Exception as exc:
+            return {'success': False, 'dropped': dropped, 'error': str(exc)}
+    @classmethod
     def _normalize_record(cls, structure_type: StructureType, record: dict) -> dict:
         fields_by_name = {
             field.name: field for field in structure_type.fields.all()
         }
         normalized = dict(record)
+        skip = set()
         for name, value in record.items():
+            if name in skip:
+                continue
+            base_name = decimal_base_column_name(name)
+            if base_name is not None:
+                continue
             field = fields_by_name.get(name)
             if field is None:
+                continue
+            if field.field_type == 'DecimalField':
+                normalized[name] = normalize_structure_field_value(field, value)
                 continue
             normalized[name] = normalize_structure_field_value(field, value)
         return normalized

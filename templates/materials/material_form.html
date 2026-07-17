@@ -92,7 +92,10 @@
                     {% if form.structure_bound_fields %}
                     {% for field in form.structure_bound_fields %}
                     <div class="mb-3">
-                        {% if field.field.widget.input_type == 'checkbox' %}
+                        {% if field.structure_field %}
+                        <label class="form-label">{{ field.value.label }}</label>
+                        {% include 'includes/structure_decimal_value_fields.html' with group=field %}
+                        {% elif field.field.widget.input_type == 'checkbox' %}
                         <div class="form-check">
                             {{ field }}
                             <label for="{{ field.id_for_label }}" class="form-check-label">{{ field.label }}</label>
@@ -154,8 +157,10 @@
                         <tr class="property-form-row">
                             {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
                             <th scope="row" class="material-props-section__name">—</th>
-                            <td class="material-props-section__value">{{ property_form.value }}</td>
-                            <td class="material-props-section__unit">—</td>
+                            <td class="material-props-section__value">
+                                {% include 'includes/property_number_value_fields.html' %}
+                            </td>
+                            <td class="material-props-section__unit"></td>
                             <td class="text-end text-nowrap">
                                 {% if formset.can_delete %}
                                 <span class="visually-hidden">{{ property_form.DELETE }}</span>
@@ -291,6 +296,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/property_number_value.js' %}"></script>
 <script src="{% static 'js/material_form.js' %}"></script>
 {% if show_create_based_on %}
 <script src="{% static 'js/material_create_based_on.js' %}"></script>
@@ -301,6 +307,7 @@
 <script src="{% static 'js/structure_type_picker_field.js' %}"></script>
 <script src="{% static 'js/material_picker_fields.js' %}"></script>
 <script src="{% static 'js/choice_picker_fields.js' %}"></script>
+<script src="{% static 'js/property_number_value.js' %}"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
 <script src="{% static 'js/composite_layer_diagram_live.js' %}"></script>
 <script src="{% static 'js/composite_layers_formset.js' %}"></script>

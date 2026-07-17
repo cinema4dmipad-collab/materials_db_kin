@@ -19,6 +19,7 @@ class PropertyFormTests(TestCase):
                 'name': '',
                 'unit': 'МПа',
                 'data_type': 'number',
+                'decimal_places': '2',
                 'group': '',
                 'description': '',
             }
@@ -26,6 +27,37 @@ class PropertyFormTests(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['name'], 'predel_prochnosti')
+        self.assertEqual(form.cleaned_data['decimal_places'], 2)
+
+    def test_number_type_defaults_decimal_places(self):
+        form = PropertyForm(
+            data={
+                'display_name': 'Плотность',
+                'name': 'density',
+                'unit': 'g/cm3',
+                'data_type': 'number',
+                'decimal_places': '',
+                'group': '',
+                'description': '',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['decimal_places'], 2)
+
+    def test_non_number_type_clears_decimal_places(self):
+        form = PropertyForm(
+            data={
+                'display_name': 'Комментарий',
+                'name': 'comment',
+                'unit': '',
+                'data_type': 'string',
+                'decimal_places': '3',
+                'group': '',
+                'description': '',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIsNone(form.cleaned_data['decimal_places'])
 
     def test_material_link_data_type_clears_unit(self):
         form = PropertyForm(
@@ -56,6 +88,32 @@ class PropertyFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['data_type'], 'choice')
         self.assertEqual(form.cleaned_data['unit'], '')
+
+    def test_effective_decimal_places_for_number(self):
+        prop = Property(
+            display_name='Плотность',
+            name='density',
+            data_type='number',
+            decimal_places=2,
+        )
+        self.assertEqual(prop.effective_decimal_places(), 2)
+
+    def test_effective_decimal_places_defaults_for_number(self):
+        prop = Property(
+            display_name='Плотность',
+            name='density',
+            data_type='number',
+        )
+        self.assertEqual(prop.effective_decimal_places(), 2)
+
+    def test_effective_decimal_places_none_for_string(self):
+        prop = Property(
+            display_name='Title',
+            name='title',
+            data_type='string',
+            decimal_places=2,
+        )
+        self.assertIsNone(prop.effective_decimal_places())
 
     def test_effective_unit_uses_unit_field(self):
         prop = Property(
@@ -111,6 +169,7 @@ class PropertyViewsTests(TestCase):
             'name': '',
             'unit': 'МПа',
             'data_type': 'number',
+            'decimal_places': '4',
             'group': str(self.group.pk),
             'description': 'Test property',
         }
@@ -215,6 +274,7 @@ class PropertyViewsTests(TestCase):
                 'display_name': 'Mass density',
                 'unit': 'kg/m3',
                 'data_type': 'number',
+                'decimal_places': '2',
                 'group': str(self.group.pk),
                 'description': '',
             },
@@ -224,6 +284,7 @@ class PropertyViewsTests(TestCase):
         self.property.refresh_from_db()
         self.assertEqual(self.property.display_name, 'Mass density')
         self.assertEqual(self.property.unit, 'kg/m3')
+        self.assertEqual(self.property.decimal_places, 2)
 
     def test_operator_cannot_update_property(self):
         login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
@@ -234,6 +295,7 @@ class PropertyViewsTests(TestCase):
                 'display_name': 'Mass density',
                 'unit': 'kg/m3',
                 'data_type': 'number',
+                'decimal_places': '2',
                 'group': str(self.group.pk),
                 'description': '',
             },

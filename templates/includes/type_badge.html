@@ -4,8 +4,9 @@
 <a href="{% if filter_base_path %}{% struct_type_filter_link label filter_base_path %}{% else %}{% struct_type_filter_link label %}{% endif %}"
    class="type-pill-link"
    title="Искать по типу «{{ label }}»">
-    <span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
-        <span class="type-pill__dot" aria-hidden="true"></span>
+    <span class="type-pill{% if tone|structure_is_hex_color %}{% else %} {{ tone|default:'tone-slate' }}{% endif %}"
+          {% if tone|structure_is_hex_color %}{% structure_pill_style tone %}{% endif %}>
+        <span class="type-pill__dot" aria-hidden="true"{% if tone|structure_is_hex_color %} {% structure_pill_dot_style tone %}{% endif %}></span>
         <span class="type-pill__label">{{ label }}</span>
     </span>
 </a>
@@ -13,8 +14,9 @@
 <a href="{% if filter_base_path %}{% object_type_filter_link label filter_base_path %}{% else %}{% object_type_filter_link label %}{% endif %}"
    class="type-pill-link"
    title="Искать по типу «{{ label }}»">
-    <span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
-        <span class="type-pill__dot" aria-hidden="true"></span>
+    <span class="type-pill{% if tone|structure_is_hex_color %}{% else %} {{ tone|default:'tone-slate' }}{% endif %}"
+          {% if tone|structure_is_hex_color %}{% structure_pill_style tone %}{% endif %}>
+        <span class="type-pill__dot" aria-hidden="true"{% if tone|structure_is_hex_color %} {% structure_pill_dot_style tone %}{% endif %}></span>
         <span class="type-pill__label">{{ label }}</span>
     </span>
 </a>
@@ -22,8 +24,9 @@
 <a href="{% if filter_base_path %}{% scan_method_filter_link label filter_base_path %}{% else %}{% scan_method_filter_link label %}{% endif %}"
    class="type-pill-link"
    title="Искать по методу «{{ label }}»">
-    <span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
-        <span class="type-pill__dot" aria-hidden="true"></span>
+    <span class="type-pill{% if tone|structure_is_hex_color %}{% else %} {{ tone|default:'tone-slate' }}{% endif %}"
+          {% if tone|structure_is_hex_color %}{% structure_pill_style tone %}{% endif %}>
+        <span class="type-pill__dot" aria-hidden="true"{% if tone|structure_is_hex_color %} {% structure_pill_dot_style tone %}{% endif %}></span>
         <span class="type-pill__label">{{ label }}</span>
     </span>
 </a>
@@ -31,14 +34,16 @@
 <a href="{{ filter_url }}?q={{ filter_query|urlencode }}{% if filter_scope %}&amp;q_in={{ filter_scope|urlencode }}{% endif %}"
    class="type-pill-link"
    title="Искать по типу «{{ label }}»">
-    <span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
-        <span class="type-pill__dot" aria-hidden="true"></span>
+    <span class="type-pill{% if tone|structure_is_hex_color %}{% else %} {{ tone|default:'tone-slate' }}{% endif %}"
+          {% if tone|structure_is_hex_color %}{% structure_pill_style tone %}{% endif %}>
+        <span class="type-pill__dot" aria-hidden="true"{% if tone|structure_is_hex_color %} {% structure_pill_dot_style tone %}{% endif %}></span>
         <span class="type-pill__label">{{ label }}</span>
     </span>
 </a>
 {% else %}
-<span class="type-pill {% if tone %}{{ tone }}{% elif variant == 'category' %}{{ value|ui_category_tone }}{% else %}{{ value|ui_tone }}{% endif %}">
-    <span class="type-pill__dot" aria-hidden="true"></span>
+<span class="type-pill{% if tone|structure_is_hex_color %}{% else %} {{ tone|default:'tone-slate' }}{% endif %}"
+      {% if tone|structure_is_hex_color %}{% structure_pill_style tone %}{% endif %}>
+    <span class="type-pill__dot" aria-hidden="true"{% if tone|structure_is_hex_color %} {% structure_pill_dot_style tone %}{% endif %}></span>
     <span class="type-pill__label">{{ label }}</span>
 </span>
 {% endif %}
