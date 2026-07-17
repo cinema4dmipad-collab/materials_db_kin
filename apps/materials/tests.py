@@ -580,7 +580,11 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'MAT-LIST-TAGGED')
         self.assertNotContains(response, 'MAT-LIST-001')
         self.assertNotContains(response, 'MAT-LIST-002')
-        self.assertContains(response, 'list-filter-chip--removable', count=3)
+        # Search chip keeps list-filter-chip--removable; tags use entity-tag chips.
+        self.assertContains(response, 'list-filter-chip--removable', count=1)
+        self.assertContains(response, 'data-tag-slug="prepreg"', count=1)
+        self.assertContains(response, 'data-tag-slug="lab"', count=1)
+        self.assertContains(response, 'list-filter-active-tag__remove', count=2)
 
 
 class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
