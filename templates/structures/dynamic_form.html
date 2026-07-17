@@ -24,6 +24,10 @@
 
                     {% for field in form.bound_structure_fields %}
                     <div class="mb-3">
+                        {% if field.structure_field %}
+                        <label class="form-label" for="{{ field.value.id_for_label }}">{{ field.value.label }}</label>
+                        {% include 'includes/structure_decimal_value_fields.html' with group=field %}
+                        {% else %}
                         <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.help_text %}
@@ -32,6 +36,7 @@
                         {% for error in field.errors %}
                         <div class="invalid-feedback d-block">{{ error }}</div>
                         {% endfor %}
+                        {% endif %}
                     </div>
                     {% endfor %}
 
@@ -52,6 +57,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/property_number_value.js' %}"></script>
 <script src="{% static 'js/reference_materials_picker.js' %}"></script>
 <script src="{% static 'js/material_picker_fields.js' %}"></script>
 {% endblock %}

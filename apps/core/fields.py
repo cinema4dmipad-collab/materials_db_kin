@@ -65,16 +65,27 @@ class LocalizedFloatField(forms.FloatField):
 class LocalizedPropertyValueField(forms.CharField):
     widget = LocalizedDecimalWidget
 
+    def __init__(self, *args, decimal_places=None, **kwargs):
+        self.decimal_places = decimal_places
+        super().__init__(*args, **kwargs)
+
     def prepare_value(self, value):
         if value in (None, ''):
             return ''
-        return format_decimal_display(value)
+        return format_decimal_display(value, self.decimal_places)
 
     def to_python(self, value):
         value = super().to_python(value)
         if value in (None, ''):
             return ''
         return value.strip()
+
+
+def apply_property_decimal_places_to_value_field(field, prop):
+    if prop and getattr(prop, 'data_type', None) == 'number':
+        field.decimal_places = prop.effective_decimal_places()
+    else:
+        field.decimal_places = None
 
 
 def clean_localized_number_value(form, *, property_field_name='property', value_field_name='value'):
@@ -90,9 +101,32 @@ def clean_localized_number_value(form, *, property_field_name='property', value_
         return
 
     try:
-        Decimal(normalized)
+        decimal_value = Decimal(normalized)
     except InvalidOperation:
         form.add_error(value_field_name, 'Введите корректное число.')
         return
 
+    places = prop.effective_decimal_places()
+    exponent = decimal_value.as_tuple().exponent
+    if isinstance(exponent, int) and exponent < 0 and abs(exponent) > places:
+        form.add_error(
+            value_field_name,
+            f'Не более {places} знаков после запятой.',
+        )
+        return
+
     form.cleaned_data[value_field_name] = normalized
+
+
+def localized_range_bound_field(*, bound_label, decimal_places=None, required=False):
+    return LocalizedPropertyValueField(
+        label='',
+        required=required,
+        decimal_places=decimal_places,
+        widget=LocalizedDecimalWidget(
+            attrs={
+                'placeholder': bound_label,
+                'aria-label': bound_label,
+            }
+        ),
+    )

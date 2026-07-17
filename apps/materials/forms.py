@@ -10,15 +10,30 @@ from apps.composites.models import CompositeLayer
 from apps.core.fields import (
     LocalizedFloatField,
     LocalizedPropertyValueField,
-    clean_localized_number_value,
+    localized_range_bound_field,
 )
+from apps.core.property_number_forms import NumberPropertyValueFormMixin
+from apps.core.property_number_value import VALUE_KIND_SCALAR
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.materials.models import Material, MaterialProperty
 from apps.materials.picker_data import materials_for_picker_queryset
 from apps.materials.services import find_shared_materials_by_code, find_shared_materials_by_name
 from apps.references.models import Property
 from apps.structures.models import StructureType
-from apps.structures.forms import MaterialChoiceField, _build_dynamic_field, material_from_value
+from apps.structures.constants import STRUCTURE_FIELD_PREFIX
+from apps.structures.forms import (
+    MaterialChoiceField,
+    _build_dynamic_field,
+    material_from_value,
+)
+from apps.structures.structure_decimal_forms import (
+    add_structure_decimal_fields,
+    apply_structure_decimal_initial,
+    clean_structure_decimal_fields,
+    collect_structure_decimal_sql_data,
+    structure_decimal_bound_group,
+    structure_decimal_field_names,
+)
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
 from apps.structures.sql_executor import SQLExecutor
 from apps.workspaces.visibility import VisibilityMode
@@ -27,7 +42,6 @@ _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _VISIBILITY_FIELD_NAMES = frozenset({'visibility_mode', 'published_workspaces'})
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
 STRUCTURE_SERVICE_FIELDS = {'id', 'created_at', 'updated_at', 'created_by'}
-STRUCTURE_FIELD_PREFIX = 'structure_field_'
 
 
 def structure_instance_label(instance: dict) -> str:
@@ -77,12 +91,15 @@ class MaterialPropertyInlineFormSet(forms.BaseInlineFormSet):
                 seen[prop.pk] = True
 
 
-class MaterialPropertyForm(forms.ModelForm):
+class MaterialPropertyForm(NumberPropertyValueFormMixin, forms.ModelForm):
     value = LocalizedPropertyValueField(required=False)
+    value_min = localized_range_bound_field(bound_label='От')
+    value_max = localized_range_bound_field(bound_label='До')
+    value_tolerance = localized_range_bound_field(bound_label='±')
 
     class Meta:
         model = MaterialProperty
-        fields = ['property', 'value']
+        fields = ['property', 'value_kind', 'value', 'value_b']
         widgets = {
             'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
         }
@@ -96,6 +113,8 @@ class MaterialPropertyForm(forms.ModelForm):
             self._configure_material_link_value()
         elif prop and prop.data_type == Property.CHOICE_DATA_TYPE:
             self._configure_choice_value(prop)
+        else:
+            self._init_number_property_fields(prop)
 
     def _resolve_property(self):
         if self.is_bound:
@@ -171,22 +190,25 @@ class MaterialPropertyForm(forms.ModelForm):
             else:
                 linked = material_from_value(value)
                 cleaned_data['value'] = str(linked.pk) if linked else ''
+            cleaned_data['value_kind'] = VALUE_KIND_SCALAR
+            cleaned_data['value_b'] = None
             return cleaned_data
         if prop and prop.data_type == Property.CHOICE_DATA_TYPE:
             value = (cleaned_data.get('value') or '').strip()
             if value and not prop.choices.filter(value=value).exists():
                 self.add_error('value', 'Выберите значение из списка вариантов свойства.')
             cleaned_data['value'] = value
+            cleaned_data['value_kind'] = VALUE_KIND_SCALAR
+            cleaned_data['value_b'] = None
             return cleaned_data
-        clean_localized_number_value(self)
-        return cleaned_data
+        return self._clean_number_property(cleaned_data, prop)
 
 
 MaterialPropertyFormSet = inlineformset_factory(
     Material,
     MaterialProperty,
     form=MaterialPropertyForm,
-    fields=['property', 'value'],
+    fields=['property', 'value_kind', 'value', 'value_b'],
     extra=0,
     can_delete=True,
     formset=MaterialPropertyInlineFormSet,
@@ -207,7 +229,7 @@ def build_material_property_formset(
         Material,
         MaterialProperty,
         form=MaterialPropertyForm,
-        fields=['property', 'value'],
+        fields=['property', 'value_kind', 'value', 'value_b'],
         extra=len(initial),
         can_delete=True,
         formset=MaterialPropertyInlineFormSet,
@@ -495,6 +517,7 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         self.fields['struct_type'].empty_label = 'Без типа структуры'
         self.structure_type = self._selected_structure_type()
         self.structure_fields = []
+        self.structure_decimal_fields = []
         self.structure_empty_message = ''
         self._add_structure_fields()
         if self.show_visibility:
@@ -569,6 +592,12 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
 
         existing_values = self._existing_structure_values()
         for structure_field in self.structure_fields:
+            if structure_field.field_type == 'DecimalField':
+                add_structure_decimal_fields(self, structure_field)
+                self.structure_decimal_fields.append(structure_field)
+                if existing_values:
+                    apply_structure_decimal_initial(self, structure_field, existing_values)
+                continue
             field_name = self.structure_form_field_name(structure_field)
             self.fields[field_name] = _build_dynamic_field(
                 structure_field,
@@ -616,7 +645,13 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
 
     @property
     def structure_bound_fields(self):
-        return [self[self.structure_form_field_name(field)] for field in self.structure_fields]
+        bound = []
+        for structure_field in self.structure_fields:
+            if structure_field.field_type == 'DecimalField':
+                bound.append(structure_decimal_bound_group(self, structure_field))
+            else:
+                bound.append(self[self.structure_form_field_name(structure_field)])
+        return bound
 
     @property
     def visibility_bound_fields(self):
@@ -629,7 +664,12 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         structure_field_names = {
             self.structure_form_field_name(field)
             for field in self.structure_fields
+            if field.field_type != 'DecimalField'
         }
+        for structure_field in self.structure_decimal_fields:
+            structure_field_names.update(
+                structure_decimal_field_names(structure_field.pk).values()
+            )
         excluded_names = structure_field_names | _VISIBILITY_FIELD_NAMES
         return [
             bound_field
@@ -705,11 +745,26 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             elif mode != VisibilityMode.SELECTED_WORKSPACES:
                 cleaned_data['published_workspaces'] = []
 
+        for structure_field in self.structure_decimal_fields:
+            cleaned_data = clean_structure_decimal_fields(
+                self,
+                structure_field,
+                cleaned_data,
+            )
+
         return cleaned_data
 
     def _collect_structure_data(self):
         data = {}
         for structure_field in self.structure_fields:
+            if structure_field.field_type == 'DecimalField':
+                data.update(
+                    collect_structure_decimal_sql_data(
+                        structure_field,
+                        self.cleaned_data,
+                    )
+                )
+                continue
             field_name = self.structure_form_field_name(structure_field)
             value = self.cleaned_data.get(field_name)
             if value not in (None, '') or structure_field.is_required:

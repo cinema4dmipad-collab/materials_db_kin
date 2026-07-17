@@ -1,6 +1,6 @@
 from django import forms
 
-from apps.core.tag_utils import assign_tags, format_tags_for_input, parse_tag_input, validate_tag_names
+from apps.core.tag_utils import active_tags_queryset, assign_tags, format_tags_for_input, parse_tag_input, validate_tag_names
 from apps.core.widgets import TagNamesWidget
 
 
@@ -22,7 +22,12 @@ class TagNamesFormMixin:
             from apps.workspaces.services import tags_in_workspace
 
             widget_kwargs['tag_suggestions'] = list(
-                tags_in_workspace(self.tag_workspace).values('name', 'slug')
+                active_tags_queryset(tags_in_workspace(self.tag_workspace)).values(
+                    'name',
+                    'slug',
+                    'color',
+                    'description',
+                )
             )
 
         self.fields[self.tag_field_name] = forms.CharField(

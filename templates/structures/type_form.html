@@ -10,6 +10,7 @@
 <link href="{% static 'css/structure_type_form.css' %}" rel="stylesheet">
 <script src="{% static 'js/reference_properties_picker.js' %}" defer></script>
 <script src="{% static 'js/structure_type_form.js' %}" defer></script>
+<script src="{% static 'js/structure_color_picker.js' %}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -129,7 +130,7 @@
                                         <input type="number" name="fields-__idx__-sort_order" value="0" min="0" id="id_fields-__idx__-sort_order">
                                         <input type="number" name="fields-__idx__-max_length" value="255" min="1" max="4000" id="id_fields-__idx__-max_length">
                                         <input type="number" name="fields-__idx__-max_digits" value="10" min="1" max="18" id="id_fields-__idx__-max_digits">
-                                        <input type="number" name="fields-__idx__-decimal_places" value="4" min="0" max="10" id="id_fields-__idx__-decimal_places">
+                                        <input type="number" name="fields-__idx__-decimal_places" value="2" min="0" max="10" id="id_fields-__idx__-decimal_places">
                                         <input type="text" name="fields-__idx__-default_value" maxlength="500" id="id_fields-__idx__-default_value">
                                         <input type="hidden" name="fields-__idx__-choice_options" value="[]" data-structure-field-choices id="id_fields-__idx__-choice_options">
                                         <input type="checkbox" name="fields-__idx__-DELETE" id="id_fields-__idx__-DELETE" class="d-none">

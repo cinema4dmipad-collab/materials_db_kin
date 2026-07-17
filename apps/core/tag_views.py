@@ -21,6 +21,9 @@ from apps.workspaces.services import tags_in_workspace
 TAG_SCOPE_WORKSPACE = 'workspace'
 TAG_SCOPE_GLOBAL = 'global'
 TAG_SCOPE_CHOICES = (TAG_SCOPE_WORKSPACE, TAG_SCOPE_GLOBAL)
+TAG_ARCHIVE_ACTIVE = 'active'
+TAG_ARCHIVE_ARCHIVED = 'archived'
+TAG_ARCHIVE_CHOICES = (TAG_ARCHIVE_ACTIVE, TAG_ARCHIVE_ARCHIVED)
 
 
 class TagListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, ListView):
@@ -48,23 +51,42 @@ class TagListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, Li
             return TAG_SCOPE_WORKSPACE
         return scope
 
-    def get_scope_url(self, scope):
+    def get_archive_filter(self):
+        archive = self.request.GET.get('archive', TAG_ARCHIVE_ACTIVE)
+        if archive not in TAG_ARCHIVE_CHOICES:
+            return TAG_ARCHIVE_ACTIVE
+        return archive
+
+    def get_scope_url(self, scope, archive=None):
         params = self.request.GET.copy()
         params.pop('page', None)
         if scope == TAG_SCOPE_WORKSPACE:
             params.pop('scope', None)
         else:
             params['scope'] = scope
+        archive = archive if archive is not None else self.get_archive_filter()
+        if archive == TAG_ARCHIVE_ACTIVE:
+            params.pop('archive', None)
+        else:
+            params['archive'] = archive
         query = params.urlencode()
         return reverse('core:tag_list') + (f'?{query}' if query else '')
+
+    def get_archive_url(self, archive):
+        return self.get_scope_url(self.get_tag_scope(), archive=archive)
 
     def get_queryset(self):
         workspace = self.request.active_workspace
         scope = self.get_tag_scope()
+        archive = self.get_archive_filter()
         if scope == TAG_SCOPE_GLOBAL:
             base_qs = Tag.objects.filter(workspace__isnull=True)
         else:
             base_qs = Tag.objects.filter(workspace=workspace)
+        if archive == TAG_ARCHIVE_ARCHIVED:
+            base_qs = base_qs.filter(is_archived=True)
+        else:
+            base_qs = base_qs.filter(is_archived=False)
         return self.filter_queryset(
             base_qs.annotate(
                 material_count=Count('materials', distinct=True),
@@ -80,7 +102,9 @@ class TagListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, Li
         workspace = self.request.active_workspace
         user = self.request.user
         scope = self.get_tag_scope()
+        archive = self.get_archive_filter()
         context['tag_scope'] = scope
+        context['tag_archive'] = archive
         context['tag_scope_tabs'] = [
             {
                 'key': TAG_SCOPE_WORKSPACE,
@@ -93,16 +117,34 @@ class TagListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, Li
                 'url': self.get_scope_url(TAG_SCOPE_GLOBAL),
             },
         ]
+        context['tag_archive_tabs'] = [
+            {
+                'key': TAG_ARCHIVE_ACTIVE,
+                'label': 'Активные',
+                'url': self.get_archive_url(TAG_ARCHIVE_ACTIVE),
+            },
+            {
+                'key': TAG_ARCHIVE_ARCHIVED,
+                'label': 'Архив',
+                'url': self.get_archive_url(TAG_ARCHIVE_ARCHIVED),
+            },
+        ]
+        preserve = []
         if scope != TAG_SCOPE_WORKSPACE:
-            context['list_filter_preserve_params'] = [('scope', scope)]
-        else:
-            context['list_filter_preserve_params'] = []
+            preserve.append(('scope', scope))
+        if archive != TAG_ARCHIVE_ACTIVE:
+            preserve.append(('archive', archive))
+        context['list_filter_preserve_params'] = preserve
         params = self.request.GET.copy()
         params.pop('page', None)
         if scope == TAG_SCOPE_WORKSPACE:
             params.pop('scope', None)
         else:
             params['scope'] = scope
+        if archive == TAG_ARCHIVE_ACTIVE:
+            params.pop('archive', None)
+        else:
+            params['archive'] = archive
         context['pagination_query'] = params.urlencode()
         context['can_create_workspace_tag'] = has_workspace_perm(
             user, workspace, WorkspacePerm.TAG_CREATE

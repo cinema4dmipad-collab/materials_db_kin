@@ -1,6 +1,44 @@
 (function () {
     'use strict';
 
+    var SCOPED_SEPARATOR = '::';
+
+    function escapeHtml(value) {
+        return (value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function isScopedTagName(tagName) {
+        var normalized = (tagName || '').trim();
+        var separatorIndex = normalized.lastIndexOf(SCOPED_SEPARATOR);
+        if (separatorIndex === -1) {
+            return false;
+        }
+        var scope = normalized.slice(0, separatorIndex).trim();
+        var value = normalized.slice(separatorIndex + SCOPED_SEPARATOR.length).trim();
+        return Boolean(scope && value);
+    }
+
+    function renderScopedTagLabel(tagName) {
+        var normalized = (tagName || '').trim();
+        var separatorIndex = normalized.lastIndexOf(SCOPED_SEPARATOR);
+        if (separatorIndex === -1) {
+            return '<span class="entity-tag__text">' + escapeHtml(normalized) + '</span>';
+        }
+        var scope = normalized.slice(0, separatorIndex).trim();
+        var value = normalized.slice(separatorIndex + SCOPED_SEPARATOR.length).trim();
+        if (!scope || !value) {
+            return '<span class="entity-tag__text">' + escapeHtml(normalized) + '</span>';
+        }
+        return (
+            '<span class="entity-tag__text">' + escapeHtml(scope) + '</span>' +
+            '<span class="entity-tag__text-scoped">' + escapeHtml(value) + '</span>'
+        );
+    }
+
     function parseTags(value) {
         return (value || '')
             .split(/[,;]+/)
@@ -18,6 +56,80 @@
         return -1;
     }
 
+    function tagScopeKey(tagName) {
+        var normalized = (tagName || '').trim();
+        var separatorIndex = normalized.indexOf(SCOPED_SEPARATOR);
+        if (separatorIndex === -1) {
+            return null;
+        }
+        var scope = normalized.slice(0, separatorIndex).trim();
+        return scope ? scope.toLowerCase() : null;
+    }
+
+    function contrastTextColor(hexColor) {
+        var raw = (hexColor || '').replace('#', '');
+        if (raw.length !== 6) {
+            return '#212529';
+        }
+        var red = parseInt(raw.slice(0, 2), 16);
+        var green = parseInt(raw.slice(2, 4), 16);
+        var blue = parseInt(raw.slice(4, 6), 16);
+        var luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+        return luminance > 0.6 ? '#212529' : '#ffffff';
+    }
+
+    function buildSuggestionMap(widget) {
+        var map = Object.create(null);
+        var scriptId = widget.getAttribute('data-tag-suggestions-id');
+        var scriptEl = scriptId ? document.getElementById(scriptId) : null;
+        var raw = scriptEl ? scriptEl.textContent : widget.getAttribute('data-tag-suggestions');
+        if (!raw) {
+            return map;
+        }
+        try {
+            var suggestions = JSON.parse(raw);
+            suggestions.forEach(function (item) {
+                if (!item || !item.name) {
+                    return;
+                }
+                map[item.name.toLowerCase()] = item;
+            });
+        } catch (error) {
+            return map;
+        }
+        return map;
+    }
+
+    function applyTagVisual(element, tagName, suggestionMap) {
+        var meta = suggestionMap[(tagName || '').toLowerCase()] || null;
+        var color = (meta && meta.color) || element.dataset.tagColor || '';
+        var description = (meta && meta.description) || element.dataset.tagDescription || '';
+        element.classList.toggle('tone-tag', !color);
+        if (color) {
+            var textColor = contrastTextColor(color);
+            element.style.setProperty('--label-background-color', color);
+            element.style.setProperty('--label-text-color', textColor);
+        } else {
+            element.style.removeProperty('--label-background-color');
+            element.style.removeProperty('--label-text-color');
+        }
+        if (description) {
+            element.title = description;
+        }
+    }
+
+    function initPickButtonStyles(widget, suggestionMap) {
+        widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
+            var tagName = button.dataset.tagName || '';
+            button.classList.toggle('entity-tag--scoped', isScopedTagName(tagName));
+            applyTagVisual(button, tagName, suggestionMap);
+            var description = button.dataset.tagDescription || '';
+            if (description) {
+                button.title = description;
+            }
+        });
+    }
+
     function initWidget(widget) {
         var hiddenInput = widget.querySelector('.tag-input-value');
         var typingInput = widget.querySelector('.tag-input-typing');
@@ -30,6 +142,7 @@
             return;
         }
 
+        var suggestionMap = buildSuggestionMap(widget);
         var tags = parseTags(hiddenInput.value);
 
         function syncHidden() {
@@ -38,16 +151,29 @@
             hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
+        function removeScopedConflict(tagName) {
+            var scopeKey = tagScopeKey(tagName);
+            if (!scopeKey) {
+                return;
+            }
+            for (var i = tags.length - 1; i >= 0; i -= 1) {
+                if (tagScopeKey(tags[i]) === scopeKey && tags[i].toLowerCase() !== tagName.toLowerCase()) {
+                    tags.splice(i, 1);
+                }
+            }
+        }
+
         function renderChips() {
             chipsContainer.innerHTML = '';
             tags.forEach(function (tagName) {
                 var chip = document.createElement('span');
-                chip.className = 'tag-input-chip entity-tag tone-tag';
+                chip.className = 'tag-input-chip entity-tag' + (isScopedTagName(tagName) ? ' entity-tag--scoped' : '');
                 chip.dataset.tagName = tagName;
+                applyTagVisual(chip, tagName, suggestionMap);
 
                 var label = document.createElement('span');
                 label.className = 'tag-input-chip__label';
-                label.textContent = tagName;
+                label.innerHTML = renderScopedTagLabel(tagName);
 
                 var removeButton = document.createElement('button');
                 removeButton.type = 'button';
@@ -73,6 +199,7 @@
                 var selected = tagIndex(tags, tagName) !== -1;
                 button.classList.toggle('tag-input-pick--selected', selected);
                 button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                applyTagVisual(button, tagName, suggestionMap);
             });
         }
 
@@ -122,6 +249,7 @@
             if (!normalized || tagIndex(tags, normalized) !== -1) {
                 return false;
             }
+            removeScopedConflict(normalized);
             tags.push(normalized);
             syncHidden();
             renderChips();
@@ -161,6 +289,7 @@
             button.addEventListener('click', function () {
                 var tagName = button.dataset.tagName || '';
                 if (tagIndex(tags, tagName) === -1) {
+                    removeScopedConflict(tagName);
                     addTag(tagName);
                     typingInput.value = '';
                     filterExistingTags();
@@ -199,7 +328,9 @@
             }
             var firstPick = firstVisiblePick();
             if (firstPick && typingInput.value.trim()) {
-                addTag(firstPick.dataset.tagName || '');
+                var pickName = firstPick.dataset.tagName || '';
+                removeScopedConflict(pickName);
+                addTag(pickName);
                 typingInput.value = '';
                 filterExistingTags();
                 return;
@@ -216,6 +347,7 @@
             }, 120);
         });
 
+        initPickButtonStyles(widget, suggestionMap);
         renderChips();
     }
 

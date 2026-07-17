@@ -68,7 +68,11 @@ class SampleViewsTests(TestCase):
     def _property_formset_data(self, property_obj, prefix='properties-0', **overrides):
         data = {
             f'{prefix}-property': str(property_obj.pk),
+            f'{prefix}-value_kind': 'scalar',
             f'{prefix}-value': '1.55',
+            f'{prefix}-value_min': '',
+            f'{prefix}-value_max': '',
+            f'{prefix}-value_tolerance': '',
         }
         data.update(overrides)
         return data

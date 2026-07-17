@@ -96,7 +96,7 @@
                         <th scope="row" class="material-props-section__name">{{ mp.property.base_display_name }}</th>
                         <td class="material-props-section__value">
                             {% if mp.property.data_type == 'number' %}
-                            {{ mp.value|decimal_comma }}
+                            {{ mp.display_value }}
                             {% elif mp.property.data_type == 'material_link' %}
                             {% with linked=mp.linked_material %}
                             {% if linked %}
@@ -111,7 +111,7 @@
                             {{ mp.value }}
                             {% endif %}
                         </td>
-                        <td class="material-props-section__unit">{{ mp.property.effective_unit|default:"—" }}</td>
+                        <td class="material-props-section__unit">{{ mp.property.effective_unit }}</td>
                         <td class="material-props-section__spacer" aria-hidden="true"></td>
                     </tr>
                     {% endfor %}

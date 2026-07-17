@@ -48,8 +48,8 @@
                         <tr class="property-form-row property-form-row--material">
                             {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
                             <th scope="row" class="material-props-section__name">—</th>
-                            <td class="material-props-section__value">{{ property_form.value }}</td>
-                            <td class="material-props-section__unit">—</td>
+                            <td class="material-props-section__value">{% include 'includes/property_number_value_fields.html' %}</td>
+                            <td class="material-props-section__unit"></td>
                             <td class="visually-hidden">
                                 {{ property_form.property }}
                                 {% if formset.can_delete %}
@@ -96,8 +96,8 @@
                         <tr class="property-form-row property-form-row--extra">
                             {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
                             <th scope="row" class="material-props-section__name">—</th>
-                            <td class="material-props-section__value">{{ property_form.value }}</td>
-                            <td class="material-props-section__unit">—</td>
+                            <td class="material-props-section__value">{% include 'includes/property_number_value_fields.html' %}</td>
+                            <td class="material-props-section__unit"></td>
                             <td class="text-end text-nowrap">
                                 {% if formset.can_delete %}
                                 <span class="visually-hidden">{{ property_form.DELETE }}</span>

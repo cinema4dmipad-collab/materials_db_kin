@@ -1,6 +1,7 @@
 from django import forms
 from django.forms import inlineformset_factory
 
+from apps.references.constants import DEFAULT_PROPERTY_DECIMAL_PLACES, MAX_PROPERTY_DECIMAL_PLACES
 from apps.references.models import Property, PropertyChoice, PropertyGroup
 from apps.structures.identifiers import normalize_identifier
 
@@ -12,10 +13,13 @@ _BOOTSTRAP_TEXTAREA = {'class': 'form-control', 'rows': 3}
 class PropertyForm(forms.ModelForm):
     class Meta:
         model = Property
-        fields = ['display_name', 'name', 'unit', 'data_type', 'group', 'description']
+        fields = ['display_name', 'name', 'data_type', 'decimal_places', 'unit', 'group', 'description']
         widgets = {
             'display_name': forms.TextInput(attrs={**_BOOTSTRAP_INPUT, 'data-property-name-source': 'true'}),
             'name': forms.TextInput(attrs={**_BOOTSTRAP_INPUT, 'data-property-name-target': 'true'}),
+            'decimal_places': forms.NumberInput(
+                attrs={**_BOOTSTRAP_INPUT, 'min': 0, 'max': MAX_PROPERTY_DECIMAL_PLACES},
+            ),
             'unit': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'data_type': forms.Select(attrs={**_BOOTSTRAP_SELECT, 'data-property-data-type': 'true'}),
             'group': forms.Select(attrs=_BOOTSTRAP_SELECT),
@@ -24,6 +28,7 @@ class PropertyForm(forms.ModelForm):
         labels = {
             'display_name': 'Название',
             'name': 'Код свойства',
+            'decimal_places': 'Знаков после запятой',
             'unit': 'Единица измерения',
             'data_type': 'Тип данных',
             'group': 'Группа',
@@ -32,6 +37,7 @@ class PropertyForm(forms.ModelForm):
         help_texts = {
             'display_name': 'Как свойство будет отображаться в интерфейсе (на русском или английском).',
             'name': 'Заполняется автоматически из названия. Можно изменить вручную при необходимости.',
+            'decimal_places': 'Только для типа «Число». Сколько знаков показывать при вводе и просмотре (0–10).',
             'unit': 'Необязательно (например, МПа, г/см³). Для типов «Материал» и «Выбор из списка» не используется.',
             'data_type': (
                 '«Материал» — ссылка на другой материал. '
@@ -45,11 +51,14 @@ class PropertyForm(forms.ModelForm):
         self.fields['group'].required = False
         self.fields['group'].empty_label = '— без группы —'
         self.fields['name'].required = False
+        if not self.instance.pk and (self.initial.get('data_type') or 'number') == 'number':
+            self.fields['decimal_places'].initial = DEFAULT_PROPERTY_DECIMAL_PLACES
 
     def clean(self):
         cleaned_data = super().clean()
         display_name = (cleaned_data.get('display_name') or '').strip()
         name = (cleaned_data.get('name') or '').strip()
+        data_type = cleaned_data.get('data_type')
 
         if not name and display_name:
             name = normalize_identifier(display_name, max_length=100)
@@ -59,7 +68,19 @@ class PropertyForm(forms.ModelForm):
         else:
             cleaned_data['name'] = name
 
-        if cleaned_data.get('data_type') in {
+        if data_type == 'number':
+            decimal_places = cleaned_data.get('decimal_places')
+            if decimal_places in (None, ''):
+                cleaned_data['decimal_places'] = DEFAULT_PROPERTY_DECIMAL_PLACES
+            elif decimal_places < 0 or decimal_places > MAX_PROPERTY_DECIMAL_PLACES:
+                self.add_error(
+                    'decimal_places',
+                    f'Знаков после запятой — от 0 до {MAX_PROPERTY_DECIMAL_PLACES}.',
+                )
+        else:
+            cleaned_data['decimal_places'] = None
+
+        if data_type in {
             Property.MATERIAL_LINK_DATA_TYPE,
             Property.CHOICE_DATA_TYPE,
         }:

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}{{ structure_type.name }} — Управление{% endblock %}
 
@@ -179,6 +180,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/structure_color_picker.js' %}" defer></script>
 {% if prompt_create_table and can_create_table %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {

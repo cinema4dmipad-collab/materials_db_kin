@@ -18,6 +18,18 @@ class Tag(models.Model):
     )
     name = models.CharField(max_length=50, verbose_name='Название')
     slug = models.SlugField(max_length=50, verbose_name='Код')
+    description = models.TextField(blank=True, verbose_name='Описание')
+    color = models.CharField(
+        max_length=7,
+        blank=True,
+        verbose_name='Цвет',
+        help_text='Hex-цвет (#RRGGBB). Пусто — стандартный стиль.',
+    )
+    is_archived = models.BooleanField(
+        default=False,
+        verbose_name='В архиве',
+        help_text='Скрыт из выбора, но остаётся на уже помеченных записях.',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создан')
     created_by_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -58,6 +70,14 @@ class Tag(models.Model):
     @property
     def is_global(self) -> bool:
         return self.workspace_id is None
+
+    @property
+    def badge_text_color(self) -> str | None:
+        from apps.core.tag_utils import contrast_text_color
+
+        if not self.color:
+            return None
+        return contrast_text_color(self.color)
 
     def __str__(self):
         return self.name

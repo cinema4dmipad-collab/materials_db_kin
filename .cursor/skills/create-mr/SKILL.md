@@ -12,8 +12,9 @@ Creates or updates a merge request using one deterministic path.
 **Before** `git push`, follow **this repository’s** release and contribution rules—not anything hardcoded in this skill.
 
 1. Read the project’s own sources, for example: `docs/` (index, conventions, build/deployment pages), `.cursor/rules/`, `CONTRIBUTING*`, `AGENTS.md`, or `README` sections on versioning, changelog, and MR expectations.
-2. Apply whatever that project requires for the current branch (e.g. version or changelog bumps, formatting, tests). If the repo documents nothing, use team conventions agreed for that project.
-3. Commit those updates on the same branch, then push.
+2. **This repo:** before push, apply [reference_upd.mdс](../../rules/reference_upd.mdс) — map the branch diff to `docs/`, `templates/core/help.html` (`/help/`), `AGENTS.md`, and `CHANGELOG.md`; verify help via `HelpPageTests` and browser/curl when a server is available; commit doc/help fixes on the same branch when user-facing behavior changed.
+3. Apply whatever that project requires for the current branch (e.g. version or changelog bumps, formatting, tests). If the repo documents nothing, use team conventions agreed for that project.
+4. Commit those updates on the same branch, then push.
 
 ### Optional: changelog (when the project maintains one)
 

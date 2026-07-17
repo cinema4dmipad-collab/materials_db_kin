@@ -45,17 +45,26 @@
         var unitInput = form.querySelector('#id_unit');
         var unitGroup = form.querySelector('[data-property-unit-group]')
             || (unitInput ? unitInput.closest('.mb-3') : null);
+        var decimalPlacesGroup = form.querySelector('[data-property-decimal-places-group]');
+        var decimalPlacesInput = form.querySelector('#id_decimal_places');
         var choicesSection = form.querySelector('[data-property-choices-section]');
         if (!dataType) {
             return;
         }
         var hideUnit = dataType.value === 'material_link' || dataType.value === 'choice';
+        var showDecimalPlaces = dataType.value === 'number';
         var showChoices = dataType.value === 'choice';
         if (unitGroup) {
             unitGroup.classList.toggle('d-none', hideUnit);
         }
+        if (decimalPlacesGroup) {
+            decimalPlacesGroup.classList.toggle('d-none', !showDecimalPlaces);
+        }
         if (hideUnit && unitInput) {
             unitInput.value = '';
+        }
+        if (!showDecimalPlaces && decimalPlacesInput) {
+            decimalPlacesInput.value = '';
         }
         if (choicesSection) {
             choicesSection.classList.toggle('d-none', !showChoices);

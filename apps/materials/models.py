@@ -4,6 +4,12 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from apps.core.property_number_value import (
+    VALUE_KIND_SCALAR,
+    VALUE_KIND_CHOICES,
+    format_property_number_display,
+    sync_number_property_instance,
+)
 from apps.references.models import Property
 from apps.workspaces.visibility import VisibilityMode, WorkspaceVisibilityMixin
 
@@ -179,7 +185,13 @@ class MaterialProperty(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     material = models.ForeignKey(Material, on_delete=models.CASCADE, related_name='properties')
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='material_values')
+    value_kind = models.CharField(
+        max_length=10,
+        choices=VALUE_KIND_CHOICES,
+        default=VALUE_KIND_SCALAR,
+    )
     value = models.CharField(max_length=500)
+    value_b = models.DecimalField(max_digits=18, decimal_places=10, null=True, blank=True)
     notes = models.TextField(blank=True)
 
     def __str__(self):
@@ -196,6 +208,21 @@ class MaterialProperty(models.Model):
         if getattr(self.property, 'data_type', None) != Property.CHOICE_DATA_TYPE:
             return self.value
         return self.property.choice_label_for_value(self.value)
+
+    def display_value(self) -> str:
+        if getattr(self.property, 'data_type', None) != 'number':
+            return self.value
+        return format_property_number_display(
+            value_kind=self.value_kind,
+            value=self.value,
+            value_b=self.value_b,
+            decimal_places=self.property.effective_decimal_places(),
+        )
+
+    def save(self, *args, **kwargs):
+        if getattr(self.property, 'data_type', None) == 'number':
+            sync_number_property_instance(self)
+        super().save(*args, **kwargs)
 
     class Meta:
         unique_together = ['material', 'property']

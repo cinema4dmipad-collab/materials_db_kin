@@ -682,7 +682,7 @@ def _serialize_material_property(item):
     linked = None
     value = item.value
     if item.property.data_type == 'number':
-        value = format_decimal_display(item.value)
+        value = item.display_value()
     elif item.property.data_type == Property.MATERIAL_LINK_DATA_TYPE:
         linked = item.linked_material()
         if linked is not None:
@@ -695,6 +695,8 @@ def _serialize_material_property(item):
         'unit': item.property.effective_unit(),
         'data_type': item.property.data_type,
         'value': value,
+        'value_kind': item.value_kind,
+        'value_b': str(item.value_b) if item.value_b is not None else None,
         'material_id': str(linked.pk) if linked is not None else None,
     }
 

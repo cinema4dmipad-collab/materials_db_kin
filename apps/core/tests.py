@@ -17,7 +17,14 @@ from apps.core.list_filters import (
     QuerySetFilterMixin,
     build_choice_label_filter,
 )
-from apps.core.tag_utils import assign_tags, get_or_create_tags, parse_tag_input, tag_slug_from_name
+from apps.core.tag_utils import (
+    assign_tags,
+    dedupe_scoped_tag_names,
+    get_or_create_tags,
+    parse_scoped_tag_name,
+    parse_tag_input,
+    tag_slug_from_name,
+)
 from apps.core.templatetags.ui_tags import category_tone, semantic_tone, ui_category_tone, ui_tone
 from apps.core.models import Tag
 from apps.core.forms import TagForm
@@ -132,6 +139,34 @@ class TagFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('name', form.errors)
 
+    def test_tag_form_accepts_metadata(self):
+        form = TagForm(
+            data={
+                'name': 'Pilot',
+                'description': 'Test pilot batch',
+                'color': '#aabbcc',
+                'is_archived': True,
+            },
+            workspace=self.workspace,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        tag = form.save()
+        self.assertEqual(tag.description, 'Test pilot batch')
+        self.assertEqual(tag.color, '#AABBCC')
+        self.assertTrue(tag.is_archived)
+
+    def test_tag_form_rejects_invalid_color(self):
+        form = TagForm(data={'name': 'Pilot', 'color': 'red'}, workspace=self.workspace)
+        self.assertFalse(form.is_valid())
+        self.assertIn('color', form.errors)
+
+    def test_tag_form_accepts_scoped_name(self):
+        form = TagForm(data={'name': 'тип::баг'}, workspace=self.workspace)
+        self.assertTrue(form.is_valid(), form.errors)
+        tag = form.save()
+        self.assertEqual(tag.name, 'тип::баг')
+        self.assertEqual(tag.slug, 'тип--баг')
+
 
 class TagViewsTests(AuthenticatedWorkspaceTestCase):
     @classmethod
@@ -240,6 +275,21 @@ class TagViewsTests(AuthenticatedWorkspaceTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Tag.objects.filter(pk=self.workspace_tag.pk).exists())
 
+    def test_tag_list_archive_filter(self):
+        Tag.objects.create(
+            name='Old tag',
+            slug='old-tag',
+            workspace=self.workspace,
+            is_archived=True,
+        )
+        response = self.client.get(reverse('core:tag_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Old tag')
+        response = self.client.get(reverse('core:tag_list'), {'archive': 'archived'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Old tag')
+        self.assertNotContains(response, 'Prepreg')
+
 
 class TagUtilsTests(TestCase):
     @classmethod
@@ -253,6 +303,37 @@ class TagUtilsTests(TestCase):
     def test_tag_slug_from_name_normalizes_text(self):
         slug = tag_slug_from_name('T700 test')
         self.assertEqual(slug, 't700-test')
+
+    def test_tag_slug_from_scoped_name(self):
+        bug_slug = tag_slug_from_name('тип::баг')
+        feature_slug = tag_slug_from_name('тип::фича')
+        self.assertEqual(bug_slug, 'тип--баг')
+        self.assertNotEqual(bug_slug, feature_slug)
+
+    def test_parse_scoped_tag_name(self):
+        scope, value = parse_scoped_tag_name('тип::баг')
+        self.assertEqual(scope, 'тип')
+        self.assertEqual(value, 'баг')
+        scope, value = parse_scoped_tag_name('plain')
+        self.assertIsNone(scope)
+        self.assertEqual(value, 'plain')
+
+    def test_dedupe_scoped_tag_names_keeps_last_per_scope(self):
+        names = dedupe_scoped_tag_names(['тип::баг', 'lab', 'тип::фича', 'field'])
+        self.assertEqual(names, ['тип::фича', 'lab', 'field'])
+
+    def test_dedupe_scoped_tag_names_ignores_invalid_scoped(self):
+        from apps.core.tag_utils import tag_scope_key
+
+        self.assertIsNone(tag_scope_key('a::b::c'))
+        names = dedupe_scoped_tag_names(['a::b::c', 'тип::баг', 'тип::фича'])
+        self.assertEqual(names, ['a::b::c', 'тип::фича'])
+
+    def test_split_scoped_tag_display(self):
+        from apps.core.tag_utils import split_scoped_tag_display
+
+        self.assertEqual(split_scoped_tag_display('тип::баг'), ('тип', 'баг', 'тип::баг'))
+        self.assertEqual(split_scoped_tag_display('plain'), (None, None, 'plain'))
 
     def test_get_or_create_tags_reuses_existing_slug(self):
         Tag.objects.create(name='Prepreg', slug='prepreg', workspace=self.workspace)
@@ -303,6 +384,33 @@ class TagAssignmentTests(TestCase):
         assign_tags(self.material, ['prepreg', 'T700'], workspace=self.workspace)
         self.assertEqual(self.material.tags.count(), 2)
         self.assertTrue(self.material.tags.filter(slug='prepreg').exists())
+
+    def test_assign_tags_dedupes_scoped_tags_by_scope(self):
+        assign_tags(self.material, ['тип::баг', 'тип::фича'], workspace=self.workspace)
+        self.assertEqual(self.material.tags.count(), 1)
+        self.assertEqual(self.material.tags.get().name, 'тип::фича')
+
+
+class TagNamesFormMixinTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.workspace = ensure_legacy_workspace()
+        Tag.objects.create(name='Active tag', slug='active-tag', workspace=cls.workspace)
+        Tag.objects.create(
+            name='Archived tag',
+            slug='archived-tag',
+            workspace=cls.workspace,
+            is_archived=True,
+        )
+
+    def test_suggestions_exclude_archived_tags(self):
+        from apps.materials.forms import MaterialForm
+
+        form = MaterialForm(workspace=self.workspace)
+        suggestions = form.fields['tag_names'].widget.get_tag_suggestions()
+        slugs = {item['slug'] for item in suggestions}
+        self.assertIn('active-tag', slugs)
+        self.assertNotIn('archived-tag', slugs)
 
 
 class _SampleFilterViewWithObjectType(_SampleFilterView):
@@ -503,6 +611,9 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Образцы')
         self.assertContains(response, 'id="interface"')
         self.assertContains(response, 'Пространство')
+        self.assertContains(response, 'область::значение')
+        self.assertContains(response, '± погрешностью')
+        self.assertContains(response, 'Знаков после запятой')
 
 
 class AppVersionTests(TestCase):

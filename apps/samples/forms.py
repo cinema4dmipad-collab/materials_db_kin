@@ -1,7 +1,8 @@
 from django import forms
 from django.forms import inlineformset_factory
 
-from apps.core.fields import LocalizedPropertyValueField, clean_localized_number_value
+from apps.core.fields import LocalizedPropertyValueField, localized_range_bound_field
+from apps.core.property_number_forms import NumberPropertyValueFormMixin
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.materials.form_widgets import material_select_widget_attrs
 from apps.samples.attachment_title import default_attachment_title
@@ -31,27 +32,53 @@ class SamplePropertyInlineFormSet(forms.BaseInlineFormSet):
                 seen[prop.pk] = True
 
 
-class SamplePropertyForm(forms.ModelForm):
+class SamplePropertyForm(NumberPropertyValueFormMixin, forms.ModelForm):
     value = LocalizedPropertyValueField(required=False)
+    value_min = localized_range_bound_field(bound_label='От')
+    value_max = localized_range_bound_field(bound_label='До')
+    value_tolerance = localized_range_bound_field(bound_label='±')
 
     class Meta:
         model = SampleProperty
-        fields = ['property', 'value']
+        fields = ['property', 'value_kind', 'value', 'value_b']
         widgets = {
             'property': forms.Select(attrs=_BOOTSTRAP_SELECT),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        prop = self._resolve_property()
+        self._init_number_property_fields(prop)
+
+    def _resolve_property(self):
+        if self.is_bound:
+            raw = self.data.get(self.add_prefix('property'))
+            if raw:
+                from apps.references.models import Property
+
+                return Property.objects.filter(pk=raw).first()
+        if getattr(self.instance, 'property_id', None):
+            return self.instance.property
+        initial = self.initial.get('property')
+        if initial is None:
+            return None
+        from apps.references.models import Property
+
+        if isinstance(initial, Property):
+            return initial
+        return Property.objects.filter(pk=initial).first()
+
     def clean(self):
         cleaned_data = super().clean()
-        clean_localized_number_value(self)
-        return cleaned_data
+        prop = cleaned_data.get('property') or self._resolve_property()
+        return self._clean_number_property(cleaned_data, prop)
 
 
 SamplePropertyFormSet = inlineformset_factory(
     Sample,
     SampleProperty,
     form=SamplePropertyForm,
-    fields=['property', 'value'],
+    fields=['property', 'value_kind', 'value', 'value_b'],
     extra=0,
     can_delete=True,
     formset=SamplePropertyInlineFormSet,

@@ -1,4 +1,6 @@
-<div class="tag-input-widget" data-tag-suggestions="{{ widget.tag_suggestions_json }}">
+{% load list_filter_tags %}
+{{ widget.tag_suggestions_json_script }}
+<div class="tag-input-widget" data-tag-suggestions-id="{{ widget.tag_suggestions_script_id }}">
     <div class="tag-input-widget__field-wrap">
         <div class="tag-input-composer">
             <div class="tag-input-chips" aria-live="polite"></div>
@@ -21,11 +23,13 @@
         <div class="tag-input-existing__list">
             {% for tag in widget.tag_suggestions %}
             <button type="button"
-                    class="entity-tag tone-tag tag-input-pick"
+                    class="entity-tag tag-input-pick{% if tag.name|is_scoped_tag %} entity-tag--scoped{% endif %}{% if not tag.color %} tone-tag{% endif %}"
                     data-tag-name="{{ tag.name }}"
                     data-tag-slug="{{ tag.slug }}"
-                    title="Добавить или убрать тег «{{ tag.name }}»">
-                {{ tag.name }}
+                    {% if tag.color %}data-tag-color="{{ tag.color }}"{% endif %}
+                    {% if tag.description %}data-tag-description="{{ tag.description }}"{% endif %}
+                    title="{% if tag.description %}{{ tag.description }}{% else %}Добавить или убрать тег «{{ tag.name }}»{% endif %}">
+                {{ tag.name|scoped_tag_label }}
             </button>
             {% endfor %}
         </div>

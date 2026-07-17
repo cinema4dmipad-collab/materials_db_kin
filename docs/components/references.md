@@ -6,9 +6,11 @@ Shared catalog of measurable **properties** used in materials, samples, and stru
 
 ## Model
 
-**Property** — name, code, unit, data type (`number`, `string`, `boolean`, `date`, `material_link`, `choice`), optional group, description, creator. For `choice`, options live in related `PropertyChoice` rows (`label` / `value`).
+**Property** — name, code, unit, data type (`number`, `string`, `boolean`, `date`, `material_link`, `choice`), optional `decimal_places` (for `number`), optional group, description, creator. For `choice`, options live in related `PropertyChoice` rows (`label` / `value`).
 
 Codes are generated from names (transliteration + snake_case) with validation against SQL reserved words.
+
+Numeric values on materials/samples use kind **точное / диапазон / ± погрешность** (`apps/core/property_number_value.py`); display precision follows `decimal_places`.
 
 ## Public UI
 
