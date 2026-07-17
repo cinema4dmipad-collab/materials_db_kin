@@ -51,8 +51,8 @@ Used in: sample form, composite layers, structure dynamic fields.
 Key blocks:
 
 1. **Basic fields** — code, name, type, tags
-2. **Properties** — table with picker (`material_properties_formset.js`); no manual property name entry
-3. **Structure fields** — dynamic fields from selected type (when SQL table exists)
+2. **Properties** — table with picker (`material_properties_formset.js`); no manual property name entry. For `number`: value kind (scalar / range / ±) via `property_number_value.js`
+3. **Structure fields** — dynamic fields from selected type (when SQL table exists); decimal fields support the same range/tolerance UI when configured
 4. **Composite layers** — if `allow_layers` on type; toolbar + DnD table (`composite_layers_formset.js`)
 
 Changing structure type reloads the form to load new dynamic fields.

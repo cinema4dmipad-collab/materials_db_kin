@@ -8,10 +8,12 @@ Dynamic **structure types**: configurable fields and per-type PostgreSQL tables.
 
 | Model | Purpose |
 |-------|---------|
-| `StructureType` | Name, code, `table_name`, `display_color`, `allow_layers`, `is_created`, `is_active` |
-| `StructureField` | Column metadata: name, label, type, defaults, sort order |
+| `StructureType` | Name, code, `table_name`, `display_color` (`#RRGGBB`), `allow_layers`, `is_created`, `is_active` |
+| `StructureField` | Column metadata: name, label, type, defaults, `decimal_places`, sort order |
 
 Field types include `CharField`, `IntegerField`, `DecimalField`, `DateField`, `MaterialLink`, `ChoiceField`. New `MaterialLink` / `ChoiceField` columns are added by picking a reference property with type «Материал» / «Выбор из списка» (not via a dedicated structure shortcut). Choice options are copied onto the structure field and rendered as a select on material forms.
+
+`display_color` is a free hex color (presets + picker); legacy `tone-*` values migrated to hex. Decimal fields can store scalar / range / ± via `decimal_range.py` and `structure_decimal_forms.py` (SQL columns managed in `sql_executor.py`).
 
 ## SQL Layer
 
@@ -56,6 +58,7 @@ Structure types and fields in admin; **Create table** action calls `SQLExecutor.
 | Command | Purpose |
 |---------|---------|
 | `sync_structure_tables` | Create SQL tables for all types with `is_created=False` |
+| `migrate_structure_decimal_ranges` | Backfill decimal range/tolerance columns for existing types |
 
 ## Tests
 

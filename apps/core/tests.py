@@ -611,6 +611,9 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Образцы')
         self.assertContains(response, 'id="interface"')
         self.assertContains(response, 'Пространство')
+        self.assertContains(response, 'область::значение')
+        self.assertContains(response, '± погрешностью')
+        self.assertContains(response, 'Знаков после запятой')
 
 
 class AppVersionTests(TestCase):

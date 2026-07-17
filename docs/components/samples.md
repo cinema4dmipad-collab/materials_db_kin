@@ -8,7 +8,7 @@ Physical **specimens** derived from materials.
 
 **Sample** — code, name, material (FK), object type (test, control, product, …), tags, workspace, creator, description.
 
-**SampleProperty** — property values; copied from material on create, editable per sample.
+**SampleProperty** — property values; copied from material on create, editable per sample. Numeric properties support scalar / range / ± (same as materials).
 
 **SampleAttachment** — generic files linked to sample.
 
