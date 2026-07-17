@@ -14,7 +14,11 @@ from apps.structures.identifiers import (
 )
 from apps.structures.choice_options import normalize_choice_options
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
-from apps.structures.colors import DEFAULT_STRUCTURE_DISPLAY_COLOR, normalize_display_color, validate_display_color
+from apps.structures.colors import (
+    DEFAULT_STRUCTURE_DISPLAY_COLOR,
+    TONE_TO_HEX,
+    validate_display_color,
+)
 from apps.structures.models import (
     CHOICE_FIELD_TYPE,
     MATERIAL_LINK_FIELD_TYPE,
@@ -31,7 +35,12 @@ _BOOTSTRAP_COLOR = {'class': 'form-control', 'placeholder': DEFAULT_STRUCTURE_DI
 
 class StructureDisplayColorFormMixin:
     def clean_display_color(self):
-        color = normalize_display_color(self.cleaned_data.get('display_color', ''))
+        raw = (self.cleaned_data.get('display_color') or '').strip()
+        if not raw:
+            return DEFAULT_STRUCTURE_DISPLAY_COLOR
+        if raw in TONE_TO_HEX:
+            return TONE_TO_HEX[raw]
+        color = raw.upper()
         validate_display_color(color)
         return color
 

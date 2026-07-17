@@ -29,7 +29,9 @@ def resolve_number_property_kind(*, is_range, is_tolerance, hidden_kind):
 class NumberPropertyValueFormMixin:
     def _init_number_property_fields(self, prop):
         if 'value_kind' in self.fields:
+            self.fields['value_kind'].required = False
             self.fields['value_kind'].widget = forms.HiddenInput()
+            self.fields['value_kind'].initial = VALUE_KIND_SCALAR
         if 'value_b' in self.fields:
             self.fields['value_b'].widget = forms.HiddenInput()
             self.fields['value_b'].required = False
@@ -96,8 +98,9 @@ class NumberPropertyValueFormMixin:
         kind = resolve_number_property_kind(
             is_range=is_range,
             is_tolerance=is_tolerance,
-            hidden_kind=cleaned_data.get('value_kind'),
+            hidden_kind=cleaned_data.get('value_kind') or VALUE_KIND_SCALAR,
         )
+        cleaned_data['value_kind'] = kind
         try:
             normalized = clean_number_property_fields(
                 value_kind=kind,

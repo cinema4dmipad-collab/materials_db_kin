@@ -9,6 +9,7 @@ from django.utils import timezone
 from apps.core.number_utils import normalize_decimal_input
 from apps.core.property_number_value import VALUE_KIND_RANGE, VALUE_KIND_SCALAR
 from apps.structures.decimal_range import (
+    DECIMAL_KIND_SUFFIX,
     LEGACY_DECIMAL_A_SUFFIX,
     LEGACY_DECIMAL_MAX_SUFFIX,
     LEGACY_DECIMAL_MIN_SUFFIX,
@@ -797,18 +798,21 @@ class SQLExecutor:
             field.name: field for field in structure_type.fields.all()
         }
         normalized = dict(record)
-        skip = set()
         for name, value in record.items():
-            if name in skip:
-                continue
             base_name = decimal_base_column_name(name)
             if base_name is not None:
+                field = fields_by_name.get(base_name)
+                # Quantize numeric companions (__b / legacy) like the base DecimalField.
+                if (
+                    field is not None
+                    and field.field_type == 'DecimalField'
+                    and not name.endswith(DECIMAL_KIND_SUFFIX)
+                    and value not in (None, '')
+                ):
+                    normalized[name] = normalize_structure_field_value(field, value)
                 continue
             field = fields_by_name.get(name)
             if field is None:
-                continue
-            if field.field_type == 'DecimalField':
-                normalized[name] = normalize_structure_field_value(field, value)
                 continue
             normalized[name] = normalize_structure_field_value(field, value)
         return normalized
