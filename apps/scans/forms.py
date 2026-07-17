@@ -6,6 +6,14 @@ from apps.scans.title_utils import default_scan_title
 from apps.scans.validators import format_max_scan_file_size, validate_scan_file
 
 
+class ScanTagsForm(TagNamesFormMixin, forms.ModelForm):
+    """Только теги — для редактирования с карточки скана."""
+
+    class Meta:
+        model = ScanRecord
+        fields = []
+
+
 class ScanRecordForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = ScanRecord

@@ -1,6 +1,8 @@
 import re
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
+from django.db.models import Q
 from django.utils.text import slugify
 
 from apps.core.models import Tag
@@ -131,6 +133,33 @@ def active_tags_queryset(queryset):
     return queryset.filter(is_archived=False)
 
 
+def _suggestion_row_rank(row: dict) -> tuple[int, int]:
+    """Higher is better: colored first, then workspace-scoped over global."""
+    has_color = 1 if str(row.get('color') or '').strip() else 0
+    workspace_id = row.get('workspace_id', row.get('workspace'))
+    is_workspace_tag = 1 if workspace_id not in (None, '') else 0
+    return (has_color, is_workspace_tag)
+
+
+def dedupe_tag_suggestion_rows(rows: list[dict]) -> list[dict]:
+    """Убирает дубли подсказок с одним именем (цветной / workspace важнее)."""
+    best_by_name: dict[str, dict] = {}
+    order: list[str] = []
+    for row in rows:
+        name = normalize_tag_name(str(row.get('name') or ''))
+        if not name:
+            continue
+        key = name.casefold()
+        current = best_by_name.get(key)
+        if current is None:
+            best_by_name[key] = row
+            order.append(key)
+            continue
+        if _suggestion_row_rank(row) > _suggestion_row_rank(current):
+            best_by_name[key] = row
+    return [best_by_name[key] for key in order]
+
+
 def resolve_tag_workspace(instance, workspace=None):
     if workspace is not None:
         return workspace
@@ -139,6 +168,94 @@ def resolve_tag_workspace(instance, workspace=None):
     if hasattr(instance, 'home_workspace_id') and instance.home_workspace_id:
         return instance.home_workspace
     return None
+
+
+def _find_existing_tag(name: str, slug: str, workspace) -> Tag | None:
+    """Resolve tag for assignment: reuse colored global over colorless workspace clone."""
+    workspace_tag = (
+        Tag.objects.filter(workspace=workspace, slug=slug).first()
+        or Tag.objects.filter(workspace=workspace, name__iexact=name).first()
+    )
+    global_tag = (
+        Tag.objects.filter(workspace__isnull=True, slug=slug).first()
+        or Tag.objects.filter(workspace__isnull=True, name__iexact=name).first()
+    )
+    if workspace_tag and global_tag:
+        workspace_has_color = bool((workspace_tag.color or '').strip())
+        global_has_color = bool((global_tag.color or '').strip())
+        if global_has_color and not workspace_has_color:
+            return global_tag
+        return workspace_tag
+    return workspace_tag or global_tag
+
+
+def coalesce_tags_for_display(tags) -> list[Tag]:
+    """
+    For list/detail badges: if a workspace tag has no color but a global twin does,
+    show the global color (in-memory). Also de-duplicates identical names.
+    """
+    tag_list = list(tags)
+    if not tag_list:
+        return []
+
+    missing = [tag for tag in tag_list if not (tag.color or '').strip()]
+    globals_by_slug: dict[str, Tag] = {}
+    globals_by_name: dict[str, Tag] = {}
+    if missing:
+        slugs = [tag.slug for tag in missing]
+        names = [tag.name for tag in missing]
+        for global_tag in Tag.objects.filter(workspace__isnull=True).filter(
+            Q(slug__in=slugs) | Q(name__in=names)
+        ).exclude(color=''):
+            globals_by_slug.setdefault(global_tag.slug, global_tag)
+            globals_by_name.setdefault(global_tag.name.casefold(), global_tag)
+
+    display_tags: list[Tag] = []
+    seen_names: set[str] = set()
+    for tag in tag_list:
+        name_key = tag.name.casefold()
+        if name_key in seen_names:
+            continue
+        seen_names.add(name_key)
+        if not (tag.color or '').strip():
+            twin = globals_by_slug.get(tag.slug) or globals_by_name.get(name_key)
+            if twin is not None:
+                tag.color = twin.color
+        display_tags.append(tag)
+    return display_tags
+
+
+def repair_colorless_workspace_tag_links(instance, workspace=None) -> bool:
+    """Replace colorless workspace tag links with matching global tags."""
+    if not hasattr(instance, 'tags'):
+        return False
+    workspace = resolve_tag_workspace(instance, workspace)
+    current = list(instance.tags.all())
+    if not current:
+        return False
+
+    replacement: list[Tag] = []
+    changed = False
+    seen: set = set()
+    for tag in current:
+        chosen = tag
+        if tag.workspace_id is not None and not (tag.color or '').strip():
+            global_tag = (
+                Tag.objects.filter(workspace__isnull=True, slug=tag.slug).first()
+                or Tag.objects.filter(workspace__isnull=True, name__iexact=tag.name).first()
+            )
+            if global_tag is not None:
+                chosen = global_tag
+                changed = True
+        if chosen.pk in seen:
+            changed = True
+            continue
+        seen.add(chosen.pk)
+        replacement.append(chosen)
+
+    if changed:
+        instance.tags.set(replacement)
+    return changed
 
 
 def get_or_create_tags(names: list[str], workspace) -> list[Tag]:
@@ -152,11 +269,30 @@ def get_or_create_tags(names: list[str], workspace) -> list[Tag]:
         if slug in seen_slugs:
             continue
         seen_slugs.add(slug)
-        tag, _created = Tag.objects.get_or_create(
-            slug=slug,
-            workspace=workspace,
-            defaults={'name': name},
-        )
+        tag = _find_existing_tag(name, slug, workspace)
+        if tag is None:
+            try:
+                tag = Tag.objects.create(
+                    workspace=workspace,
+                    slug=slug,
+                    name=name,
+                )
+            except IntegrityError:
+                # Гонка или старый slug при том же name — берём существующий.
+                tag = _find_existing_tag(name, slug, workspace)
+                if tag is None:
+                    raise
+        elif (
+            tag.workspace_id is not None
+            and tag.slug != slug
+            and not Tag.objects.filter(
+                workspace=workspace,
+                slug=slug,
+            ).exclude(pk=tag.pk).exists()
+        ):
+            # Подтянуть slug к актуальному формату (напр. scope--value).
+            tag.slug = slug
+            tag.save(update_fields=['slug'])
         tags.append(tag)
     return tags
 
@@ -167,6 +303,7 @@ def assign_tags(instance, names: list[str], workspace=None) -> None:
         return
     tags = get_or_create_tags(names, workspace)
     instance.tags.set(tags)
+    repair_colorless_workspace_tag_links(instance, workspace=workspace)
 
 
 def format_tags_for_input(tags) -> str:

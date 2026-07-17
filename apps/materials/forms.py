@@ -477,6 +477,14 @@ def get_composite_layer_formset():
     )
 
 
+class MaterialTagsForm(TagNamesFormMixin, forms.ModelForm):
+    """Только теги — для редактирования с карточки материала."""
+
+    class Meta:
+        model = Material
+        fields = []
+
+
 class MaterialForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = Material

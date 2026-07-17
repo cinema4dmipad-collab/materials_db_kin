@@ -127,6 +127,23 @@ class SampleViewsTests(TestCase):
         self.assertContains(response, 'type-pill-link')
         self.assertContains(response, 'Испытательный')
 
+    def test_sample_detail_has_inline_tags_form(self):
+        response = self.client.get(reverse('samples:detail', kwargs={'pk': self.sample.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('tags_form', response.context)
+        self.assertContains(response, 'entity-detail-tags-form')
+
+    def test_sample_tags_update_view(self):
+        response = self.client.post(
+            reverse('samples:tags', kwargs={'pk': self.sample.pk}),
+            {'tag_names': 'лаб, тип::тест'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            set(self.sample.tags.values_list('name', flat=True)),
+            {'лаб', 'тип::тест'},
+        )
+
     def test_sample_property_formset_save_directly(self):
         density = Property.objects.create(
             name='direct_density',

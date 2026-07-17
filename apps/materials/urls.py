@@ -7,6 +7,7 @@ from apps.materials.views import (
     MaterialLinkView,
     MaterialListView,
     MaterialPropertiesJSONView,
+    MaterialTagsUpdateView,
     MaterialUpdateView,
     MaterialVisibilityView,
 )
@@ -18,6 +19,7 @@ urlpatterns = [
     path('create/', MaterialCreateView.as_view(), name='create'),
     path('<uuid:pk>/link/', MaterialLinkView.as_view(), name='link'),
     path('<uuid:pk>/edit/', MaterialUpdateView.as_view(), name='edit'),
+    path('<uuid:pk>/tags/', MaterialTagsUpdateView.as_view(), name='tags'),
     path('<uuid:pk>/delete/', MaterialDeleteView.as_view(), name='delete'),
     path('<uuid:pk>/visibility/', MaterialVisibilityView.as_view(), name='visibility'),
     path('<uuid:pk>/properties.json/', MaterialPropertiesJSONView.as_view(), name='properties_json'),

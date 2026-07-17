@@ -13,8 +13,10 @@
             <p class="text-muted mb-0 small">Код: <strong>{{ sample.code }}</strong></p>
         </div>
         <div class="text-nowrap">
+            {% if sample_is_editable %}
             <a href="{% url 'samples:edit' sample.pk %}" class="btn btn-outline-primary btn-sm">Изменить</a>
             <a href="{% url 'samples:delete' sample.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            {% endif %}
             <a href="{% url 'samples:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
         </div>
     </div>
@@ -30,7 +32,15 @@
                 {% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type use_object_type_filter=True filter_base_path=samples_list_url %}
             </dd>
             <dt class="col-sm-3">Теги</dt>
-            <dd class="col-sm-9">{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</dd>
+            <dd class="col-sm-9">
+                {% if tags_form %}
+                {% url 'samples:tags' sample.pk as sample_tags_url %}
+                {% include 'includes/entity_tags_form.html' with tags_form=tags_form tags_form_action=sample_tags_url %}
+                {% else %}
+                {% url 'samples:list' as samples_list_url %}
+                {% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}
+                {% endif %}
+            </dd>
             <dt class="col-sm-3">Создал</dt>
             <dd class="col-sm-9">{{ sample|creator_display }}</dd>
             <dt class="col-sm-3">Создан</dt>

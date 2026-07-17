@@ -86,6 +86,14 @@ SamplePropertyFormSet = inlineformset_factory(
 )
 
 
+class SampleTagsForm(TagNamesFormMixin, forms.ModelForm):
+    """Только теги — для редактирования с карточки образца."""
+
+    class Meta:
+        model = Sample
+        fields = []
+
+
 class SampleForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = Sample

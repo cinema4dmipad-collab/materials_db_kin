@@ -1,0 +1,13 @@
+{# Inline tags editor for material/sample/scan detail. #}
+<form method="post"
+      action="{{ tags_form_action }}"
+      class="entity-detail-tags-form">
+    {% csrf_token %}
+    {{ tags_form.tag_names }}
+    {% for error in tags_form.tag_names.errors %}
+    <div class="invalid-feedback d-block">{{ error }}</div>
+    {% endfor %}
+    <div class="mt-2">
+        <button type="submit" class="btn btn-sm btn-outline-primary">Сохранить теги</button>
+    </div>
+</form>

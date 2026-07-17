@@ -403,6 +403,17 @@ class MaterialEditAccessTests(TestCase):
         self.assertContains(response, self.other_workspace.name)
         self.assertNotContains(response, reverse('materials:visibility', kwargs={'pk': self.shared_material.pk}))
         self.assertContains(response, 'Видимость ссылочного материала настраивается в исходном пространстве')
+        self.assertNotContains(response, 'entity-detail-tags-form')
+        self.assertNotIn('tags_form', response.context)
+
+    def test_shared_readonly_material_detail_hides_tags_form(self):
+        response = self.client.get(
+            reverse('materials:detail', kwargs={'pk': self.shared_material.pk}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['material_is_readonly'])
+        self.assertNotContains(response, 'entity-detail-tags-form')
+        self.assertNotIn('tags_form', response.context)
 
     def test_linked_material_visibility_page_is_forbidden(self):
         from apps.workspaces.models import WorkspaceMaterialLink

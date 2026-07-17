@@ -82,12 +82,13 @@
         {% endfor %}
         {% for tag in active_tags %}
         <a href="{{ tag.remove_url }}"
-           class="list-filter-chip list-filter-chip--removable"
-           title="Убрать тег из фильтра"
+           class="entity-tag list-filter-active-tag{% if tag.label|is_scoped_tag %} entity-tag--scoped{% endif %}{% if not tag.color %} tone-tag{% endif %}"
+           data-tag-slug="{{ tag.slug }}"
+           {% if tag.tag %}{% tag_badge_style tag.tag %}{% endif %}
+           title="Убрать тег «{{ tag.label }}» из фильтра"
            aria-label="Убрать тег «{{ tag.label }}» из фильтра">
-            <span class="list-filter-chip__key">Тег</span>
             {{ tag.label|scoped_tag_label }}
-            <span class="list-filter-chip__remove" aria-hidden="true">&times;</span>
+            <span class="list-filter-active-tag__remove" aria-hidden="true">&times;</span>
         </a>
         {% endfor %}
     </div>

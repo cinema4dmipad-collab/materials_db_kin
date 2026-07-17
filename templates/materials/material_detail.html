@@ -56,7 +56,15 @@
                 <a href="{% url 'material_samples:list' material.pk %}">{{ sample_count }}</a>
             </dd>
             <dt class="col-sm-3">Теги</dt>
-            <dd class="col-sm-9">{% url 'materials:list' as materials_list_url %}{% include 'includes/tag_badges.html' with tags=material.tags.all filter_url=materials_list_url %}</dd>
+            <dd class="col-sm-9">
+                {% if tags_form %}
+                {% url 'materials:tags' material.pk as material_tags_url %}
+                {% include 'includes/entity_tags_form.html' with tags_form=tags_form tags_form_action=material_tags_url %}
+                {% else %}
+                {% url 'materials:list' as materials_list_url %}
+                {% include 'includes/tag_badges.html' with tags=material.tags.all filter_url=materials_list_url %}
+                {% endif %}
+            </dd>
         </dl>
     </div>
 </div>

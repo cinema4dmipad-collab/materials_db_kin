@@ -369,6 +369,26 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Настроить видимость')
         self.assertContains(response, reverse('materials:visibility', kwargs={'pk': material.pk}))
 
+    def test_detail_page_allows_inline_tag_edit_and_save(self):
+        material = self.create_material(
+            code='MAT-TAGS-DETAIL',
+            name='Tagged from detail',
+        )
+        detail_url = reverse('materials:detail', kwargs={'pk': material.pk})
+        tags_url = reverse('materials:tags', kwargs={'pk': material.pk})
+
+        response = self.client.get(detail_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, tags_url)
+        self.assertContains(response, 'Сохранить теги')
+        self.assertContains(response, 'tag-input-widget')
+
+        response = self.client.post(tags_url, {'tag_names': 'пилот, тип::баг'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, detail_url)
+        tag_names = set(material.tags.values_list('name', flat=True))
+        self.assertEqual(tag_names, {'пилот', 'тип::баг'})
+
     def test_sample_detail_inherits_material_structure_properties(self):
         from apps.samples.models import Sample
 

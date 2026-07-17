@@ -105,16 +105,20 @@
         var color = (meta && meta.color) || element.dataset.tagColor || '';
         var description = (meta && meta.description) || element.dataset.tagDescription || '';
         element.classList.toggle('tone-tag', !color);
+        element.classList.toggle('entity-tag--scoped', isScopedTagName(tagName));
         if (color) {
             var textColor = contrastTextColor(color);
             element.style.setProperty('--label-background-color', color);
             element.style.setProperty('--label-text-color', textColor);
+            element.dataset.tagColor = color;
         } else {
             element.style.removeProperty('--label-background-color');
             element.style.removeProperty('--label-text-color');
+            delete element.dataset.tagColor;
         }
         if (description) {
             element.title = description;
+            element.dataset.tagDescription = description;
         }
     }
 
@@ -144,6 +148,11 @@
 
         var suggestionMap = buildSuggestionMap(widget);
         var tags = parseTags(hiddenInput.value);
+        var renderedTagKeys = null;
+
+        function tagKey(tagName) {
+            return String(tagName || '').trim().toLowerCase();
+        }
 
         function syncHidden() {
             hiddenInput.value = tags.join(', ');
@@ -163,32 +172,101 @@
             }
         }
 
-        function renderChips() {
-            chipsContainer.innerHTML = '';
-            tags.forEach(function (tagName) {
-                var chip = document.createElement('span');
-                chip.className = 'tag-input-chip entity-tag' + (isScopedTagName(tagName) ? ' entity-tag--scoped' : '');
-                chip.dataset.tagName = tagName;
-                applyTagVisual(chip, tagName, suggestionMap);
+        function playChipEnter(chip) {
+            // Opacity/slide only — scale makes scoped pills look square for a frame.
+            chip.classList.add('tag-input-chip--animating');
+            chip.style.opacity = '0';
+            chip.style.transform = 'translateY(4px)';
 
-                var label = document.createElement('span');
-                label.className = 'tag-input-chip__label';
-                label.innerHTML = renderScopedTagLabel(tagName);
+            window.requestAnimationFrame(function () {
+                window.requestAnimationFrame(function () {
+                    if (typeof chip.animate === 'function') {
+                        var animation = chip.animate(
+                            [
+                                { opacity: 0, transform: 'translateY(4px)' },
+                                { opacity: 1, transform: 'translateY(0)' },
+                            ],
+                            {
+                                duration: 320,
+                                easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                                fill: 'forwards',
+                            }
+                        );
+                        animation.addEventListener('finish', function () {
+                            chip.style.opacity = '';
+                            chip.style.transform = '';
+                            chip.classList.remove('tag-input-chip--animating');
+                        });
+                        return;
+                    }
 
-                var removeButton = document.createElement('button');
-                removeButton.type = 'button';
-                removeButton.className = 'tag-input-chip__remove';
-                removeButton.setAttribute('aria-label', 'Убрать тег «' + tagName + '»');
-                removeButton.innerHTML = '&times;';
-                removeButton.addEventListener('click', function (event) {
-                    event.preventDefault();
-                    removeTag(tagName);
+                    chip.classList.add('tag-input-chip--enter');
+                    chip.style.opacity = '';
+                    chip.style.transform = '';
+                    window.setTimeout(function () {
+                        chip.classList.remove('tag-input-chip--enter');
+                        chip.classList.remove('tag-input-chip--animating');
+                    }, 320);
                 });
-
-                chip.appendChild(label);
-                chip.appendChild(removeButton);
-                chipsContainer.appendChild(chip);
             });
+        }
+
+        function createChip(tagName) {
+            var chip = document.createElement('span');
+            chip.className = 'tag-input-chip entity-tag' + (isScopedTagName(tagName) ? ' entity-tag--scoped' : '');
+            chip.dataset.tagName = tagName;
+            applyTagVisual(chip, tagName, suggestionMap);
+            // Same GlLabel markup as picker/badges — text parts are direct children.
+            chip.innerHTML = renderScopedTagLabel(tagName);
+
+            var removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'tag-input-chip__remove';
+            removeButton.setAttribute('aria-label', 'Убрать тег «' + tagName + '»');
+            removeButton.innerHTML = '&times;';
+            removeButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                removeTag(tagName);
+            });
+
+            chip.appendChild(removeButton);
+            return chip;
+        }
+
+        function renderChips() {
+            var previousKeys = renderedTagKeys;
+            var animateNew = previousKeys !== null;
+            var existingByKey = Object.create(null);
+
+            Array.prototype.forEach.call(
+                chipsContainer.querySelectorAll('.tag-input-chip'),
+                function (chip) {
+                    existingByKey[tagKey(chip.dataset.tagName)] = chip;
+                }
+            );
+
+            var nextKeys = Object.create(null);
+            tags.forEach(function (tagName) {
+                var key = tagKey(tagName);
+                nextKeys[key] = true;
+                var existing = existingByKey[key];
+                if (existing) {
+                    chipsContainer.appendChild(existing);
+                    delete existingByKey[key];
+                    return;
+                }
+                var chip = createChip(tagName);
+                chipsContainer.appendChild(chip);
+                if (animateNew) {
+                    playChipEnter(chip);
+                }
+            });
+
+            Object.keys(existingByKey).forEach(function (key) {
+                existingByKey[key].remove();
+            });
+
+            renderedTagKeys = nextKeys;
             updatePickButtons();
             filterExistingTags();
         }
@@ -203,16 +281,114 @@
             });
         }
 
-        function tagMatchesQuery(button, query) {
-            var tagName = (button.dataset.tagName || '').toLowerCase();
-            var tagSlug = (button.dataset.tagSlug || '').toLowerCase();
-            return tagName.indexOf(query) !== -1 || tagSlug.indexOf(query) !== -1;
+        function normalizeSearchText(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/::/g, ' ')
+                .replace(/--/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function splitTagParts(tagName) {
+            var normalized = String(tagName || '').trim();
+            var separatorIndex = normalized.lastIndexOf(SCOPED_SEPARATOR);
+            if (separatorIndex === -1) {
+                return { scope: '', value: '', plain: normalized };
+            }
+            var scope = normalized.slice(0, separatorIndex).trim();
+            var value = normalized.slice(separatorIndex + SCOPED_SEPARATOR.length).trim();
+            if (!scope || !value) {
+                return { scope: '', value: '', plain: normalized };
+            }
+            return { scope: scope, value: value, plain: normalized };
+        }
+
+        // Match at start of haystack or start of a word — never mid-word / UI titles.
+        function startsAtWord(haystack, query) {
+            var normalizedHaystack = normalizeSearchText(haystack);
+            var normalizedQuery = normalizeSearchText(query);
+            if (!normalizedQuery || !normalizedHaystack) {
+                return false;
+            }
+            if (normalizedHaystack.indexOf(normalizedQuery) === 0) {
+                return true;
+            }
+            return normalizedHaystack.indexOf(' ' + normalizedQuery) !== -1;
+        }
+
+        function scoreTagMatch(button, query) {
+            var normalizedQuery = normalizeSearchText(query);
+            if (!normalizedQuery) {
+                return 0;
+            }
+            var tagName = button.dataset.tagName || '';
+            var tagSlug = button.dataset.tagSlug || '';
+            var description = button.dataset.tagDescription || '';
+            var parts = splitTagParts(tagName);
+            var nameNorm = normalizeSearchText(tagName);
+            var slugNorm = normalizeSearchText(tagSlug);
+            var scopeNorm = normalizeSearchText(parts.scope);
+            var valueNorm = normalizeSearchText(parts.value);
+            var plainNorm = normalizeSearchText(parts.plain);
+            var descNorm = normalizeSearchText(description);
+
+            if (nameNorm === normalizedQuery || plainNorm === normalizedQuery) {
+                return 100;
+            }
+            if (valueNorm === normalizedQuery || scopeNorm === normalizedQuery) {
+                return 95;
+            }
+            if (nameNorm.indexOf(normalizedQuery) === 0 || plainNorm.indexOf(normalizedQuery) === 0) {
+                return 90;
+            }
+            if (valueNorm.indexOf(normalizedQuery) === 0) {
+                return 85;
+            }
+            if (scopeNorm.indexOf(normalizedQuery) === 0) {
+                return 80;
+            }
+            if (slugNorm.indexOf(normalizedQuery) === 0) {
+                return 75;
+            }
+            if (startsAtWord(valueNorm, normalizedQuery)) {
+                return 60;
+            }
+            if (startsAtWord(nameNorm, normalizedQuery) || startsAtWord(plainNorm, normalizedQuery)) {
+                return 50;
+            }
+            if (startsAtWord(scopeNorm, normalizedQuery)) {
+                return 40;
+            }
+            if (startsAtWord(slugNorm, normalizedQuery)) {
+                return 30;
+            }
+            if (descNorm && startsAtWord(descNorm, normalizedQuery)) {
+                return 10;
+            }
+            return 0;
+        }
+
+        function dedupePickButtons() {
+            var seen = Object.create(null);
+            widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
+                var key = tagKey(button.dataset.tagName || button.dataset.tagSlug || '');
+                if (!key) {
+                    return;
+                }
+                if (seen[key]) {
+                    button.remove();
+                    return;
+                }
+                seen[key] = true;
+            });
         }
 
         function filterExistingTags() {
-            var query = typingInput.value.trim().toLowerCase();
-            var visibleCount = 0;
+            var query = typingInput.value.trim();
             var isFiltering = query.length > 0;
+            var list = widget.querySelector('.tag-input-existing__list');
+            var matched = [];
 
             if (existingBlock) {
                 existingBlock.classList.toggle('tag-input-existing--filtered', isFiltering);
@@ -221,18 +397,54 @@
                 existingLabel.textContent = isFiltering ? 'Похожие теги' : 'Существующие теги';
             }
 
-            widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
+            widget.querySelectorAll('.tag-input-pick').forEach(function (button, index) {
                 var tagName = button.dataset.tagName || '';
-                var visible;
-                if (!isFiltering) {
-                    visible = true;
-                } else {
-                    visible = tagMatchesQuery(button, query) && tagIndex(tags, tagName) === -1;
+                var selected = tagIndex(tags, tagName) !== -1;
+                var score = isFiltering ? scoreTagMatch(button, query) : 1;
+                button.classList.remove('tag-input-pick--already-selected');
+                button.removeAttribute('data-tag-match-score');
+                if (score <= 0) {
+                    button.hidden = true;
+                    return;
                 }
-                button.hidden = !visible;
-                if (visible) {
-                    visibleCount += 1;
+                matched.push({
+                    button: button,
+                    selected: selected,
+                    score: score,
+                    index: index,
+                });
+            });
+
+            if (isFiltering) {
+                matched.sort(function (left, right) {
+                    if (left.selected !== right.selected) {
+                        return left.selected ? 1 : -1;
+                    }
+                    if (right.score !== left.score) {
+                        return right.score - left.score;
+                    }
+                    return left.index - right.index;
+                });
+            }
+
+            var hasUnselectedMatch = matched.some(function (item) { return !item.selected; });
+            var visibleCount = 0;
+            matched.forEach(function (item) {
+                var hideSelected = isFiltering && hasUnselectedMatch && item.selected;
+                item.button.hidden = hideSelected;
+                if (hideSelected) {
+                    return;
                 }
+                if (isFiltering) {
+                    item.button.dataset.tagMatchScore = String(item.score);
+                    if (item.selected) {
+                        item.button.classList.add('tag-input-pick--already-selected');
+                    }
+                    if (list) {
+                        list.appendChild(item.button);
+                    }
+                }
+                visibleCount += 1;
             });
 
             if (emptyMessage) {
@@ -241,7 +453,23 @@
         }
 
         function firstVisiblePick() {
-            return widget.querySelector('.tag-input-pick:not([hidden])');
+            var visible = Array.prototype.slice.call(
+                widget.querySelectorAll('.tag-input-pick:not([hidden])')
+            );
+            if (!visible.length) {
+                return null;
+            }
+            visible.sort(function (left, right) {
+                var leftSelected = left.classList.contains('tag-input-pick--selected') ? 1 : 0;
+                var rightSelected = right.classList.contains('tag-input-pick--selected') ? 1 : 0;
+                if (leftSelected !== rightSelected) {
+                    return leftSelected - rightSelected;
+                }
+                var leftScore = Number(left.dataset.tagMatchScore || 0);
+                var rightScore = Number(right.dataset.tagMatchScore || 0);
+                return rightScore - leftScore;
+            });
+            return visible[0];
         }
 
         function addTag(tagName) {
@@ -282,6 +510,8 @@
             typingInput.focus();
         });
 
+        dedupePickButtons();
+
         widget.querySelectorAll('.tag-input-pick').forEach(function (button) {
             button.addEventListener('mousedown', function (event) {
                 event.preventDefault();
@@ -301,6 +531,7 @@
         });
 
         typingInput.addEventListener('input', filterExistingTags);
+        typingInput.addEventListener('compositionend', filterExistingTags);
 
         typingInput.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
@@ -349,9 +580,16 @@
 
         initPickButtonStyles(widget, suggestionMap);
         renderChips();
+        widget.dataset.tagInputReady = '1';
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.tag-input-widget').forEach(initWidget);
-    });
+    function bootTagInputs() {
+        document.querySelectorAll('.tag-input-widget:not([data-tag-input-ready])').forEach(initWidget);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootTagInputs);
+    } else {
+        bootTagInputs();
+    }
 })();
