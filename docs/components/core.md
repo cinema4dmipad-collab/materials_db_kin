@@ -36,7 +36,10 @@ Templates: `includes/list_filter_bar.html`, `includes/client_filter_bar.html`, `
 * Archived tags stay on existing records but are hidden from picker / suggestions
 * Forms see both via `tags_in_workspace()`; suggestions exclude archived
 * Widget: `tag_names_input` — chips + suggestions (`json_script`); GitLab-like colored badges
-* Helpers: `apps/core/tag_utils.py`, `apps/core/widgets.py`
+* Display: `coalesce_tags_for_display` / `|coalesce_tag_styles` — prefer colored global twin over colorless workspace clone
+* Assignment: `get_or_create_tags` / `assign_tags` use the **entity** workspace (home/sample/scan), not the viewer’s active workspace when they differ
+* Inline edit on detail cards: `MaterialTagsForm` / `SampleTagsForm` / `ScanTagsForm` + shared `includes/entity_tags_form.html` (only when entity is editable in active workspace)
+* Helpers: `apps/core/tag_utils.py`, `apps/core/widgets.py`, `apps/core/tag_forms.py`
 
 ## Forms and Helpers
 

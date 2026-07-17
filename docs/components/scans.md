@@ -24,6 +24,9 @@ Large files supported via streaming storage and extended Gunicorn timeout.
 | `/scans/` | All scans (global list) |
 | `/samples/<pk>/scans/` | Scans for one sample |
 | Create / detail / delete | Standard CRUD under sample namespace |
+| `…/scans/<pk>/tags/` | POST — save tags from detail card (when scan’s workspace is active) |
+
+Tag forms use `sample.workspace` / `scan.workspace` for suggestions and assignment (not the viewer’s active workspace when the sample is visible via a shared material).
 
 Download links use `.file-download-link` with progress indicator (`file_transfer_progress.js`).
 

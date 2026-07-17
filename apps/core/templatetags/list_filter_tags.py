@@ -57,6 +57,14 @@ def tag_badge_style(tag):
 
 
 @register.filter
+def coalesce_tag_styles(tags):
+    """Use global tag colors for colorless workspace clones in badges."""
+    from apps.core.tag_utils import coalesce_tags_for_display
+
+    return coalesce_tags_for_display(tags)
+
+
+@register.filter
 def is_scoped_tag(name):
     from apps.core.tag_utils import split_scoped_tag_display
 

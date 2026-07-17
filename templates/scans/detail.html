@@ -17,8 +17,10 @@
         </div>
         <div class="text-nowrap">
             <a href="{% url 'scans:download' sample.pk scan.pk %}" class="btn btn-outline-secondary btn-sm file-download-link" data-download-name="{{ scan.filename }}">Скачать</a>
+            {% if scan_is_editable %}
             <a href="{% url 'scans:edit' sample.pk scan.pk %}" class="btn btn-primary btn-sm">Изменить</a>
             <a href="{% url 'scans:delete' sample.pk scan.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            {% endif %}
             <a href="{% url 'scans:list' sample.pk %}" class="btn btn-outline-secondary btn-sm">К списку</a>
         </div>
     </div>
@@ -30,7 +32,15 @@
                 {% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method use_scan_method_filter=True filter_base_path=sample_scans_url %}
             </dd>
             <dt class="col-sm-3">Теги</dt>
-            <dd class="col-sm-9">{% url 'scans:list' sample.pk as sample_scans_url %}{% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}</dd>
+            <dd class="col-sm-9">
+                {% if tags_form %}
+                {% url 'scans:tags' sample.pk scan.pk as scan_tags_url %}
+                {% include 'includes/entity_tags_form.html' with tags_form=tags_form tags_form_action=scan_tags_url %}
+                {% else %}
+                {% url 'scans:list' sample.pk as sample_scans_url %}
+                {% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}
+                {% endif %}
+            </dd>
             <dt class="col-sm-3">Описание</dt>
             <dd class="col-sm-9">{{ scan.description|default:"—" }}</dd>
             <dt class="col-sm-3">Загрузил</dt>

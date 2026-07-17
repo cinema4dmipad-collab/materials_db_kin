@@ -25,6 +25,7 @@ from apps.materials.form_validation import (
 from apps.materials.forms import (
     MaterialForm,
     MaterialPropertyFormSet,
+    MaterialTagsForm,
     MaterialVisibilityForm,
     build_composite_layer_formset,
     build_material_property_formset,
@@ -566,6 +567,18 @@ class MaterialDetailView(AppViewMixin, DetailView):
             self.object,
             active_ws,
         )
+        # Tags are editable only in the material's home workspace — not for
+        # linked/published read-only copies (even for system admins).
+        if (
+            not context['material_is_readonly']
+            and not context['material_is_workspace_link']
+            and self.object.is_editable_in(active_ws)
+        ):
+            tag_workspace = self.object.home_workspace or active_ws
+            context['tags_form'] = MaterialTagsForm(
+                instance=self.object,
+                workspace=tag_workspace,
+            )
         context['active_tab'] = self.active_tab
         context['attachment_count'] = material_attachments_for_material(
             self.object,
@@ -624,6 +637,48 @@ class MaterialUpdateView(
 
     def get_success_url(self):
         return reverse_lazy('materials:detail', kwargs={'pk': self.object.pk})
+
+
+class MaterialTagsUpdateView(
+    AppViewMixin,
+    PermissionRequiredMixin,
+    MaterialEditableMixin,
+    UpdateView,
+):
+    """Сохранение тегов с карточки материала без полной формы редактирования."""
+
+    permission_codename = WorkspacePerm.MATERIAL_EDIT
+    model = Material
+    form_class = MaterialTagsForm
+    http_method_names = ['post']
+    context_object_name = 'material'
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        workspace = self.request.active_workspace
+        if (
+            is_material_linked_to_workspace(obj, workspace)
+            or not obj.is_editable_in(workspace)
+        ):
+            raise PermissionDenied
+        return obj
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        material = self.object
+        kwargs['workspace'] = material.home_workspace or self.request.active_workspace
+        return kwargs
+
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, 'Теги материала сохранены.')
+        return redirect('materials:detail', pk=self.object.pk)
+
+    def form_invalid(self, form):
+        for error in form.errors.get('tag_names', form.non_field_errors()):
+            messages.error(self.request, error)
+        return redirect('materials:detail', pk=self.object.pk)
 
 
 class MaterialLinkView(AppViewMixin, PermissionRequiredMixin, View):

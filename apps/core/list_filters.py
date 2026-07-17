@@ -119,30 +119,43 @@ class QuerySetFilterMixin:
             **{f'{self.tag_relation}__workspace__isnull': True}
         )
 
-    def _get_active_tags(self) -> list[dict[str, str]]:
+    def _resolve_tag_for_slug(self, slug: str, workspace):
+        """Pick display tag for a filter slug; prefer colored, then workspace-local."""
+        queryset = Tag.objects.filter(slug=slug, is_archived=False)
+        if workspace is not None:
+            queryset = queryset.filter(Q(workspace=workspace) | Q(workspace__isnull=True))
+        else:
+            queryset = queryset.filter(workspace__isnull=True)
+        candidates = list(queryset)
+        if not candidates:
+            return None
+
+        def rank(tag: Tag) -> tuple[int, int]:
+            return (
+                1 if (tag.color or '').strip() else 0,
+                1 if tag.workspace_id is not None else 0,
+            )
+
+        return max(candidates, key=rank)
+
+    def _get_active_tags(self) -> list[dict]:
         slugs = self._get_active_tag_slugs()
         if not slugs:
             return []
         workspace = self.get_tag_filter_workspace()
-        tag_queryset = Tag.objects.filter(slug__in=slugs)
-        if workspace is not None:
-            tag_queryset = tag_queryset.filter(
-                Q(workspace=workspace) | Q(workspace__isnull=True)
+        active: list[dict] = []
+        for slug in slugs:
+            tag = self._resolve_tag_for_slug(slug, workspace)
+            active.append(
+                {
+                    'slug': slug,
+                    'label': tag.name if tag is not None else slug,
+                    'color': (tag.color or '') if tag is not None else '',
+                    'tag': tag,
+                    'remove_url': self._build_filter_url(remove_tag_slugs=(slug,)),
+                }
             )
-        elif workspace is None:
-            tag_queryset = tag_queryset.filter(workspace__isnull=True)
-        labels = {
-            slug: name
-            for slug, name in tag_queryset.values_list('slug', 'name')
-        }
-        return [
-            {
-                'slug': slug,
-                'label': labels.get(slug, slug),
-                'remove_url': self._build_filter_url(remove_tag_slugs=(slug,)),
-            }
-            for slug in slugs
-        ]
+        return active
 
     def _build_search_condition(self, query: str) -> tuple[Q | None, bool]:
         active_scopes = self._get_active_search_scope_values()

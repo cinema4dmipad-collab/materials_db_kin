@@ -297,6 +297,78 @@ class ScanViewsTests(TestCase):
 
         shutil.rmtree(self.media_root, ignore_errors=True)
 
+    def test_scan_detail_has_inline_tags_form(self):
+        scan = ScanRecord.objects.create(
+            sample=self.sample,
+            workspace=self.legacy_workspace,
+            title='Tagged scan',
+            method='ut',
+            file=make_hdf5_upload('tagged.h5'),
+        )
+        response = self.client.get(
+            reverse('scans:detail', kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('tags_form', response.context)
+        self.assertContains(response, 'entity-detail-tags-form')
+
+    def test_scan_tags_update_view(self):
+        scan = ScanRecord.objects.create(
+            sample=self.sample,
+            workspace=self.legacy_workspace,
+            title='Tag update scan',
+            method='ut',
+            file=make_hdf5_upload('tag-update.h5'),
+        )
+        response = self.client.post(
+            reverse('scans:tags', kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk}),
+            {'tag_names': 'hdf5, метод::ут'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            set(scan.tags.values_list('name', flat=True)),
+            {'hdf5', 'метод::ут'},
+        )
+
+    def test_create_scan_assigns_tags_to_sample_workspace(self):
+        """Tags must follow sample.workspace even when active workspace differs."""
+        from apps.core.models import Tag
+        from apps.workspaces.models import Workspace
+
+        home = Workspace.objects.create(slug='ws-scan-home', name='Scan home')
+        self.assertNotEqual(home.pk, self.legacy_workspace.pk)
+        material = Material.objects.create(
+            code='MAT-SCN-SHARED',
+            name='Shared scan material',
+            home_workspace=home,
+            visibility_mode='all_workspaces',
+        )
+        sample = Sample.objects.create(
+            code='SMP-SCN-SHARED',
+            name='Shared sample',
+            material=material,
+            workspace=home,
+        )
+
+        response = self.client.post(
+            reverse('scans:create', kwargs={'sample_pk': sample.pk}),
+            {
+                'title': 'Cross-ws scan',
+                'description': '',
+                'method': 'echo',
+                'file': make_hdf5_upload('cross-ws.h5'),
+                'tag_names': 'кросс-тег',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        scan = ScanRecord.objects.get(title='Cross-ws scan')
+        self.assertEqual(scan.workspace_id, home.pk)
+        tag = scan.tags.get(name='кросс-тег')
+        self.assertEqual(tag.workspace_id, home.pk)
+        self.assertFalse(
+            Tag.objects.filter(name='кросс-тег', workspace=self.legacy_workspace).exists()
+        )
+
     def test_upload_list_and_delete_scan(self):
 
         create_url = reverse('scans:create', kwargs={'sample_pk': self.sample.pk})

@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
@@ -23,12 +24,18 @@ from apps.core.list_filters import (
 from apps.materials.models import Material
 from apps.materials.structure_display import get_material_structure_context
 from apps.core.property_form_display import enrich_property_form_display
-from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyFormSet
+from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyFormSet, SampleTagsForm
 from apps.samples.models import Sample, SampleAttachment
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.property_mapping import reference_properties_for_picker
 from apps.workspaces.mixins import AppViewMixin
 from apps.workspaces.services import materials_visible_in, samples_in_workspace, samples_visible_in
+
+
+def sample_is_editable_in_workspace(sample, workspace) -> bool:
+    if sample is None or workspace is None:
+        return False
+    return sample.workspace_id == workspace.pk
 
 
 def warn_extra_sample_properties(request, sample):
@@ -97,7 +104,11 @@ def _split_sample_property_formset(formset, material_property_ids):
 class SampleFormsetMixin:
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs['workspace'] = self.request.active_workspace
+        instance = getattr(self, 'object', None)
+        if instance is not None and getattr(instance, 'workspace_id', None):
+            kwargs['workspace'] = instance.workspace
+        else:
+            kwargs['workspace'] = self.request.active_workspace
         return kwargs
 
     def get_formset(self):
@@ -245,7 +256,14 @@ class SampleDetailView(AppViewMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        active_ws = self.request.active_workspace
         context['active_tab'] = self.active_tab
+        context['sample_is_editable'] = sample_is_editable_in_workspace(self.object, active_ws)
+        if context['sample_is_editable']:
+            context['tags_form'] = SampleTagsForm(
+                instance=self.object,
+                workspace=self.object.workspace or active_ws,
+            )
         context['scan_count'] = self.object.scans.count()
         context['attachment_count'] = self.object.attachments.count()
         context['scans'] = self.object.scans.all()[:5]
@@ -267,6 +285,39 @@ class SampleDetailView(AppViewMixin, DetailView):
         ]
         context.update(get_material_structure_context(self.object.material))
         return context
+
+
+class SampleTagsUpdateView(AppViewMixin, UpdateView):
+    """Сохранение тегов с карточки образца без полной формы редактирования."""
+
+    model = Sample
+    form_class = SampleTagsForm
+    http_method_names = ['post']
+    context_object_name = 'sample'
+
+    def get_queryset(self):
+        return samples_visible_in(self.request.active_workspace)
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not sample_is_editable_in_workspace(obj, self.request.active_workspace):
+            raise PermissionDenied
+        return obj
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['workspace'] = self.object.workspace or self.request.active_workspace
+        return kwargs
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, 'Теги образца сохранены.')
+        return redirect('samples:detail', pk=self.object.pk)
+
+    def form_invalid(self, form):
+        for error in form.errors.get('tag_names', form.non_field_errors()):
+            messages.error(self.request, error)
+        return redirect('samples:detail', pk=self.object.pk)
 
 
 class SampleCreateView(AppViewMixin, SampleFormsetMixin, CreateView):

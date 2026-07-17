@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -18,10 +19,25 @@ from apps.core.list_filters import (
     build_choice_label_filter,
 )
 from apps.samples.models import Sample
-from apps.scans.forms import ScanRecordForm
+from apps.scans.forms import ScanRecordForm, ScanTagsForm
 from apps.scans.models import ScanRecord
 from apps.workspaces.mixins import AppViewMixin
 from apps.workspaces.services import samples_in_workspace, samples_visible_in, scans_in_workspace, scans_visible_in
+
+
+def scan_is_editable_in_workspace(scan, workspace) -> bool:
+    if scan is None or workspace is None:
+        return False
+    return scan.workspace_id == workspace.pk
+
+
+def scan_tag_workspace(*, sample=None, scan=None, fallback=None):
+    """Workspace for tag assignment — entity home, not the viewer's active workspace."""
+    if scan is not None and getattr(scan, 'workspace_id', None):
+        return scan.workspace
+    if sample is not None and getattr(sample, 'workspace_id', None):
+        return sample.workspace
+    return fallback
 
 
 class ScanMethodFilterMixin:
@@ -127,7 +143,14 @@ class ScanListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin, Sam
     def get_scan_form(self):
         if hasattr(self, '_scan_form'):
             return self._scan_form
-        kwargs = {'prefix': 'scan', 'sample': self.sample}
+        kwargs = {
+            'prefix': 'scan',
+            'sample': self.sample,
+            'workspace': scan_tag_workspace(
+                sample=self.sample,
+                fallback=self.request.active_workspace,
+            ),
+        }
         if self.request.method == 'POST':
             kwargs['data'] = self.request.POST
             kwargs['files'] = self.request.FILES
@@ -140,6 +163,10 @@ class ScanListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin, Sam
             request.FILES,
             prefix='scan',
             sample=self.sample,
+            workspace=scan_tag_workspace(
+                sample=self.sample,
+                fallback=request.active_workspace,
+            ),
         )
         if form.is_valid():
             scan = form.save(commit=False)
@@ -172,6 +199,58 @@ class ScanDetailView(AppViewMixin, SampleScanMixin, DetailView):
     def get_queryset(self):
         return self.sample.scans.prefetch_related('tags')
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        active_ws = self.request.active_workspace
+        context['scan_is_editable'] = scan_is_editable_in_workspace(self.object, active_ws)
+        if context['scan_is_editable']:
+            context['tags_form'] = ScanTagsForm(
+                instance=self.object,
+                workspace=scan_tag_workspace(
+                    scan=self.object,
+                    sample=self.sample,
+                    fallback=active_ws,
+                ),
+            )
+        return context
+
+
+class ScanTagsUpdateView(AppViewMixin, SampleScanMixin, UpdateView):
+    """Сохранение тегов с карточки скана без полной формы редактирования."""
+
+    model = ScanRecord
+    form_class = ScanTagsForm
+    http_method_names = ['post']
+    context_object_name = 'scan'
+
+    def get_queryset(self):
+        return self.sample.scans.all()
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not scan_is_editable_in_workspace(obj, self.request.active_workspace):
+            raise PermissionDenied
+        return obj
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['workspace'] = scan_tag_workspace(
+            scan=self.object,
+            sample=self.sample,
+            fallback=self.request.active_workspace,
+        )
+        return kwargs
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, 'Теги скана сохранены.')
+        return redirect('scans:detail', sample_pk=self.sample.pk, pk=self.object.pk)
+
+    def form_invalid(self, form):
+        for error in form.errors.get('tag_names', form.non_field_errors()):
+            messages.error(self.request, error)
+        return redirect('scans:detail', sample_pk=self.sample.pk, pk=self.object.pk)
+
 
 class ScanCreateView(AppViewMixin, SampleScanMixin, CreateView):
     model = ScanRecord
@@ -181,7 +260,10 @@ class ScanCreateView(AppViewMixin, SampleScanMixin, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['sample'] = self.sample
-        kwargs['workspace'] = self.request.active_workspace
+        kwargs['workspace'] = scan_tag_workspace(
+            sample=self.sample,
+            fallback=self.request.active_workspace,
+        )
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -208,6 +290,16 @@ class ScanUpdateView(AppViewMixin, SampleScanMixin, UpdateView):
 
     def get_queryset(self):
         return self.sample.scans.prefetch_related('tags')
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['sample'] = self.sample
+        kwargs['workspace'] = scan_tag_workspace(
+            scan=self.object,
+            sample=self.sample,
+            fallback=self.request.active_workspace,
+        )
+        return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

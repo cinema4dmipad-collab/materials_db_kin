@@ -115,7 +115,62 @@
         }
     }
 
+    function animateNewlyAddedFilterTags() {
+        var chips = document.querySelectorAll('.list-filter-active-tag[data-tag-slug]');
+        if (!chips.length && !document.querySelector('.list-filter-panel')) {
+            return;
+        }
+
+        var storageKey = 'listFilterActiveTags:' + window.location.pathname;
+        var currentSlugs = Array.prototype.map.call(chips, function (chip) {
+            return chip.getAttribute('data-tag-slug') || '';
+        }).filter(Boolean);
+
+        var previousRaw = null;
+        try {
+            previousRaw = window.sessionStorage.getItem(storageKey);
+            window.sessionStorage.setItem(storageKey, JSON.stringify(currentSlugs));
+        } catch (error) {
+            return;
+        }
+
+        if (!previousRaw) {
+            return;
+        }
+
+        var previousSlugs;
+        try {
+            previousSlugs = JSON.parse(previousRaw) || [];
+        } catch (error) {
+            return;
+        }
+        if (!Array.isArray(previousSlugs)) {
+            return;
+        }
+
+        var previousSet = Object.create(null);
+        previousSlugs.forEach(function (slug) {
+            previousSet[slug] = true;
+        });
+
+        Array.prototype.forEach.call(chips, function (chip) {
+            var slug = chip.getAttribute('data-tag-slug') || '';
+            if (!slug || previousSet[slug]) {
+                return;
+            }
+            chip.classList.add('list-filter-active-tag--enter');
+            chip.addEventListener('animationend', function onEnd(event) {
+                if (event.target !== chip) {
+                    return;
+                }
+                chip.classList.remove('list-filter-active-tag--enter');
+                chip.removeEventListener('animationend', onEnd);
+            });
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('[data-client-filter-mode]').forEach(bindClientFilterPanel);
+        animateNewlyAddedFilterTags();
     });
 })();

@@ -341,11 +341,76 @@ class TagUtilsTests(TestCase):
         self.assertEqual(len(tags), 1)
         self.assertEqual(tags[0].slug, 'prepreg')
 
-    def test_get_or_create_tags_creates_workspace_tag_not_global(self):
-        Tag.objects.create(name='Prepreg', slug='prepreg', workspace=None)
+    def test_get_or_create_tags_reuses_legacy_scoped_slug_by_name(self):
+        """Старый slugify схлопывал «--» в «-»; повторное назначение не должно падать."""
+        existing = Tag.objects.create(
+            name='Волокно::Стекло',
+            slug='волокно-стекло',
+            workspace=self.workspace,
+        )
+        tags = get_or_create_tags(['Волокно::Стекло'], self.workspace)
+        self.assertEqual(len(tags), 1)
+        self.assertEqual(tags[0].pk, existing.pk)
+        self.assertEqual(tags[0].slug, 'волокно--стекло')
+
+    def test_get_or_create_tags_reuses_global_tag(self):
+        global_tag = Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            color='#cc0000',
+            workspace=None,
+        )
         tags = get_or_create_tags(['prepreg'], self.workspace)
         self.assertEqual(len(tags), 1)
-        self.assertEqual(tags[0].workspace, self.workspace)
+        self.assertEqual(tags[0].pk, global_tag.pk)
+        self.assertIsNone(tags[0].workspace_id)
+        self.assertEqual(tags[0].color, '#cc0000')
+
+    def test_get_or_create_tags_prefers_colored_global_over_colorless_workspace(self):
+        global_tag = Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            color='#cc0000',
+            workspace=None,
+        )
+        Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            color='',
+            workspace=self.workspace,
+        )
+        tags = get_or_create_tags(['prepreg'], self.workspace)
+        self.assertEqual(tags[0].pk, global_tag.pk)
+
+    def test_get_or_create_tags_prefers_workspace_tag_over_global(self):
+        Tag.objects.create(name='Prepreg', slug='prepreg', color='#cc0000', workspace=None)
+        local = Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            color='#00cc00',
+            workspace=self.workspace,
+        )
+        tags = get_or_create_tags(['prepreg'], self.workspace)
+        self.assertEqual(tags[0].pk, local.pk)
+
+    def test_coalesce_tags_for_display_uses_global_color(self):
+        from apps.core.tag_utils import coalesce_tags_for_display
+
+        Tag.objects.create(
+            name='Общий',
+            slug='obshchiy',
+            color='#336699',
+            workspace=None,
+        )
+        local = Tag.objects.create(
+            name='Общий',
+            slug='obshchiy',
+            color='',
+            workspace=self.workspace,
+        )
+        display = coalesce_tags_for_display([local])
+        self.assertEqual(len(display), 1)
+        self.assertEqual(display[0].color, '#336699')
 
 
 class NumberUtilsTests(TestCase):
@@ -411,6 +476,30 @@ class TagNamesFormMixinTests(TestCase):
         slugs = {item['slug'] for item in suggestions}
         self.assertIn('active-tag', slugs)
         self.assertNotIn('archived-tag', slugs)
+
+    def test_suggestions_dedupe_global_and_workspace_same_name(self):
+        from apps.materials.forms import MaterialForm
+
+        Tag.objects.create(
+            name='общий тег',
+            slug='obshchiy-teg-global',
+            color='#336699',
+            workspace=None,
+        )
+        Tag.objects.create(
+            name='общий тег',
+            slug='obshchiy-teg-ws',
+            color='',
+            workspace=self.workspace,
+        )
+
+        form = MaterialForm(workspace=self.workspace)
+        suggestions = form.fields['tag_names'].widget.get_tag_suggestions()
+        matching = [item for item in suggestions if item['name'].casefold() == 'общий тег']
+        self.assertEqual(len(matching), 1)
+        # Colored global wins over colorless workspace duplicate.
+        self.assertEqual(matching[0]['slug'], 'obshchiy-teg-global')
+        self.assertEqual(matching[0]['color'], '#336699')
 
 
 class _SampleFilterViewWithObjectType(_SampleFilterView):
@@ -523,6 +612,30 @@ class QuerySetFilterMixinTests(TestCase):
         self.assertEqual(queryset.count(), 1)
         self.assertEqual(queryset.get().code, 'SMP-FILTER-B')
 
+    def test_search_and_filter_include_global_tags(self):
+        global_tag = Tag.objects.create(
+            name='Общие теги::Тест',
+            slug='obshchie-tegi--test',
+            color='#aa33cc',
+            workspace=None,
+        )
+        assign_tags(self.sample_a, [global_tag.name], workspace=self.workspace)
+        self.assertTrue(self.sample_a.tags.filter(pk=global_tag.pk).exists())
+
+        request = self._request('/samples/', {'q': 'Общие', 'q_in': TAG_SEARCH_SCOPE})
+        view = _SampleFilterView(request)
+        queryset = view.filter_queryset(Sample.objects.all())
+        self.assertEqual(queryset.count(), 1)
+        self.assertEqual(queryset.get().code, 'SMP-FILTER-A')
+
+        request = self._request('/samples/', {'tag': global_tag.slug})
+        view = _SampleFilterView(request)
+        context = view.get_filter_context()
+        self.assertEqual(view.filter_queryset(Sample.objects.all()).count(), 1)
+        self.assertEqual(context['active_tags'][0]['label'], global_tag.name)
+        self.assertEqual(context['active_tags'][0]['color'], '#aa33cc')
+        self.assertEqual(context['active_tags'][0]['tag'].pk, global_tag.pk)
+
     def test_search_scope_limits_fields(self):
         request = RequestFactory().get('/samples/', {'q': 'Alpha', 'q_in': 'code'})
         view = _SampleFilterView(request)
@@ -612,6 +725,7 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'id="interface"')
         self.assertContains(response, 'Пространство')
         self.assertContains(response, 'область::значение')
+        self.assertContains(response, 'Общие цветные теги')
         self.assertContains(response, '± погрешностью')
         self.assertContains(response, 'Знаков после запятой')
 
