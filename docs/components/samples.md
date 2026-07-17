@@ -18,7 +18,8 @@ Physical **specimens** derived from materials.
 |-----|--------|
 | `/samples/` | List |
 | `/samples/create/` | Create (optional `?material=<uuid>` preselect) |
-| `/samples/<pk>/` | Detail — properties, scans tab, files tab |
+| `/samples/<pk>/` | Detail — properties, scans tab, files tab; inline tags when `sample.workspace` is active |
+| `/samples/<pk>/tags/` | POST — save tags from detail card |
 | `/samples/<pk>/edit/` | Edit |
 
 Attachments: `/samples/<pk>/attachments/`.

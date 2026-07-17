@@ -21,7 +21,8 @@ Related data:
 |-----|--------|
 | `/materials/` | List — tabs **Пространство** / **Общие** |
 | `/materials/create/` | Create (own workspace only) |
-| `/materials/<pk>/` | Detail — properties, layers, structure params, samples |
+| `/materials/<pk>/` | Detail — properties, layers, structure params, samples; inline tags when editable |
+| `/materials/<pk>/tags/` | POST — save tags from detail card |
 | `/materials/<pk>/edit/` | Edit form |
 | `/materials/<pk>/delete/` | Delete |
 
