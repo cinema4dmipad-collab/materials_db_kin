@@ -288,6 +288,19 @@ class MaterialImportMappingUnitTests(TestCase):
         self.assertEqual(compact['value'], '4050')
         self.assertEqual(compact['confidence'], 'ok')
 
+    def test_parse_plus_as_tolerance_from_excel(self):
+        """Сводные часто пишут «0,27+0,035» вместо «±»."""
+        tol = parse_property_cell('0,27+0,035')
+        self.assertEqual(tol['value_kind'], 'tolerance')
+        self.assertEqual(tol['value'], '0.27')
+        self.assertEqual(tol['value_b'], '0.035')
+        self.assertEqual(tol['confidence'], 'ok')
+
+        with_unit = parse_property_cell('12+1 /м')
+        self.assertEqual(with_unit['value_kind'], 'tolerance')
+        self.assertEqual(with_unit['value'], '12')
+        self.assertEqual(with_unit['value_b'], '1')
+
     def test_blank_placeholders_are_empty(self):
         from apps.materials.imports.value_parse import is_blank_cell
 

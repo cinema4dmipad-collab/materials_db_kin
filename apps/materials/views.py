@@ -894,7 +894,7 @@ def _import_debug_context(request):
     batch = get_last_import_debug_batch(request.session)
     workspace = request.active_workspace
     show = bool(
-        settings.DEBUG
+        settings.IMPORT_BATCH_UNDO
         and batch
         and batch.get('workspace_slug') == workspace.slug
         and batch.get('materials')
@@ -1274,7 +1274,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             f'свойств создано {report.properties_created}, обновлено {report.properties_updated}.'
             + (
                 f' Отладка: можно удалить {len(report.affected_material_ids)} материал(ов) одной кнопкой.'
-                if settings.DEBUG and report.affected_material_ids
+                if settings.IMPORT_BATCH_UNDO and report.affected_material_ids
                 else ''
             ),
         )
@@ -1442,15 +1442,18 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             f'{done_message} Записано: {applied}, пропущено: {skipped}, ошибок: {errors}.'
             + (
                 f' Отладка: можно удалить {len(material_ids)} материал(ов) одной кнопкой.'
-                if settings.DEBUG and material_ids
+                if settings.IMPORT_BATCH_UNDO and material_ids
                 else ''
             ),
         )
         return redirect('materials:list')
 
     def _handle_undo_last_import(self, request):
-        if not settings.DEBUG:
-            messages.error(request, 'Откат импорта доступен только при DEBUG=True.')
+        if not settings.IMPORT_BATCH_UNDO:
+            messages.error(
+                request,
+                'Откат импорта выключен. Включите IMPORT_BATCH_UNDO=true или DEBUG=True.',
+            )
             return redirect('materials:list')
         result = undo_last_import_debug_batch(
             request.session,

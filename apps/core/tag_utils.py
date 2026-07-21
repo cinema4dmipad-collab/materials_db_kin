@@ -154,12 +154,48 @@ def dedupe_tag_suggestion_rows(rows: list[dict]) -> list[dict]:
         key = name.casefold()
         current = best_by_name.get(key)
         if current is None:
-            best_by_name[key] = row
+            best_by_name[key] = {**row, 'name': name}
             order.append(key)
             continue
         if _suggestion_row_rank(row) > _suggestion_row_rank(current):
-            best_by_name[key] = row
-    return [best_by_name[key] for key in order]
+            best_by_name[key] = {**row, 'name': name}
+    return apply_scoped_suggestion_colors([best_by_name[key] for key in order])
+
+
+def apply_scoped_suggestion_colors(rows: list[dict]) -> list[dict]:
+    """
+    Для бесцветных scoped-тегов в виджете — тот же цвет, что в списке материалов
+    (цвет области или SCOPED_TAG_DEFAULT_COLOR), иначе чипы выглядят «старым» tone-tag.
+    """
+    if not rows:
+        return rows
+
+    scope_names: set[str] = set()
+    for row in rows:
+        if str(row.get('color') or '').strip():
+            continue
+        scope, value, _plain = split_scoped_tag_display(str(row.get('name') or ''))
+        if scope and value:
+            scope_names.add(scope)
+
+    scope_colors: dict[str, str] = {}
+    if scope_names:
+        for row in Tag.objects.filter(name__in=list(scope_names)).exclude(color='').values(
+            'name', 'color', 'workspace_id'
+        ):
+            key = row['name'].casefold()
+            if key not in scope_colors or row['workspace_id'] is not None:
+                scope_colors[key] = row['color']
+
+    enriched: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        if not str(item.get('color') or '').strip():
+            scope, value, _plain = split_scoped_tag_display(str(item.get('name') or ''))
+            if scope and value:
+                item['color'] = scope_colors.get(scope.casefold()) or SCOPED_TAG_DEFAULT_COLOR
+        enriched.append(item)
+    return enriched
 
 
 def resolve_tag_workspace(instance, workspace=None):
@@ -385,11 +421,16 @@ def get_or_create_tags(names: list[str], workspace) -> list[Tag]:
         tag = _find_existing_tag(name, slug, workspace)
         if tag is None:
             try:
-                tag = Tag.objects.create(
-                    workspace=workspace,
-                    slug=slug,
-                    name=name,
-                )
+                create_kwargs = {
+                    'workspace': workspace,
+                    'slug': slug,
+                    'name': name,
+                }
+                scope, value, _plain = split_scoped_tag_display(name)
+                if scope and value:
+                    # Как в списке материалов: scoped без цвета → фирменный teal.
+                    create_kwargs['color'] = SCOPED_TAG_DEFAULT_COLOR
+                tag = Tag.objects.create(**create_kwargs)
             except IntegrityError:
                 # Гонка или старый slug при том же name — берём существующий.
                 tag = _find_existing_tag(name, slug, workspace)

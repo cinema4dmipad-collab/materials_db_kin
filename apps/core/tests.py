@@ -569,6 +569,26 @@ class TagNamesFormMixinTests(TestCase):
         self.assertEqual(matching[0]['slug'], 'obshchiy-teg-global')
         self.assertEqual(matching[0]['color'], '#336699')
 
+    def test_suggestions_apply_default_color_to_scoped_tags(self):
+        from apps.core.tag_utils import SCOPED_TAG_DEFAULT_COLOR
+        from apps.materials.forms import MaterialForm
+
+        Tag.objects.create(
+            name='марка::Е-стекло с добавлением E-CR',
+            slug='marka--e-steklo',
+            color='',
+            workspace=self.workspace,
+        )
+        form = MaterialForm(workspace=self.workspace)
+        suggestions = form.fields['tag_names'].widget.get_tag_suggestions()
+        matching = [
+            item
+            for item in suggestions
+            if item['name'] == 'марка::Е-стекло с добавлением E-CR'
+        ]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]['color'], SCOPED_TAG_DEFAULT_COLOR)
+
 
 class _SampleFilterViewWithObjectType(_SampleFilterView):
     search_scopes = _SampleFilterView.search_scopes + (

@@ -581,7 +581,7 @@ def _is_numeric_parse(parsed: dict) -> bool:
     if parsed.get('value_kind') in ('range', 'tolerance'):
         return True
     note = parsed.get('note') or ''
-    if note in {'число', 'диапазон', '± погрешность'}:
+    if note in {'число', 'диапазон', '± погрешность'} or note.startswith('± погрешность'):
         return True
     # «число извлечено из … (единицы отброшены)» и аналоги
     return note.startswith('число извлечено')

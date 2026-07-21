@@ -38,6 +38,12 @@ _TOLERANCE_RE = re.compile(
     r'^\s*([+-]?\d+(?:[.,]\d+)?)\s*[±]\s*([+]?\d+(?:[.,]\d+)?)\s*$',
     re.UNICODE,
 )
+# В сводных часто пишут «0,27+0,035» / «12+1 /м» вместо «±»
+_TOLERANCE_PLUS_RE = re.compile(
+    r'^\s*([+-]?\d+(?:[.,]\d+)?)\s*\+\s*([+]?\d+(?:[.,]\d+)?)'
+    r'(?:\s*[a-zA-Zа-яА-ЯёЁ%°²³µμ/].*)?$',
+    re.UNICODE,
+)
 _RANGE_RE = re.compile(
     r'^\s*([+-]?\d+(?:[.,]\d+)?)\s*[-–—]\s*([+-]?\d+(?:[.,]\d+)?)\s*$',
     re.UNICODE,
@@ -102,6 +108,16 @@ def parse_property_cell(raw, *, mode: str = PARSE_AUTO) -> dict | None:
             _norm_num(match.group(2)),
             CONFIDENCE_OK,
             '± погрешность',
+        )
+
+    match = _TOLERANCE_PLUS_RE.match(single_line)
+    if match:
+        return _result(
+            VALUE_KIND_TOLERANCE,
+            _norm_num(match.group(1)),
+            _norm_num(match.group(2)),
+            CONFIDENCE_OK,
+            '± погрешность (из записи с «+»)',
         )
 
     match = _RANGE_RE.match(single_line)

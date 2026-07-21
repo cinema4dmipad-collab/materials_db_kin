@@ -2,6 +2,7 @@
     'use strict';
 
     var SCOPED_SEPARATOR = '::';
+    var SCOPED_TAG_DEFAULT_COLOR = '#007679';
 
     function escapeHtml(value) {
         return (value || '')
@@ -104,6 +105,10 @@
         var meta = suggestionMap[(tagName || '').toLowerCase()] || null;
         var color = (meta && meta.color) || element.dataset.tagColor || '';
         var description = (meta && meta.description) || element.dataset.tagDescription || '';
+        if (!color && isScopedTagName(tagName)) {
+            // Совпадает с coalesce_tags_for_display / списком материалов
+            color = SCOPED_TAG_DEFAULT_COLOR;
+        }
         element.classList.toggle('tone-tag', !color);
         element.classList.toggle('entity-tag--scoped', isScopedTagName(tagName));
         if (color) {

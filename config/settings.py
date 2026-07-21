@@ -39,6 +39,9 @@ def env_list(name: str, default: list[str] | None = None) -> list[str]:
 
 SECRET_KEY = env_str('SECRET_KEY')
 DEBUG = env_bool('DEBUG', False)
+# Кнопка «удалить результат последнего импорта» (сессия). По умолчанию = DEBUG;
+# на стенде можно включить без полного DEBUG: IMPORT_BATCH_UNDO=true
+IMPORT_BATCH_UNDO = env_bool('IMPORT_BATCH_UNDO', DEBUG)
 
 if not DEBUG and not SECRET_KEY:
     raise ImproperlyConfigured('SECRET_KEY обязателен при DEBUG=False.')

@@ -194,17 +194,8 @@ def validate_drafts(
                 )
                 continue
             if is_blank_cell(prop.value) and is_blank_cell(prop.value_b):
-                # Сопоставлено и включено, но пусто — свойство остаётся пустым на карточке.
-                prop_items.append(
-                    PropertyImportItem(
-                        row_number=draft.source_row,
-                        property_ref=property_ref,
-                        value_kind=VALUE_KIND_SCALAR,
-                        value='',
-                        value_b=None,
-                        notes=prop.note,
-                    )
-                )
+                # Пустая ячейка — не создаём пустое MaterialProperty (иначе карточка
+                # забивается «пустыми» доп. свойствами без значений).
                 continue
             row = {
                 'value_kind': prop.value_kind,
