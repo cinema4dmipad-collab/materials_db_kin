@@ -17,7 +17,8 @@ from apps.workspaces.visibility import VisibilityMode, WorkspaceVisibilityMixin
 class Material(WorkspaceVisibilityMixin, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=50, verbose_name='Код')
-    name = models.CharField(max_length=200, verbose_name='Название')
+    # Длинные «названия» из сводных (укладка, ориентации слоёв) — нормальны для композитов.
+    name = models.CharField(max_length=1000, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
     struct_type = models.ForeignKey(
         'structures.StructureType',
@@ -72,6 +73,19 @@ class Material(WorkspaceVisibilityMixin, models.Model):
 
     def __str__(self):
         return f'{self.code} - {self.name}'
+
+    @property
+    def import_source_filename(self) -> str:
+        from apps.materials.imports.source_note import parse_import_source_filename
+
+        return parse_import_source_filename(self.description)
+
+    @property
+    def description_display(self) -> str:
+        """Описание без служебной строки об импорте (она показывается отдельно)."""
+        from apps.materials.imports.source_note import strip_import_source_note
+
+        return strip_import_source_note(self.description)
 
     @property
     def is_composite(self):
@@ -226,3 +240,33 @@ class MaterialProperty(models.Model):
 
     class Meta:
         unique_together = ['material', 'property']
+
+
+class MaterialImportProfile(models.Model):
+    """Сохранённый профиль сопоставления колонок для повторного импорта."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.CASCADE,
+        related_name='material_import_profiles',
+        verbose_name='Пространство',
+    )
+    name = models.CharField(max_length=120, verbose_name='Название профиля')
+    config = models.JSONField(default=dict, blank=True, verbose_name='Конфигурация маппинга')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'профиль импорта материалов'
+        verbose_name_plural = 'профили импорта материалов'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['workspace', 'name'],
+                name='unique_material_import_profile_per_workspace',
+            ),
+        ]
+
+    def __str__(self):
+        return self.name

@@ -187,7 +187,11 @@ class SQLExecutor:
         return expanded
 
     @classmethod
-    def insert(cls, structure_type: StructureType, data: dict) -> dict:
+    def insert(cls, structure_type: StructureType, data: dict, *, allow_empty_null: bool = False) -> dict:
+        """
+        allow_empty_null: для импорта — пустые поля остаются NULL (без default_value и без
+        ошибки is_required). Колонки NOT NULL в SQL по-прежнему могут отвергнуть INSERT.
+        """
         try:
             cls._ensure_decimal_companion_columns(structure_type)
             data = cls._expand_decimal_field_data(structure_type, data)
@@ -200,19 +204,40 @@ class SQLExecutor:
 
             for field in cls._sql_fields(structure_type.fields.all()):
                 if field.field_type == 'DecimalField':
+                    value_col, kind_col, b_col = decimal_storage_columns(field.name)
+                    mapped = any(key in data for key in (value_col, kind_col, b_col, field.name))
+                    has_any = any(
+                        key in data and not cls._is_empty_value(data.get(key))
+                        for key in (value_col, kind_col, b_col)
+                    )
+                    if allow_empty_null and mapped and not has_any:
+                        # Сопоставлено в импорте, но пусто → явный NULL (не default).
+                        for col_name in (value_col, kind_col, b_col):
+                            cls.validate_identifier(col_name)
+                            columns.append(col_name)
+                            values.append(None)
+                        continue
+                    if allow_empty_null and not mapped:
+                        continue
                     cls._append_decimal_field_values(
                         field,
                         data,
                         columns,
                         values,
-                        required_on_empty=field.is_required,
+                        required_on_empty=field.is_required and not allow_empty_null,
                     )
                     continue
                 value = data.get(field.name)
-                if field.name in data and not cls._is_empty_value(value):
+                if field.name in data:
+                    # Явно передано (в т.ч. None/'' из импорта) → пишем значение или NULL.
                     cls.validate_identifier(field.name)
                     columns.append(field.name)
-                    values.append(cls._coerce_for_db(field, value))
+                    values.append(
+                        None if cls._is_empty_value(value) else cls._coerce_for_db(field, value)
+                    )
+                elif allow_empty_null:
+                    # Не сопоставлено в импорте — не трогаем (без default_value).
+                    continue
                 elif cls._has_default(field):
                     cls.validate_identifier(field.name)
                     columns.append(field.name)
@@ -304,7 +329,14 @@ class SQLExecutor:
             return {'success': False, 'record': None, 'error': str(exc)}
 
     @classmethod
-    def update(cls, structure_type: StructureType, record_id: str | uuid.UUID, data: dict) -> dict:
+    def update(
+        cls,
+        structure_type: StructureType,
+        record_id: str | uuid.UUID,
+        data: dict,
+        *,
+        allow_empty_null: bool = False,
+    ) -> dict:
         try:
             cls._ensure_decimal_companion_columns(structure_type)
             data = cls._expand_decimal_field_data(structure_type, data)
@@ -320,14 +352,16 @@ class SQLExecutor:
                 if field is None:
                     continue
                 if (
-                    field.field_type == 'DecimalField'
+                    not allow_empty_null
+                    and field.field_type == 'DecimalField'
                     and name == field.name
                     and cls._is_empty_value(value)
                     and field.is_required
                 ):
                     raise ValueError(f'Field {field.name!r} is required.')
                 elif (
-                    not is_decimal_companion_column(name)
+                    not allow_empty_null
+                    and not is_decimal_companion_column(name)
                     and field.field_type != 'DecimalField'
                     and field.is_required
                     and field.field_type != MATERIAL_LINK_FIELD_TYPE

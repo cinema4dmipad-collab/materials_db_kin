@@ -412,6 +412,74 @@ class TagUtilsTests(TestCase):
         self.assertEqual(len(display), 1)
         self.assertEqual(display[0].color, '#336699')
 
+    def test_coalesce_scoped_tag_gets_brand_or_scope_color(self):
+        from apps.core.tag_utils import SCOPED_TAG_DEFAULT_COLOR, coalesce_tags_for_display
+
+        colorless = Tag.objects.create(
+            name='марка уток::EC9',
+            slug='marka-utok--ec9',
+            color='',
+            workspace=self.workspace,
+        )
+        display = coalesce_tags_for_display([colorless])
+        self.assertEqual(display[0].color, SCOPED_TAG_DEFAULT_COLOR)
+
+        Tag.objects.create(
+            name='марка уток',
+            slug='marka-utok',
+            color='#cc0066',
+            workspace=None,
+        )
+        colorless2 = Tag.objects.create(
+            name='марка уток::EC13',
+            slug='marka-utok--ec13',
+            color='',
+            workspace=self.workspace,
+        )
+        display2 = coalesce_tags_for_display([colorless2])
+        self.assertEqual(display2[0].color, '#cc0066')
+
+    def test_legacy_plain_utok_tag_displays_as_scoped(self):
+        from apps.core.tag_utils import (
+            SCOPED_TAG_DEFAULT_COLOR,
+            coalesce_tags_for_display,
+            merge_import_tag_names,
+            normalize_legacy_import_tag_name,
+        )
+
+        self.assertEqual(
+            normalize_legacy_import_tag_name('7 ends/cm Уток: EC9'),
+            'марка уток::EC9',
+        )
+        self.assertEqual(
+            normalize_legacy_import_tag_name('марка::Основа: EC 9'),
+            'марка основа::EC 9',
+        )
+        merged = merge_import_tag_names(
+            ['7 ends/cm Уток: EC', 'приоритет::1', 'марка::Е-стекло'],
+            ['марка уток::EC13'],
+        )
+        self.assertIn('марка уток::EC13', merged)
+        self.assertIn('приоритет::1', merged)
+        self.assertIn('марка::Е-стекло', merged)  # другая область — сохраняется
+        self.assertNotIn('7 ends/cm Уток: EC', merged)
+
+        replaced = merge_import_tag_names(
+            ['марка::Е-стекло', '7 ends/cm Уток: EC'],
+            ['марка::Т-23'],
+        )
+        self.assertEqual(replaced, ['марка::Т-23'])
+
+        legacy = Tag.objects.create(
+            name='7 ends/cm Уток: EC',
+            slug='legacy-utok',
+            color='',
+            workspace=self.workspace,
+        )
+        display = coalesce_tags_for_display([legacy])
+        self.assertEqual(display[0].name, 'марка уток::EC')
+        self.assertEqual(display[0].color, SCOPED_TAG_DEFAULT_COLOR)
+
 
 class NumberUtilsTests(TestCase):
     def test_normalize_decimal_input_accepts_comma(self):
@@ -726,6 +794,8 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Пространство')
         self.assertContains(response, 'область::значение')
         self.assertContains(response, 'Общие цветные теги')
+        self.assertContains(response, 'Импорт из файла')
+        self.assertContains(response, 'марка::')
         self.assertContains(response, '± погрешностью')
         self.assertContains(response, 'Знаков после запятой')
 
