@@ -120,6 +120,34 @@ def mapping_choices(
     return choices
 
 
+def mapping_catalog_groups(choices: list[tuple[str, str]]) -> list[dict]:
+    """Группы целей для панели «реквизиты» в конструкторе сопоставления."""
+    material: list[dict] = []
+    structure: list[dict] = []
+    properties: list[dict] = []
+    skip: list[dict] = []
+    for value, label in choices:
+        item = {'target': value, 'label': label}
+        if value == TARGET_SKIP:
+            skip.append(item)
+        elif value.startswith(TARGET_STRUCTURE_PREFIX):
+            structure.append(item)
+        elif value.startswith(TARGET_PROPERTY_PREFIX):
+            properties.append(item)
+        else:
+            material.append(item)
+    groups: list[dict] = []
+    if material:
+        groups.append({'id': 'material', 'label': 'Материал', 'items': material})
+    if structure:
+        groups.append({'id': 'structure', 'label': 'Параметры структуры', 'items': structure})
+    if properties:
+        groups.append({'id': 'property', 'label': 'Доп. свойства', 'items': properties})
+    if skip:
+        groups.append({'id': 'skip', 'label': 'Пропустить', 'items': skip})
+    return groups
+
+
 def suggest_target(
     column: WideColumn,
     properties: list[Property],

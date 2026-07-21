@@ -142,7 +142,366 @@ body.import-busy-lock {
     }
 }
 
-/* Mapping cards: file column → system field */
+/* Keep mapping step from growing the page with table overflow */
+.import-map-page .card-body {
+    overflow: hidden;
+}
+
+/* Mapping constructor: two equal-height scroll panes */
+.import-map-constructor {
+    --import-map-pane-height: min(58vh, 34rem);
+    align-items: stretch;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1.15fr) minmax(20rem, 30rem);
+    height: var(--import-map-pane-height);
+    max-height: var(--import-map-pane-height);
+    min-height: 18rem;
+    overflow: hidden;
+    padding-bottom: 0;
+}
+
+.import-map-panel {
+    background: var(--kx-surface, #fff);
+    border: 1px solid var(--kx-border, #ddd);
+    border-radius: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.import-map-panel__head {
+    align-items: flex-start;
+    border-bottom: 1px solid var(--kx-border, #ddd);
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    gap: 0.4rem;
+    padding: 0.5rem 0.65rem;
+}
+
+.import-map-panel__title {
+    color: var(--kx-brand, #007679);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.import-map-constructor__main {
+    min-width: 0;
+}
+
+.import-map-constructor__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.import-map-table-wrap {
+    background: var(--kx-surface, #fff);
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.import-map-catalog {
+    background: linear-gradient(180deg, rgba(0, 118, 121, 0.06), var(--kx-surface, #fff) 2.5rem);
+    border-color: rgba(0, 118, 121, 0.35);
+    border-width: 2px;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.import-map-catalog.is-armed {
+    border-color: var(--kx-brand, #007679);
+    box-shadow: 0 0 0 3px rgba(0, 118, 121, 0.12);
+}
+
+.import-map-catalog.is-drop-clear {
+    background: rgba(0, 118, 121, 0.08);
+    border-color: var(--kx-brand, #007679);
+    box-shadow: 0 0 0 3px rgba(0, 118, 121, 0.18);
+}
+
+.import-map-constructor.is-dragging-from-row .import-map-catalog {
+    border-style: dashed;
+}
+
+.import-map-catalog__head {
+    border-bottom-color: rgba(0, 118, 121, 0.18);
+}
+
+.import-map-catalog__search {
+    font-size: 0.8rem;
+}
+
+.import-map-catalog__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.3rem 0.5rem 0.55rem;
+}
+
+.import-map-catalog__group-title {
+    color: var(--kx-text-subtle, #777);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    margin: 0.4rem 0.1rem 0.2rem;
+    text-transform: uppercase;
+}
+
+.import-map-catalog__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.22rem;
+}
+
+.import-map-catalog-item {
+    align-items: flex-start;
+    background: var(--kx-surface, #fff);
+    border: 1px solid rgba(0, 118, 121, 0.28);
+    border-radius: 0.35rem;
+    color: var(--kx-text, #111);
+    cursor: grab;
+    display: flex;
+    font-size: 0.78rem;
+    gap: 0.35rem;
+    line-height: 1.25;
+    padding: 0.3rem 0.4rem;
+    text-align: left;
+    width: 100%;
+}
+
+.import-map-catalog-item:active:not(:disabled) {
+    cursor: grabbing;
+}
+
+.import-map-catalog-item.is-dragging {
+    opacity: 0.45;
+}
+
+.import-map-catalog-item:hover:not(:disabled),
+.import-map-catalog-item:focus-visible:not(:disabled) {
+    background: rgba(0, 118, 121, 0.1);
+    border-color: var(--kx-brand, #007679);
+    color: var(--kx-brand, #007679);
+    outline: none;
+}
+
+.import-map-catalog.is-armed .import-map-catalog-item:not(:disabled) {
+    box-shadow: inset 0 0 0 1px rgba(0, 118, 121, 0.08);
+}
+
+.import-map-catalog-item.is-used {
+    background: rgba(0, 118, 121, 0.08);
+    border-style: dashed;
+}
+
+.import-map-catalog-item.is-used .import-map-catalog-item__mark::before {
+    content: '✓';
+}
+
+.import-map-catalog-item.is-disabled,
+.import-map-catalog-item:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.import-map-catalog-item__mark {
+    color: var(--kx-brand, #007679);
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.3;
+    min-width: 0.75rem;
+}
+
+.import-map-catalog-item:not(.is-used) .import-map-catalog-item__mark::before {
+    content: '＋';
+}
+
+.import-map-catalog-item[data-target='skip'] .import-map-catalog-item__mark::before {
+    content: '×';
+}
+
+.import-map-catalog-item__text {
+    word-break: break-word;
+}
+
+.import-map-table > :not(caption) > * > * {
+    padding: 0.35rem 0.5rem;
+}
+
+.import-map-table thead th {
+    background: var(--kx-surface-muted, #f5f6f7);
+    box-shadow: inset 0 -1px 0 var(--kx-border, #ddd);
+    font-size: 0.75rem;
+    position: sticky;
+    top: 0;
+    white-space: nowrap;
+    z-index: 2;
+}
+
+.import-map-table__parse-col {
+    min-width: 6.5rem;
+    width: 7rem;
+}
+
+.import-map-parse {
+    font-size: 0.72rem;
+    max-width: 7rem;
+    padding-bottom: 0.15rem;
+    padding-left: 0.3rem;
+    padding-right: 1.4rem;
+    padding-top: 0.15rem;
+}
+
+.import-map-row {
+    cursor: pointer;
+}
+
+.import-map-row:hover:not(.is-selected) {
+    background: rgba(0, 0, 0, 0.025);
+}
+
+.import-map-row.is-selected {
+    background: rgba(0, 118, 121, 0.1);
+    box-shadow: inset 3px 0 0 var(--kx-brand, #007679);
+}
+
+.import-map-row.is-selected .import-map-expr-slot {
+    background: #fff;
+    border-color: var(--kx-brand, #007679);
+    box-shadow: 0 0 0 2px rgba(0, 118, 121, 0.15);
+}
+
+.import-map-row.is-duplicate {
+    background: #fff8e8;
+}
+
+.import-map-row__title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.25;
+    word-break: break-word;
+}
+
+.import-map-row__sample {
+    color: var(--kx-text-subtle, #777);
+    font-size: 0.68rem;
+    line-height: 1.2;
+    margin-top: 0.08rem;
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.import-required-badge {
+    color: var(--kx-brand, #007679);
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.import-map-constructor.is-dragging .import-map-expr-slot {
+    border-color: rgba(0, 118, 121, 0.55);
+    border-style: dashed;
+}
+
+.import-map-row.is-drop-over {
+    background: rgba(0, 118, 121, 0.06);
+}
+
+.import-map-expr-slot {
+    align-items: center;
+    background: rgba(0, 118, 121, 0.04);
+    border: 1px dashed rgba(0, 118, 121, 0.4);
+    border-radius: 0.35rem;
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.4rem;
+    max-width: 100%;
+    min-height: 1.85rem;
+    padding: 0.2rem 0.45rem;
+    transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.import-map-expr-slot.is-drop-hover {
+    background: rgba(0, 118, 121, 0.14);
+    border-color: var(--kx-brand, #007679);
+    border-style: solid;
+    box-shadow: 0 0 0 2px rgba(0, 118, 121, 0.2);
+}
+
+.import-map-expr-slot.is-drop-blocked {
+    background: #fff1f0;
+    border-color: #c0392b;
+    border-style: solid;
+}
+
+.import-map-expr-slot:not(.is-empty) {
+    background: rgba(0, 118, 121, 0.08);
+    border-color: rgba(0, 118, 121, 0.35);
+    border-style: solid;
+    cursor: grab;
+}
+
+.import-map-expr-slot.is-empty {
+    background: #fff;
+    border-color: #c5c9cc;
+    color: var(--kx-text-subtle, #777);
+    min-width: 4.5rem;
+}
+
+.import-map-expr-slot.is-empty .import-map-expr-label:empty::before {
+    content: '—';
+    font-weight: 500;
+    opacity: 0.55;
+}
+
+.import-map-expr-slot.is-dragging {
+    cursor: grabbing;
+    opacity: 0.45;
+}
+
+.import-map-expr-label {
+    font-size: 0.76rem;
+    font-weight: 600;
+    line-height: 1.25;
+    word-break: break-word;
+}
+
+.import-map-row.is-unmapped .import-map-expr-label {
+    color: var(--kx-text-subtle, #888);
+    font-weight: 500;
+}
+
+@media (max-width: 991.98px) {
+    .import-map-constructor {
+        --import-map-pane-height: auto;
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .import-map-constructor__main,
+    .import-map-catalog {
+        height: min(50vh, 22rem);
+    }
+
+    .import-map-catalog {
+        order: -1;
+    }
+}
+
+/* Legacy mapping cards (kept for reference; constructor replaces them) */
 .import-map-list {
     display: flex;
     flex-direction: column;

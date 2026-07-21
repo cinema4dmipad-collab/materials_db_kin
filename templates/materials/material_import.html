@@ -4,11 +4,11 @@
 {% block title %}Импорт материалов — База композитов{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/import_busy.css' %}" rel="stylesheet">
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-map3" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-<div class="card mb-4">
+<div class="card mb-4{% if step == 'mapping' %} import-map-page{% endif %}">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h1 class="h4 mb-0">Импорт материалов</h1>
         <div class="d-flex flex-wrap gap-2">
@@ -149,35 +149,6 @@
             Колонка <strong>Наименование</strong> → <strong>Название</strong>; параметры ткани — в <strong>поля структуры</strong>.
         </div>
 
-        <div class="alert {% if missing_required_targets %}{% if show_mapping_errors %}alert-danger{% else %}alert-secondary{% endif %}{% else %}alert-success{% endif %} py-2 small"
-             id="import-required-targets"
-             data-show-errors="{% if show_mapping_errors %}1{% else %}0{% endif %}"
-             data-required-targets="{% for target, label in required_import_targets %}{{ target }}{% if not forloop.last %},{% endif %}{% endfor %}">
-            <div class="fw-semibold mb-1">
-                Обязательно для создания материалов
-                <span class="text-muted">★</span>
-            </div>
-            <ul class="mb-0 ps-3">
-                {% for target, label in required_import_targets %}
-                <li class="import-required-item" data-target="{{ target }}">
-                    <span class="import-required-status text-muted">○ </span>
-                    {{ label }}
-                    <code class="small text-muted">{{ target }}</code>
-                </li>
-                {% endfor %}
-            </ul>
-            {% if missing_required_targets %}
-            <div class="mt-2 mb-0 {% if show_mapping_errors %}text-danger fw-semibold{% else %}text-muted{% endif %}" id="import-required-missing">
-                {% if show_mapping_errors %}Не сопоставлено:{% else %}Ещё нужно сопоставить:{% endif %}
-                {% for target, label in missing_required_targets %}
-                {{ label }}{% if not forloop.last %}, {% endif %}
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="mt-2 mb-0 text-success" id="import-required-missing">Все обязательные поля сопоставлены.</div>
-            {% endif %}
-        </div>
-
         <div class="alert alert-danger py-2 small{% if not duplicate_mapping_targets %} d-none{% endif %}"
              id="import-duplicate-targets"
              role="alert">
@@ -215,7 +186,9 @@
         </form>
         {% endif %}
 
-        <form method="post">
+        <form method="post"
+              class="import-map-constructor-form"
+              data-required-targets="{% for target, label in required_import_targets %}{{ target }}{% if not forloop.last %},{% endif %}{% endfor %}">
             {% csrf_token %}
             <div class="mb-3 col-md-5">
                 <label class="form-label" for="map-match-policy">Уникальность записей</label>
@@ -226,52 +199,107 @@
                 </select>
             </div>
 
-            <p class="small text-muted mb-2">
-                Для каждой колонки файла укажите, <strong>куда её записать</strong> в системе.
-                Пример значения — из первой строки данных.
-            </p>
-
-            <div class="import-map-list mb-3">
-                {% for item in mapping_rows %}
-                <div class="import-map-card{% if item.is_required_target %} is-required{% endif %}"
-                     data-import-map-row
-                     data-map-target="{{ item.target }}">
-                    <div class="import-map-card__from">
-                        <div class="import-map-card__eyebrow">Из файла</div>
-                        <div class="import-map-card__title fw-semibold">{{ item.column.display }}</div>
-                        {% if item.is_required_target %}
-                        <div class="small text-success fw-semibold import-required-badge">★ обязательно</div>
-                        {% endif %}
-                        <div class="import-map-card__sample" title="{{ item.sample }}">
-                            <span class="text-muted">пример:</span> {{ item.sample }}
+            <div class="import-map-constructor mb-3">
+                <section class="import-map-panel import-map-constructor__main" aria-label="Сопоставление колонок">
+                    <div class="import-map-panel__head">
+                        <div class="import-map-panel__title">Колонки файла</div>
+                        <div class="import-map-constructor__toolbar">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="import-map-clear-row">
+                                Очистить строку
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="import-map-reset-all">
+                                Сбросить всё
+                            </button>
                         </div>
                     </div>
-                    <div class="import-map-card__arrow" aria-hidden="true">→</div>
-                    <div class="import-map-card__to">
-                        <div class="import-map-card__eyebrow">Куда записать</div>
-                        <select name="map_{{ item.column.index }}"
-                                class="form-select form-select-sm import-map-target{% if item.is_required_target %} border-success{% endif %}"
-                                aria-label="Куда записать колонку {{ item.column.display }}">
-                            {% for value, label in target_choices %}
-                            <option value="{{ value }}"
-                                    {% if item.target == value %} selected{% endif %}>
-                                {{ label }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <label class="form-label small text-muted mb-1 mt-2" for="parse-{{ item.column.index }}">
-                            Как читать значение
-                        </label>
-                        <select name="parse_{{ item.column.index }}" id="parse-{{ item.column.index }}"
-                                class="form-select form-select-sm"
-                                aria-label="Как читать колонку {{ item.column.display }}">
-                            {% for value, label in parse_modes %}
-                            <option value="{{ value }}"{% if item.parse == value %} selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
+                    <div class="import-map-table-wrap">
+                        <table class="table table-sm align-middle mb-0 import-map-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Колонка</th>
+                                    <th scope="col">Куда писать</th>
+                                    <th scope="col" class="import-map-table__parse-col">Чтение</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in mapping_rows %}
+                                <tr class="import-map-row{% if item.is_required_target %} is-required{% endif %}{% if item.target == 'skip' %} is-unmapped{% endif %}"
+                                    data-import-map-row
+                                    data-column-index="{{ item.column.index }}"
+                                    data-column-label="{{ item.column.display|escape }}"
+                                    tabindex="0"
+                                    role="button"
+                                    aria-label="Колонка {{ item.column.display }}">
+                                    <td class="import-map-row__file">
+                                        <div class="import-map-row__title">{{ item.column.display }}</div>
+                                        {% if item.is_required_target %}
+                                        <span class="import-required-badge">★</span>
+                                        {% endif %}
+                                        <div class="import-map-row__sample" title="{{ item.sample }}">{{ item.sample }}</div>
+                                    </td>
+                                    <td class="import-map-row__expr">
+                                        <span class="import-map-expr-slot{% if item.target == 'skip' %} is-empty{% endif %}"
+                                              data-drop-slot
+                                              {% if item.target != 'skip' %}draggable="true"{% endif %}
+                                              title="{% if item.target == 'skip' %}Перетащите поле сюда или выберите строку и кликните поле справа{% else %}Перетащите обратно в каталог, чтобы очистить{% endif %}">
+                                            <span class="import-map-expr-label">{% if item.target != 'skip' %}{{ item.target_label }}{% endif %}</span>
+                                        </span>
+                                        <input type="hidden"
+                                               name="map_{{ item.column.index }}"
+                                               class="import-map-target"
+                                               value="{{ item.target }}"
+                                               data-label="{% if item.target != 'skip' %}{{ item.target_label|escape }}{% endif %}">
+                                    </td>
+                                    <td class="import-map-row__parse">
+                                        <select name="parse_{{ item.column.index }}"
+                                                id="parse-{{ item.column.index }}"
+                                                class="form-select form-select-sm import-map-parse"
+                                                aria-label="Как читать колонку {{ item.column.display }}">
+                                            {% for value, label in parse_modes %}
+                                            <option value="{{ value }}"{% if item.parse == value %} selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
-                </div>
-                {% endfor %}
+                </section>
+
+                <aside class="import-map-panel import-map-catalog" aria-label="Поля для подстановки" id="import-map-catalog">
+                    <div class="import-map-panel__head import-map-catalog__head">
+                        <div class="import-map-panel__title">Поля для подстановки</div>
+                        <input type="search"
+                               class="form-control form-control-sm import-map-catalog__search"
+                               id="import-map-catalog-search"
+                               placeholder="Поиск…"
+                               autocomplete="off"
+                               aria-label="Поиск в каталоге полей">
+                    </div>
+                    <div class="import-map-catalog__body">
+                        {% for group in mapping_catalog_groups %}
+                        <section class="import-map-catalog__group" data-catalog-group="{{ group.id }}">
+                            <h3 class="import-map-catalog__group-title">{{ group.label }}</h3>
+                            <ul class="import-map-catalog__list list-unstyled mb-0">
+                                {% for item in group.items %}
+                                <li class="import-map-catalog__item" data-catalog-label="{{ item.label|lower }}">
+                                    <button type="button"
+                                            class="import-map-catalog-item"
+                                            draggable="true"
+                                            data-target="{{ item.target }}"
+                                            data-label="{{ item.label|escape }}"
+                                            title="Клик или перетащите в «Куда писать»">
+                                        <span class="import-map-catalog-item__mark" aria-hidden="true"></span>
+                                        <span class="import-map-catalog-item__text">{{ item.label }}</span>
+                                    </button>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </section>
+                        {% endfor %}
+                    </div>
+                </aside>
             </div>
             <div class="sticky-form-actions" role="region" aria-label="Действия сопоставления">
                 <div class="sticky-form-actions__inner">
@@ -663,136 +691,8 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/import_busy.js' %}"></script>
+<script src="{% static 'js/import_busy.js' %}?v={{ app_version }}-map3"></script>
 {% if step == 'mapping' %}
-<script>
-(function () {
-    var box = document.getElementById('import-required-targets');
-    if (!box) return;
-    var required = (box.getAttribute('data-required-targets') || '')
-        .split(',')
-        .map(function (item) { return item.trim(); })
-        .filter(Boolean);
-    var missingEl = document.getElementById('import-required-missing');
-    var showErrors = box.getAttribute('data-show-errors') === '1';
-
-    var MULTI_OK = {'material.description': true, 'material.tags': true, 'skip': true};
-    var dupBox = document.getElementById('import-duplicate-targets');
-    var dupList = document.getElementById('import-duplicate-list');
-
-    function refreshRequiredHighlight() {
-        var mapped = {};
-        var targetCounts = {};
-        var targetColumns = {};
-        document.querySelectorAll('select.import-map-target').forEach(function (select) {
-            var value = select.value;
-            var row = select.closest('[data-import-map-row]');
-            var isRequired = required.indexOf(value) !== -1;
-            var colLabel = '';
-            if (row) {
-                var title = row.querySelector('.import-map-card__title, .fw-semibold');
-                colLabel = title ? title.textContent.trim() : '';
-                row.classList.toggle('is-required', isRequired);
-                row.classList.toggle('table-success', isRequired);
-                var badge = row.querySelector('.import-required-badge');
-                var from = row.querySelector('.import-map-card__from') || row;
-                if (isRequired) {
-                    if (!badge) {
-                        badge = document.createElement('div');
-                        badge.className = 'small text-success fw-semibold import-required-badge';
-                        badge.textContent = '★ обязательно';
-                        var titleEl = row.querySelector('.import-map-card__title');
-                        if (titleEl && titleEl.parentNode) {
-                            titleEl.parentNode.insertBefore(badge, titleEl.nextSibling);
-                        } else {
-                            from.appendChild(badge);
-                        }
-                    }
-                } else if (badge) {
-                    badge.remove();
-                }
-            }
-            select.classList.toggle('border-success', isRequired);
-            select.classList.remove('border-danger');
-            if (isRequired) mapped[value] = true;
-            if (value && !MULTI_OK[value]) {
-                targetCounts[value] = (targetCounts[value] || 0) + 1;
-                if (!targetColumns[value]) targetColumns[value] = [];
-                targetColumns[value].push(colLabel || value);
-            }
-        });
-        var duplicateTargets = Object.keys(targetCounts).filter(function (target) {
-            return targetCounts[target] > 1;
-        });
-        document.querySelectorAll('select.import-map-target').forEach(function (select) {
-            var row = select.closest('[data-import-map-row]');
-            var isDup = duplicateTargets.indexOf(select.value) !== -1;
-            if (row) {
-                row.classList.toggle('is-duplicate', isDup);
-                row.classList.toggle('table-warning', isDup && !row.classList.contains('is-required'));
-            }
-            if (isDup) {
-                select.classList.add('border-warning');
-                select.classList.remove('border-success');
-            }
-        });
-        if (dupBox && dupList) {
-            dupBox.classList.toggle('d-none', duplicateTargets.length === 0);
-            dupList.innerHTML = duplicateTargets.map(function (target) {
-                var cols = (targetColumns[target] || []).map(function (col) {
-                    return '«' + col + '»';
-                }).join(', ');
-                return '<li><code>' + target + '</code>: ' + cols + '</li>';
-            }).join('');
-        }
-        document.querySelectorAll('.import-map-continue').forEach(function (button) {
-            button.disabled = duplicateTargets.length > 0;
-        });
-        var missing = required.filter(function (target) { return !mapped[target]; });
-        box.classList.toggle('alert-danger', showErrors && missing.length > 0);
-        box.classList.toggle('alert-secondary', missing.length > 0 && !showErrors);
-        box.classList.toggle('alert-success', missing.length === 0);
-        document.querySelectorAll('.import-required-item').forEach(function (item) {
-            var target = item.getAttribute('data-target');
-            var ok = !!mapped[target];
-            var status = item.querySelector('.import-required-status');
-            if (status) {
-                status.textContent = ok ? '✓ ' : (showErrors ? '✗ ' : '○ ');
-                status.className = 'import-required-status ' + (
-                    ok ? 'text-success' : (showErrors ? 'text-danger fw-semibold' : 'text-muted')
-                );
-            }
-        });
-        if (missingEl) {
-            if (missing.length) {
-                var labels = missing.map(function (target) {
-                    var item = box.querySelector('.import-required-item[data-target="' + target + '"]');
-                    return item ? item.textContent.replace(/[✓✗○]/g, '').replace(target, '').trim() : target;
-                });
-                missingEl.className = showErrors
-                    ? 'mt-2 mb-0 text-danger fw-semibold'
-                    : 'mt-2 mb-0 text-muted';
-                missingEl.textContent = (showErrors ? 'Не сопоставлено: ' : 'Ещё нужно сопоставить: ') + labels.join(', ');
-            } else {
-                missingEl.className = 'mt-2 mb-0 text-success';
-                missingEl.textContent = 'Все обязательные поля сопоставлены.';
-            }
-        }
-    }
-
-    document.querySelectorAll('select.import-map-target').forEach(function (select) {
-        select.addEventListener('change', refreshRequiredHighlight);
-    });
-    var policy = document.getElementById('map-match-policy');
-    if (policy) {
-        policy.addEventListener('change', function () {
-            // Политика меняет набор обязательных полей — нужен перезапрос страницы после submit;
-            // подсветку текущего набора обновляем сразу.
-            refreshRequiredHighlight();
-        });
-    }
-    refreshRequiredHighlight();
-})();
-</script>
+<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map3"></script>
 {% endif %}
 {% endblock %}

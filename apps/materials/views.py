@@ -61,6 +61,7 @@ from apps.materials.imports.mapping import (
     TARGET_SKIP,
     apply_profile_to_columns,
     mapping_choices,
+    mapping_catalog_groups,
     mapping_for_session,
     find_duplicate_mapping_targets,
     missing_required_targets,
@@ -89,7 +90,7 @@ from apps.materials.imports.upload import (
     set_import_config,
     store_import_session,
 )
-from apps.materials.imports.value_parse import PARSE_MODES
+from apps.materials.imports.value_parse import PARSE_MODES_SHORT
 from apps.materials.imports.wide import detect_header_layout, list_sheet_names, load_wide_table
 from apps.references.models import Property
 from apps.core.property_form_display import enrich_property_form_display
@@ -947,13 +948,14 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['wide_table'] = getattr(self, 'wide_table', None)
         context['mapping_rows'] = getattr(self, 'mapping_rows', [])
         context['target_choices'] = getattr(self, 'target_choices', mapping_choices())
+        context['mapping_catalog_groups'] = getattr(self, 'mapping_catalog_groups', [])
         context['required_import_targets'] = getattr(self, 'required_import_targets', [])
         context['missing_required_targets'] = getattr(self, 'missing_required_targets', [])
         context['duplicate_mapping_targets'] = getattr(self, 'duplicate_mapping_targets', [])
         context['required_target_keys'] = {
             target for target, _label in context['required_import_targets']
         }
-        context['parse_modes'] = PARSE_MODES
+        context['parse_modes'] = PARSE_MODES_SHORT
         context['match_policies'] = MATCH_POLICIES
         context['draft_rows'] = getattr(self, 'draft_rows', [])
         context['profiles'] = MaterialImportProfile.objects.filter(
@@ -1640,6 +1642,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             structure_fields,
             match_policy=match_policy,
         )
+        self.mapping_catalog_groups = mapping_catalog_groups(self.target_choices)
         self.required_import_targets = required_import_targets(match_policy)
         self.selected_structure_type = structure_type
         try:
@@ -1653,6 +1656,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         mapping_rows = []
         claimed_targets: set[str] = set()
         required_keys = {t for t, _ in self.required_import_targets}
+        target_labels = dict(self.target_choices)
         for column in self.wide_table.columns:
             key = str(column.index)
             if key in stored:
@@ -1685,6 +1689,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 'parse': parse,
                 'sample': sample_text,
                 'is_required_target': target in required_keys,
+                'target_label': target_labels.get(target, target_labels.get(TARGET_SKIP, '— пропустить —')),
             })
         self.mapping_rows = mapping_rows
         self.missing_required_targets = missing_required_targets(

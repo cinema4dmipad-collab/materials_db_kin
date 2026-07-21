@@ -22,6 +22,8 @@ from apps.materials.imports.mapping import (
     TARGET_SKIP,
     TARGET_STRUCTURE_PREFIX,
     find_duplicate_mapping_targets,
+    mapping_catalog_groups,
+    mapping_choices,
     missing_required_targets,
     required_import_targets,
     suggest_target,
@@ -240,6 +242,36 @@ class MaterialImportMappingUnitTests(TestCase):
         self.assertEqual(len(dups), 1)
         self.assertEqual(dups[0]['target'], target)
         self.assertEqual(dups[0]['columns'], ['Разрывная основа', 'Разрывная уток'])
+
+    def test_mapping_catalog_groups(self):
+        structure_type = StructureType.objects.create(
+            name='Catalog map fabric',
+            code='catalog_map_fabric',
+            table_name='structures_catalog_map_fabric',
+        )
+        density_field = StructureField.objects.create(
+            structure_type=structure_type,
+            name='areal_density',
+            label='Плотность пов',
+            field_type='DecimalField',
+            sort_order=1,
+        )
+        choices = mapping_choices(
+            structure_fields=[density_field],
+            properties=[self.density],
+        )
+        groups = mapping_catalog_groups(choices)
+        group_ids = [group['id'] for group in groups]
+        self.assertIn('material', group_ids)
+        self.assertIn('structure', group_ids)
+        self.assertIn('property', group_ids)
+        self.assertIn('skip', group_ids)
+        material_targets = next(g for g in groups if g['id'] == 'material')['items']
+        self.assertTrue(any(item['target'] == TARGET_NAME for item in material_targets))
+        structure_targets = next(g for g in groups if g['id'] == 'structure')['items']
+        self.assertTrue(
+            any(item['target'] == f'{TARGET_STRUCTURE_PREFIX}{density_field.name}' for item in structure_targets)
+        )
 
     def test_merge_structure_payloads_prefers_nonblank(self):
         merged = merge_structure_sql_payloads(
@@ -861,6 +893,23 @@ class MaterialImportUITests(TestCase):
             },
         )
         self.assertEqual(configure.status_code, 200)
+        return configure
+
+    def test_mapping_constructor_renders(self):
+        response = self._upload_and_configure_wide_sample()
+        self.assertContains(response, 'import-map-constructor')
+        self.assertContains(response, 'import-map-catalog')
+        self.assertContains(response, 'Поля для подстановки')
+        self.assertContains(response, 'Колонки файла')
+        self.assertContains(response, 'Куда писать')
+        self.assertContains(response, 'import-map-expr-slot')
+        self.assertContains(response, 'import-map-panel')
+        self.assertContains(response, 'data-drop-slot')
+        self.assertContains(response, 'draggable="true"')
+        self.assertContains(response, 'import_mapping_constructor.js')
+        self.assertContains(response, 'name="map_0"')
+        self.assertContains(response, 'name="parse_0"')
+        self.assertContains(response, 'data-target="material.name"')
 
     def test_duplicate_structure_mapping_blocks_preview(self):
         self._upload_and_configure_wide_sample()

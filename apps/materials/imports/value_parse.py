@@ -18,6 +18,12 @@ PARSE_MODES = (
     (PARSE_TEXT, 'Всегда текст'),
     (PARSE_NUMBER, 'Строго число (иначе сомнение)'),
 )
+# Короткие подписи для компактного UI маппинга
+PARSE_MODES_SHORT = (
+    (PARSE_AUTO, 'Авто'),
+    (PARSE_TEXT, 'Текст'),
+    (PARSE_NUMBER, 'Число'),
+)
 
 CONFIDENCE_OK = 'ok'
 CONFIDENCE_UNCERTAIN = 'uncertain'
