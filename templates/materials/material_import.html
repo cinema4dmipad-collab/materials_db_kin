@@ -336,8 +336,36 @@
         <p class="small text-muted mb-3">
             Файл: <strong>{{ staged_filename }}</strong>
             {% if selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
-            · <a href="{% url 'materials:import' %}?step=mapping">к маппингу</a>
         </p>
+
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-outline-primary btn-sm">
+                ← К сопоставлению колонок
+            </a>
+            <a href="{% url 'materials:import' %}?step=configure" class="btn btn-outline-secondary btn-sm">
+                ← Лист и структура
+            </a>
+        </div>
+
+        {% if import_has_errors %}
+        <div class="alert alert-warning py-3 mb-3">
+            <div class="fw-semibold mb-1">Есть ошибки валидации — импорт можно продолжить</div>
+            <p class="mb-2 small">
+                Не обязательно начинать заново. Можно:
+                пропустить проблемные строки в черновике, снять отдельные поля,
+                нажать «Перепроверить», затем «Применить»;
+                или вернуться к сопоставлению колонок и поправить маппинг.
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-primary btn-sm">
+                    Исправить сопоставление
+                </a>
+                <a href="#import-validation-report" class="btn btn-outline-secondary btn-sm">
+                    Смотреть ошибки
+                </a>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="alert alert-secondary py-3 mb-3">
             <div class="fw-semibold mb-1">Итог по черновику</div>
@@ -477,18 +505,33 @@
             </div>
 
             <div class="d-flex flex-wrap gap-2 align-items-center">
+                {% if import_has_errors %}
+                <button type="submit" name="action" value="review_recheck" class="btn btn-outline-primary"
+                        data-import-busy="1">
+                    Перепроверить
+                </button>
+                {% endif %}
                 <button type="submit" name="action" value="review_apply" class="btn btn-success"
-                        {% if import_report and not import_report.ok %} disabled{% endif %}>
+                        {% if not can_apply %}disabled{% endif %}
+                        data-import-busy="1">
                     Применить пакетно
                     {% if draft_create_count or draft_update_count %}
                     ({{ draft_create_count }} созд.{% if draft_update_count %}, {{ draft_update_count }} обн.{% endif %})
                     {% endif %}
                 </button>
                 <button type="submit" name="action" value="review_iterate_start" class="btn btn-link btn-sm"
-                        {% if import_report and not import_report.ok %} disabled{% endif %}>
+                        {% if not can_apply %}disabled{% endif %}>
                     Перейти в построчный режим
                 </button>
+                <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-link btn-sm">
+                    ← К сопоставлению
+                </a>
             </div>
+            {% if import_has_errors %}
+            <p class="form-text mb-0 mt-2">
+                После правок в черновике сначала «Перепроверить», затем «Применить».
+            </p>
+            {% endif %}
         </form>
         {% endif %}
 
@@ -647,7 +690,7 @@
 </div>
 
 {% if import_report %}
-<div class="card mb-4">
+<div class="card mb-4" id="import-validation-report">
     <div class="card-header">
         <h2 class="h5 mb-0">{% if import_report.dry_run %}Проверка перед записью{% else %}Результат{% endif %}</h2>
     </div>
@@ -672,6 +715,13 @@
                 </tbody>
             </table>
         </div>
+        {% if step == 'review' %}
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-outline-primary btn-sm">
+                ← К сопоставлению колонок
+            </a>
+        </div>
+        {% endif %}
         {% elif import_report.ok %}
         <p class="text-success mb-0">Ошибок валидации нет.</p>
         {% endif %}

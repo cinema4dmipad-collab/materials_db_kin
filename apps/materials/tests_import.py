@@ -46,7 +46,10 @@ from apps.materials.imports.staging import (
     apply_review_post,
     build_staging_draft,
     draft_to_import_rows,
+    drafts_from_session,
+    drafts_to_session,
 )
+from apps.materials.imports.upload import get_import_config, set_import_config
 from apps.materials.imports.value_parse import parse_property_cell
 from apps.materials.imports.wide import detect_header_layout, load_wide_table
 from apps.materials.models import Material, MaterialProperty
@@ -975,6 +978,59 @@ class MaterialImportUITests(TestCase):
         row = get_row(self.structure_type, material.struct_props_id)
         self.assertEqual(str(row[self.density_field.name]).rstrip('0').rstrip('.'), '260')
         self.assertTrue(material.tags.filter(name='марка::Е-стекло').exists())
+
+    def test_review_validation_errors_keep_navigation(self):
+        """При ошибках валидации можно вернуться к маппингу и перепроверить — не тупик."""
+        self._upload_and_configure_wide_sample()
+        preview = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'match_policy': MATCH_BY_NAME,
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, 'К сопоставлению колонок')
+        self.assertContains(preview, 'Лист и структура')
+
+        # Портим имя в черновике сессии → dry-run на review даёт жёсткую ошибку валидации
+        session = self.client.session
+        config = get_import_config(session)
+        drafts = drafts_from_session(config.get('draft'))
+        self.assertTrue(drafts)
+        name_max = Material._meta.get_field('name').max_length
+        drafts[0].name = 'x' * (name_max + 10)
+        set_import_config(session, draft=drafts_to_session(drafts))
+        session.save()
+
+        review = self.client.get(reverse('materials:import') + '?step=review')
+        self.assertEqual(review.status_code, 200)
+        self.assertContains(review, 'import-validation-report')
+        self.assertContains(review, 'Исправить сопоставление')
+        self.assertContains(review, 'value="review_recheck"')
+        apply_html = review.content.decode()
+        self.assertNotRegex(apply_html, r'value="review_apply"[^>]*\bdisabled\b')
+
+        back = self.client.get(reverse('materials:import') + '?step=mapping')
+        self.assertEqual(back.status_code, 200)
+        self.assertContains(back, 'import-map-constructor')
+
+        recheck = self.client.post(
+            reverse('materials:import'),
+            {'action': 'review_recheck', 'review_marker': '1', 'skip_0': '1'},
+        )
+        self.assertEqual(recheck.status_code, 200)
+        self.assertContains(recheck, 'К сопоставлению')
 
     def test_iterate_starts_from_mapping(self):
         self._upload_and_configure_wide_sample()
