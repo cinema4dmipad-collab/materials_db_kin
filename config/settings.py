@@ -228,6 +228,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Большие HDF5-файлы (до 20 ГБ) не держим целиком в памяти — пишем во временный файл.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+# Импорт: черновик с десятками колонок × много строк даёт >1000 POST-полей (лимит Django по умолчанию).
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
 # Загружаемые файлы: S3 (если USE_S3=true и задан bucket) или локальная папка media/.
 AWS_ACCESS_KEY_ID = env_str('AWS_ACCESS_KEY_ID')

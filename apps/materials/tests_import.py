@@ -39,6 +39,9 @@ from apps.materials.imports.staging import (
     MATCH_ALWAYS_CREATE,
     MATCH_BY_NAME,
     DraftMaterial,
+    DraftProperty,
+    DraftStructureValue,
+    apply_review_post,
     build_staging_draft,
     draft_to_import_rows,
 )
@@ -986,6 +989,95 @@ def _draft(*, source_row: int, action: str, name: str) -> DraftMaterial:
         tags='',
         action=action,
     )
+
+
+class MaterialImportReviewPostTests(TestCase):
+    def test_apply_review_post_keeps_includes_when_not_posted(self):
+        """Свёрнутый черновик не шлёт include_* — флаги из сессии должны сохраниться."""
+        draft = DraftMaterial(
+            source_row=2,
+            name='Fabric',
+            code='F-1',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Плотность',
+                    column_label='Плотность',
+                    raw='100',
+                    value_kind='scalar',
+                    value='100',
+                    value_b='',
+                    confidence='ok',
+                    note='число',
+                    include=True,
+                )
+            ],
+            properties=[
+                DraftProperty(
+                    property_name='note',
+                    property_id='1',
+                    column_label='Примечание',
+                    raw='x',
+                    value_kind='scalar',
+                    value='x',
+                    value_b='',
+                    confidence='ok',
+                    note='текст',
+                    include=True,
+                )
+            ],
+        )
+        updated = apply_review_post([draft], {'review_marker': '1'})
+        self.assertTrue(updated[0].structure_values[0].include)
+        self.assertTrue(updated[0].properties[0].include)
+        self.assertEqual(updated[0].action, 'create')
+
+    def test_apply_review_post_honours_include_checkboxes(self):
+        draft = DraftMaterial(
+            source_row=2,
+            name='Fabric',
+            code='F-1',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Плотность',
+                    column_label='Плотность',
+                    raw='100',
+                    value_kind='scalar',
+                    value='100',
+                    value_b='',
+                    confidence='ok',
+                    note='число',
+                    include=True,
+                )
+            ],
+            properties=[],
+        )
+        updated = apply_review_post(
+            [draft],
+            {'review_marker': '1'},  # include_struct_0_0 отсутствует → False
+        )
+        # без include_* в POST — не трогаем
+        self.assertTrue(updated[0].structure_values[0].include)
+
+        updated = apply_review_post(
+            [draft],
+            {'review_marker': '1', 'include_struct_0_0': '1'},
+        )
+        self.assertTrue(updated[0].structure_values[0].include)
+
+        draft.structure_values[0].include = True
+        updated = apply_review_post(
+            [draft],
+            {'review_marker': '1', 'include_0_0': '1'},  # только property-ключ, struct нет
+        )
+        self.assertFalse(updated[0].structure_values[0].include)
 
 
 class MaterialImportIterateUnitTests(TestCase):
