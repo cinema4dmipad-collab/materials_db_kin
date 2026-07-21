@@ -75,15 +75,14 @@ def insert_row(
     code: str,
     field_data: dict,
     created_by: str = '',
+    *,
+    allow_empty_null: bool = False,
 ) -> uuid.UUID:
     row_id = uuid.uuid4()
     data = {'id': str(row_id), 'created_by': created_by or ''}
+    data.update(field_data or {})
 
-    for field in _supported_fields(structure_type):
-        if field.name in field_data:
-            data[field.name] = field_data.get(field.name)
-
-    result = SQLExecutor.insert(structure_type, data)
+    result = SQLExecutor.insert(structure_type, data, allow_empty_null=allow_empty_null)
     if not result['success']:
         raise ValueError(result['error'])
     return row_id
@@ -94,14 +93,15 @@ def update_row(
     row_id: uuid.UUID,
     field_data: dict,
     code: str | None = None,
+    *,
+    allow_empty_null: bool = False,
 ) -> None:
-    data = {}
-
-    for field in _supported_fields(structure_type):
-        if field.name in field_data:
-            data[field.name] = field_data[field.name]
-
-    result = SQLExecutor.update(structure_type, row_id, data)
+    result = SQLExecutor.update(
+        structure_type,
+        row_id,
+        field_data or {},
+        allow_empty_null=allow_empty_null,
+    )
     if not result['success']:
         raise ValueError(result['error'])
 

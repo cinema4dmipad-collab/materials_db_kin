@@ -1,0 +1,222 @@
+.import-busy {
+    inset: 0;
+    position: fixed;
+    z-index: 2100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+}
+
+.import-busy.is-active,
+.import-busy.is-active[hidden] {
+    display: flex;
+}
+
+.import-busy__panel {
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 0.75rem;
+    box-shadow: 0 16px 48px rgba(15, 23, 42, 0.28);
+    max-width: 26rem;
+    padding: 1.25rem 1.35rem;
+    width: 100%;
+}
+
+.import-busy__title {
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.import-busy__meta {
+    color: #64748b;
+    font-size: 0.875rem;
+    margin-bottom: 0.85rem;
+}
+
+.import-busy .progress {
+    background: #eef2f7;
+    height: 0.75rem;
+}
+
+.import-busy .progress-bar {
+    background: var(--kx-brand, #007679);
+    width: 100%;
+}
+
+body.import-busy-lock {
+    overflow: hidden;
+}
+
+/* Wizard step circles on a line */
+.import-wizard-steps__list {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.import-wizard-steps__item {
+    align-items: center;
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+    text-align: center;
+}
+
+.import-wizard-steps__line {
+    background: #d7dee8;
+    height: 2px;
+    left: calc(-50% + 0.85rem);
+    position: absolute;
+    right: calc(50% + 0.85rem);
+    top: 0.85rem;
+    z-index: 0;
+}
+
+.import-wizard-steps__item.is-done .import-wizard-steps__line,
+.import-wizard-steps__item.is-current .import-wizard-steps__line {
+    background: var(--kx-brand, #007679);
+}
+
+.import-wizard-steps__dot {
+    align-items: center;
+    background: #fff;
+    border: 2px solid #c5ceda;
+    border-radius: 999px;
+    color: #64748b;
+    display: inline-flex;
+    font-size: 0.75rem;
+    font-weight: 600;
+    height: 1.7rem;
+    justify-content: center;
+    line-height: 1;
+    position: relative;
+    width: 1.7rem;
+    z-index: 1;
+}
+
+.import-wizard-steps__item.is-done .import-wizard-steps__dot {
+    background: var(--kx-brand, #007679);
+    border-color: var(--kx-brand, #007679);
+    color: #fff;
+}
+
+.import-wizard-steps__item.is-current .import-wizard-steps__dot {
+    background: var(--kx-brand, #007679);
+    border-color: var(--kx-brand, #007679);
+    box-shadow: 0 0 0 3px rgba(0, 118, 121, 0.18);
+    color: #fff;
+}
+
+.import-wizard-steps__label {
+    color: #64748b;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    margin-top: 0.45rem;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 0 0.15rem;
+    text-overflow: ellipsis;
+}
+
+.import-wizard-steps__item.is-done .import-wizard-steps__label {
+    color: var(--kx-brand, #007679);
+}
+
+.import-wizard-steps__item.is-current .import-wizard-steps__label {
+    color: #0f172a;
+    font-weight: 600;
+}
+
+@media (max-width: 575.98px) {
+    .import-wizard-steps__label {
+        font-size: 0.65rem;
+    }
+}
+
+/* Mapping cards: file column → system field */
+.import-map-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    /* место под sticky-панель кнопок внизу экрана */
+    padding-bottom: 0.5rem;
+}
+
+.import-map-card {
+    align-items: stretch;
+    background: var(--kx-surface, #fff);
+    border: 1px solid var(--kx-border, #ddd);
+    border-radius: 0.65rem;
+    display: grid;
+    gap: 0.75rem 1rem;
+    grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.2fr);
+    padding: 0.85rem 1rem;
+}
+
+.import-map-card.is-required {
+    background: rgba(0, 118, 121, 0.06);
+    border-color: rgba(0, 118, 121, 0.35);
+}
+
+.import-map-card.is-duplicate {
+    background: #fff8e8;
+    border-color: #e0b44f;
+}
+
+.import-map-card__eyebrow {
+    color: var(--kx-text-subtle, #999);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.2rem;
+    text-transform: uppercase;
+}
+
+.import-map-card__title {
+    color: var(--kx-text, #111);
+    font-size: 0.95rem;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.import-map-card__sample {
+    color: var(--kx-text-muted, #555);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    margin-top: 0.35rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.import-map-card__arrow {
+    align-self: center;
+    color: var(--kx-brand, #007679);
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+}
+
+.import-map-card__to .form-label {
+    margin-bottom: 0.15rem;
+}
+
+@media (max-width: 767.98px) {
+    .import-map-card {
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+    }
+
+    .import-map-card__arrow {
+        display: none;
+    }
+}

@@ -21,6 +21,8 @@ Related data:
 |-----|--------|
 | `/materials/` | List — tabs **Пространство** / **Общие** |
 | `/materials/create/` | Create (own workspace only) |
+| `/materials/import/` | UI import CSV/XLSX (preview dry-run, then apply); requires `material.create` |
+| `/materials/import/example.csv` | Download sample CSV |
 | `/materials/<pk>/` | Detail — properties, layers, structure params, samples; inline tags when editable |
 | `/materials/<pk>/tags/` | POST — save tags from detail card |
 | `/materials/<pk>/edit/` | Edit form |
@@ -64,6 +66,55 @@ Changing structure type reloads the form to load new dynamic fields.
 * Property values validated against reference property data types
 * Layer materials must reference existing materials
 
+## Import (materials + properties)
+
+Shared service: `apps/materials/imports/` (`MaterialImporter`).
+
+**UI:** `/materials/import/` — hybrid wizard for arbitrary CSV/XLSX:
+1. Upload  
+2. Sheet + header/group rows + **match policy** + required **StructureType**  
+3. Column mapping: **structure fields first**, then reference `Property` (existing only — no auto-create)  
+4. **Staging draft / review** (skip rows, exclude fields/properties)  
+5. Apply → SQL structure row (`struct_props_id`) + optional `MaterialProperty` leftovers  
+
+Mapping profiles: model `MaterialImportProfile` (per workspace, includes `structure_type_id`).  
+Permission: `material.create`.
+
+**CLI:**
+
+```bash
+poetry run python manage.py import_materials path/to/file.csv --workspace legacy --dry-run
+poetry run python manage.py import_materials path/to/file.xlsx --workspace legacy
+```
+
+**Format:** one row per material property; repeat `code` for multiple properties on the same material.
+
+| Column | Required | Notes |
+|--------|----------|-------|
+| `code` | yes | Unique per `home_workspace` |
+| `name` | on create | |
+| `description`, `struct_type`, `tags` | no | `tags`: `tag1;tag2` |
+| `property_name` | for property rows | Must exist in reference catalog (`Property.name`) |
+| `value_kind` | no | `scalar` (default), `range`, `tolerance` — numbers only |
+| `value`, `value_b`, `notes` | depends | Same semantics as material property forms |
+
+**Behaviour:**
+
+* Idempotent upsert by `(home_workspace, code)` and `(material, property)`
+* Tags are **merged** with existing tags on update (not replaced)
+* `--dry-run` validates and prints planned counts without writing
+* `home_workspace` column, if present, must match `--workspace`
+* Does not create reference properties
+* `material_link` / structure `MaterialLink`: cell may be material **code**, unique **name**, or **UUID** (visible in the active workspace). Links are applied in a second pass, so targets from the same import file are allowed.
+* XLSX merged cells are expanded (top-left value copied into the whole merge range) before staging.
+* Empty cells stay empty (`NULL` / omitted): import does not apply `StructureField.default_value` and does not invent values; a row with only name/code is enough to create a material.
+* Mapped structure/property fields appear in the review draft even when the cell is blank (written as empty/`NULL`). Unchecking include (or mapping to skip) ignores the field even if Excel has a value.
+* After column mapping, choose apply mode: **batch** (full draft review, then write all) or **row-by-row** (go straight to the first draft; confirm/skip each active row; committed rows stay if a later row fails).
+* Numeric cells may include units or strip width (`12,5 мм`, `4050/ 50мм`): the leading number is stored; the unit suffix is discarded (field unit comes from the structure/property).
+
+Example file: `apps/materials/fixtures/import_examples/materials_sample.csv`
+
 ## Tests
 
-`apps/materials/tests.py` — CRUD, structure linkage, layers, attachments, SQL integration.
+`apps/materials/tests.py` — CRUD, structure linkage, layers, attachments, SQL integration.  
+`apps/materials/tests_import.py` — CSV/XLSX readers, import service/command, UI import flow.

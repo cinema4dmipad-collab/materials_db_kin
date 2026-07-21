@@ -87,6 +87,24 @@
         document.close();
     }
 
+    function sameDocumentUrl(a, b) {
+        try {
+            return new URL(a, window.location.href).href.split('#')[0]
+                === new URL(b, window.location.href).href.split('#')[0];
+        } catch (err) {
+            return a.split('#')[0] === b.split('#')[0];
+        }
+    }
+
+    function submitFormNatively(form) {
+        form.dataset.fileUploadNativeFallback = '1';
+        if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+        } else {
+            HTMLFormElement.prototype.submit.call(form);
+        }
+    }
+
     function uploadForm(form) {
         var submitButton = form.querySelector('[type="submit"]');
         var fileInput = form.querySelector('input[type="file"]');
@@ -114,7 +132,7 @@
 
             if (xhr.status >= 200 && xhr.status < 400) {
                 var finalUrl = xhr.responseURL || startUrl;
-                if (finalUrl.split('#')[0] !== startUrl.split('#')[0]) {
+                if (!sameDocumentUrl(finalUrl, startUrl)) {
                     finishProgress();
                     window.location.href = finalUrl;
                     return;
@@ -130,7 +148,16 @@
                 submitButton.disabled = false;
             }
             setBusy(false);
-            window.alert('Не удалось загрузить файл. Проверьте соединение и попробуйте снова.');
+            // Chrome: ERR_UPLOAD_FILE_CHANGED when the file was edited after pick (Excel/OneDrive).
+            // Fall back to a normal form POST so the wizard still works when XHR is blocked.
+            if (form.dataset.fileUploadNativeFallback !== '1') {
+                submitFormNatively(form);
+                return;
+            }
+            window.alert(
+                'Не удалось загрузить файл. Если файл открыт в Excel — закройте его, '
+                + 'заново выберите файл и повторите.'
+            );
         });
 
         xhr.send(formData);
@@ -182,11 +209,18 @@
             if (form.dataset.fileUploadBound === 'true') {
                 return;
             }
+            if (form.dataset.nativeFileUpload === '1') {
+                return;
+            }
             if (!form.querySelector('input[type="file"]')) {
                 return;
             }
             form.dataset.fileUploadBound = 'true';
             form.addEventListener('submit', function (event) {
+                if (form.dataset.fileUploadNativeFallback === '1') {
+                    form.dataset.fileUploadNativeFallback = '';
+                    return;
+                }
                 if (!formHasNewFile(form)) {
                     return;
                 }

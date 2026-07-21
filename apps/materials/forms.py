@@ -871,3 +871,23 @@ class MaterialVisibilityForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['visibility_mode'].choices = VisibilityMode.ui_choices()
 
+
+class MaterialImportForm(forms.Form):
+    file = forms.FileField(
+        label='Файл CSV или XLSX',
+        help_text='Одна строка — одно свойство материала. Повторяйте code для нескольких свойств.',
+        widget=forms.ClearableFileInput(
+            attrs={
+                'class': 'form-control',
+                'accept': '.csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            }
+        ),
+    )
+
+    def clean_file(self):
+        uploaded = self.cleaned_data['file']
+        name = (getattr(uploaded, 'name', '') or '').lower()
+        if not name.endswith(('.csv', '.xlsx', '.xlsm')):
+            raise ValidationError('Поддерживаются только файлы CSV и XLSX.')
+        return uploaded
+

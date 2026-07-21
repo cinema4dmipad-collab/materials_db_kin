@@ -1,0 +1,16 @@
+{% if show_import_debug_undo %}
+<div class="alert alert-warning py-2 mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="small">
+        <strong>Отладка импорта:</strong> последний apply затронул
+        <strong>{{ import_debug_count }}</strong> материал(ов) в этом пространстве.
+    </div>
+    <form method="post" action="{% url 'materials:import' %}" class="m-0"
+          onsubmit="return confirm('Удалить все материалы из последнего импорта? Это необратимо.');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="undo_last_import">
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+            Удалить результат последнего импорта
+        </button>
+    </form>
+</div>
+{% endif %}

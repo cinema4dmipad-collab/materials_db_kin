@@ -31,7 +31,14 @@ def workspace_navigation(request):
             'icon': 'bi-box-seam',
             'url': reverse('materials:list'),
             'visible': can(WorkspacePerm.MATERIAL_VIEW),
-            'is_active': lambda n, u: n == 'materials',
+            'is_active': lambda n, u: n == 'materials' and u != 'import' and u != 'import_example',
+        },
+        {
+            'label': 'Импорт',
+            'icon': 'bi-upload',
+            'url': reverse('materials:import'),
+            'visible': can(WorkspacePerm.MATERIAL_CREATE),
+            'is_active': lambda n, u: n == 'materials' and u in ('import', 'import_example'),
         },
         {
             'label': 'Свойства',

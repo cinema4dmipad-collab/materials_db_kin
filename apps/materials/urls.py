@@ -4,6 +4,8 @@ from apps.materials.views import (
     MaterialCreateView,
     MaterialDeleteView,
     MaterialDetailView,
+    MaterialImportExampleView,
+    MaterialImportView,
     MaterialLinkView,
     MaterialListView,
     MaterialPropertiesJSONView,
@@ -17,6 +19,8 @@ app_name = 'materials'
 urlpatterns = [
     path('', MaterialListView.as_view(), name='list'),
     path('create/', MaterialCreateView.as_view(), name='create'),
+    path('import/', MaterialImportView.as_view(), name='import'),
+    path('import/example.csv', MaterialImportExampleView.as_view(), name='import_example'),
     path('<uuid:pk>/link/', MaterialLinkView.as_view(), name='link'),
     path('<uuid:pk>/edit/', MaterialUpdateView.as_view(), name='edit'),
     path('<uuid:pk>/tags/', MaterialTagsUpdateView.as_view(), name='tags'),
