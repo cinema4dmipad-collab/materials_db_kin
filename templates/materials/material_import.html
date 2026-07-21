@@ -348,13 +348,11 @@
         </div>
 
         {% if import_has_errors %}
-        <div class="alert alert-warning py-3 mb-3">
-            <div class="fw-semibold mb-1">Есть ошибки валидации — импорт можно продолжить</div>
+        <div class="alert alert-danger py-3 mb-3">
+            <div class="fw-semibold mb-1">Есть ошибки валидации — запись запрещена</div>
             <p class="mb-2 small">
-                Не обязательно начинать заново. Можно:
-                пропустить проблемные строки в черновике, снять отдельные поля,
-                нажать «Перепроверить», затем «Применить»;
-                или вернуться к сопоставлению колонок и поправить маппинг.
+                «Применить» и построчный режим недоступны, пока ошибки не устранены.
+                Вернитесь к сопоставлению колонок, поправьте маппинг и снова соберите черновик.
             </p>
             <div class="d-flex flex-wrap gap-2">
                 <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-primary btn-sm">
@@ -504,13 +502,14 @@
                 </p>
             </div>
 
+            {% if import_has_errors %}
             <div class="d-flex flex-wrap gap-2 align-items-center">
-                {% if import_has_errors %}
-                <button type="submit" name="action" value="review_recheck" class="btn btn-outline-primary"
-                        data-import-busy="1">
-                    Перепроверить
-                </button>
-                {% endif %}
+                <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-primary">
+                    Исправить сопоставление
+                </a>
+            </div>
+            {% else %}
+            <div class="d-flex flex-wrap gap-2 align-items-center">
                 <button type="submit" name="action" value="review_apply" class="btn btn-success"
                         {% if not can_apply %}disabled{% endif %}
                         data-import-busy="1">
@@ -527,10 +526,6 @@
                     ← К сопоставлению
                 </a>
             </div>
-            {% if import_has_errors %}
-            <p class="form-text mb-0 mt-2">
-                После правок в черновике сначала «Перепроверить», затем «Применить».
-            </p>
             {% endif %}
         </form>
         {% endif %}

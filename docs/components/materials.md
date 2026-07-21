@@ -74,7 +74,7 @@ Shared service: `apps/materials/imports/` (`MaterialImporter`).
 1. Upload  
 2. Sheet + header/group rows + **match policy** + required **StructureType**  
 3. **Mapping constructor** (1C-style): table «file column → expression (target field)» + catalog of material / structure / property targets; click row then catalog item to review auto-mapping; parse mode per column (auto / text / number)  
-4. **Staging draft / review** (skip rows, exclude fields/properties); on validation errors — back to mapping/configure, «Recheck», Apply stays available  
+4. **Staging draft / review** (skip rows, exclude fields/properties); on validation errors — Apply/iterate blocked, only «Fix mapping»  
 5. Apply → SQL structure row (`struct_props_id`) + optional `MaterialProperty` leftovers  
 
 Mapping profiles: model `MaterialImportProfile` (per workspace, includes `structure_type_id`).  
@@ -111,6 +111,7 @@ poetry run python manage.py import_materials path/to/file.xlsx --workspace legac
 * Mapped structure/property fields appear in the review draft even when the cell is blank (written as empty/`NULL`). Unchecking include (or mapping to skip) ignores the field even if Excel has a value.
 * After column mapping, choose apply mode: **batch** (full draft review, then write all) or **row-by-row** (go straight to the first draft; confirm/skip each active row; committed rows stay if a later row fails).
 * Numeric cells may include units or strip width (`12,5 мм`, `4050/ 50мм`): the leading number is stored; the unit suffix is discarded (field unit comes from the structure/property).
+* Each create/update via import sets `Material.import_source_filename` to the source file basename (last import wins). The materials list has a choice filter «Источник импорта».
 
 Example file: `apps/materials/fixtures/import_examples/materials_sample.csv`
 

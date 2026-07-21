@@ -11,7 +11,6 @@ from apps.core.property_number_value import VALUE_KIND_SCALAR
 from apps.materials.imports.material_link import resolve_material_ref
 from apps.materials.imports.readers import read_import_file
 from apps.materials.imports.report import ImportReport
-from apps.materials.imports.source_note import with_import_source_note
 from apps.materials.imports.staging import DraftMaterial
 from apps.materials.imports.validate import HybridImportItem, validate_drafts, validate_rows
 from apps.materials.models import Material, MaterialProperty
@@ -193,6 +192,8 @@ class MaterialImporter:
             defaults['name'] = item.name
         if item.struct_type is not None:
             defaults['struct_type'] = item.struct_type
+        if self.source_filename:
+            defaults['import_source_filename'] = self.source_filename
 
         material, created = Material.objects.update_or_create(
             home_workspace=self.workspace,
@@ -201,9 +202,9 @@ class MaterialImporter:
         )
         if created:
             report.materials_created += 1
-            self._mark_created_from_import(material)
         else:
             report.materials_updated += 1
+        self._mark_import_source(material)
         report.affected_material_ids.append(str(material.pk))
 
         if item.tag_names:
@@ -266,14 +267,13 @@ class MaterialImporter:
             else:
                 report.properties_updated += 1
 
-    def _mark_created_from_import(self, material: Material) -> None:
+    def _mark_import_source(self, material: Material) -> None:
         if not self.source_filename:
             return
-        description = with_import_source_note(material.description, self.source_filename)
-        if description == (material.description or '').strip():
+        if material.import_source_filename == self.source_filename:
             return
-        material.description = description
-        material.save(update_fields=['description', 'updated_at'])
+        material.import_source_filename = self.source_filename
+        material.save(update_fields=['import_source_filename', 'updated_at'])
 
     def _apply_hybrid_item(
         self,
@@ -287,6 +287,8 @@ class MaterialImporter:
         }
         if item.name:
             defaults['name'] = item.name
+        if self.source_filename:
+            defaults['import_source_filename'] = self.source_filename
 
         if item.existing_pk:
             material = Material.objects.get(pk=item.existing_pk, home_workspace=self.workspace)
@@ -303,9 +305,9 @@ class MaterialImporter:
 
         if created:
             report.materials_created += 1
-            self._mark_created_from_import(material)
         else:
             report.materials_updated += 1
+        self._mark_import_source(material)
         report.affected_material_ids.append(str(material.pk))
 
         if item.tag_names:
