@@ -968,7 +968,10 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['draft_create_count'] = sum(1 for d in draft_rows if d.action == 'create')
         context['draft_update_count'] = sum(1 for d in draft_rows if d.action == 'update')
         context['draft_skip_count'] = sum(1 for d in draft_rows if d.action == 'skip')
-        context['can_apply'] = bool(draft_rows) and not (
+        # Ошибки валидации не блокируют «Применить» навсегда: можно пропустить
+        # проблемные строки / вернуться к маппингу и повторить.
+        context['can_apply'] = bool(draft_rows)
+        context['import_has_errors'] = bool(
             getattr(self, 'import_report', None) and not self.import_report.ok
         )
         context['layout_hint'] = getattr(self, 'layout_hint', '')
@@ -1058,6 +1061,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             'map_preview': self._handle_map_preview,
             'map_iterate': self._handle_map_iterate,
             'review_apply': self._handle_review_apply,
+            'review_recheck': self._handle_review_recheck,
             'review_iterate_start': self._handle_review_iterate_start,
             'iterate_apply': self._handle_iterate_apply,
             'iterate_skip': self._handle_iterate_skip,
@@ -1237,22 +1241,50 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         )
         return redirect(f"{reverse('materials:import')}?step=iterate")
 
-    def _handle_review_apply(self, request):
+    def _load_review_drafts(self, request):
         path = get_import_session_path(request.session)
         if path is None:
             messages.error(request, 'Сначала загрузите файл.')
-            return redirect('materials:import')
+            return None, None, None, redirect('materials:import')
         config = get_import_config(request.session)
         drafts = drafts_from_session(config.get('draft'))
         if not drafts:
             messages.error(request, 'Нет черновика — сначала выполните проверку маппинга.')
-            return redirect('materials:import')
-        drafts = apply_review_post(drafts, request.POST)
-        set_import_config(request.session, draft=drafts_to_session(drafts))
+            return path, None, None, redirect('materials:import')
+        if request.POST.get('review_marker'):
+            drafts = apply_review_post(drafts, request.POST)
+            set_import_config(request.session, draft=drafts_to_session(drafts))
         structure_type = self._resolve_structure_type(config)
         if structure_type is None:
             messages.error(request, 'Не выбран тип структуры.')
-            return redirect('materials:import')
+            return path, None, None, redirect('materials:import')
+        return path, drafts, structure_type, None
+
+    def _handle_review_recheck(self, request):
+        path, drafts, structure_type, early = self._load_review_drafts(request)
+        if early is not None:
+            return early
+        self.import_report = MaterialImporter(
+            workspace=request.active_workspace,
+            dry_run=True,
+        ).import_drafts(drafts, structure_type=structure_type)
+        if self.import_report.ok:
+            messages.success(
+                request,
+                'Перепроверка пройдена. Можно применять импорт или вернуться к сопоставлению.',
+            )
+        else:
+            messages.error(
+                request,
+                'Ошибки остались. Пропустите проблемные строки, снимите поля в черновике '
+                'или вернитесь к сопоставлению колонок.',
+            )
+        return self._render_review(request, path)
+
+    def _handle_review_apply(self, request):
+        path, drafts, structure_type, early = self._load_review_drafts(request)
+        if early is not None:
+            return early
         report = MaterialImporter(
             workspace=request.active_workspace,
             dry_run=False,
@@ -1260,7 +1292,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         ).import_drafts(drafts, structure_type=structure_type)
         if not report.ok:
             self.import_report = report
-            messages.error(request, 'Импорт не выполнен: есть ошибки валидации.')
+            messages.error(
+                request,
+                'Импорт не выполнен: есть ошибки валидации. '
+                'Можно пропустить проблемные строки и нажать «Перепроверить» / «Применить» снова '
+                'или вернуться к сопоставлению колонок.',
+            )
             return self._render_review(request, path)
         if report.affected_material_ids:
             store_last_import_debug_batch(
@@ -1712,10 +1749,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         if structure_type is None:
             messages.error(request, 'Не выбран тип структуры.')
             return self._render_configure(request, path)
-        self.import_report = MaterialImporter(
-            workspace=request.active_workspace,
-            dry_run=True,
-        ).import_drafts(self.draft_rows, structure_type=structure_type)
+        # Не перетираем отчёт, если его уже посчитали в этом запросе (apply/recheck).
+        if getattr(self, 'import_report', None) is None:
+            self.import_report = MaterialImporter(
+                workspace=request.active_workspace,
+                dry_run=True,
+            ).import_drafts(self.draft_rows, structure_type=structure_type)
         self.selected_structure_type = structure_type
         self.wizard_step = 'review'
         self.sheet_names = list_sheet_names(path)
