@@ -70,19 +70,21 @@ class Material(WorkspaceVisibilityMixin, models.Model):
         related_name='materials',
         verbose_name='Теги',
     )
+    import_source_filename = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name='Источник импорта',
+        help_text='Имя файла последнего импорта, затронувшего материал.',
+    )
 
     def __str__(self):
         return f'{self.code} - {self.name}'
 
     @property
-    def import_source_filename(self) -> str:
-        from apps.materials.imports.source_note import parse_import_source_filename
-
-        return parse_import_source_filename(self.description)
-
-    @property
     def description_display(self) -> str:
-        """Описание без служебной строки об импорте (она показывается отдельно)."""
+        """Описание без устаревшей служебной строки об импорте (если осталась)."""
         from apps.materials.imports.source_note import strip_import_source_note
 
         return strip_import_source_note(self.description)

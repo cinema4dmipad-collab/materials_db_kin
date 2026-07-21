@@ -549,6 +549,33 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'type-pill-link')
         self.assertContains(response, 'Test Panel')
 
+    def test_material_list_filters_by_import_source(self):
+        self.create_material(code='MAT-SRC-001', name='Manual material')
+        self.create_material(
+            code='MAT-SRC-002',
+            name='From summary',
+            import_source_filename='Сводная по материалам.xlsx',
+        )
+        self.create_material(
+            code='MAT-SRC-003',
+            name='From other file',
+            import_source_filename='other.csv',
+        )
+
+        list_page = self.client.get(reverse('materials:list'))
+        self.assertEqual(list_page.status_code, 200)
+        self.assertContains(list_page, 'Источник импорта')
+        self.assertContains(list_page, 'Сводная по материалам.xlsx')
+
+        filtered = self.client.get(
+            reverse('materials:list'),
+            {'import_source': 'Сводная по материалам.xlsx'},
+        )
+        self.assertEqual(filtered.status_code, 200)
+        self.assertContains(filtered, 'MAT-SRC-002')
+        self.assertNotContains(filtered, 'MAT-SRC-001')
+        self.assertNotContains(filtered, 'MAT-SRC-003')
+
     def test_material_list_combines_structure_type_search_with_multiple_tags(self):
         tagged = self.create_material(
             code='MAT-LIST-TAGGED',

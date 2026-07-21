@@ -111,6 +111,7 @@ poetry run python manage.py import_materials path/to/file.xlsx --workspace legac
 * Mapped structure/property fields appear in the review draft even when the cell is blank (written as empty/`NULL`). Unchecking include (or mapping to skip) ignores the field even if Excel has a value.
 * After column mapping, choose apply mode: **batch** (full draft review, then write all) or **row-by-row** (go straight to the first draft; confirm/skip each active row; committed rows stay if a later row fails).
 * Numeric cells may include units or strip width (`12,5 мм`, `4050/ 50мм`): the leading number is stored; the unit suffix is discarded (field unit comes from the structure/property).
+* Each create/update via import sets `Material.import_source_filename` to the source file basename (last import wins). The materials list has a choice filter «Источник импорта».
 
 Example file: `apps/materials/fixtures/import_examples/materials_sample.csv`
 

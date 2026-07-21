@@ -485,8 +485,14 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
         (TAG_SEARCH_SCOPE, 'Тег', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
-    choice_filters = (('struct_type', 'struct_type_id'),)
-    choice_filter_labels = {'struct_type': 'Тип структуры'}
+    choice_filters = (
+        ('struct_type', 'struct_type_id'),
+        ('import_source', 'import_source_filename'),
+    )
+    choice_filter_labels = {
+        'struct_type': 'Тип структуры',
+        'import_source': 'Источник импорта',
+    }
 
     def paginate_queryset(self, queryset, page_size):
         """Avoid 404 when page number is stale after bulk delete / filters."""
@@ -592,12 +598,25 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
         }
 
     def get_choice_filter_options(self):
+        workspace = self.request.active_workspace
+        scope = self.get_material_scope()
+        if scope == MATERIAL_SCOPE_SHARED:
+            source_qs = materials_shared_in(workspace)
+        else:
+            source_qs = materials_in_workspace_tab(workspace)
+        import_sources = list(
+            source_qs.exclude(import_source_filename='')
+            .order_by('import_source_filename')
+            .values_list('import_source_filename', flat=True)
+            .distinct()
+        )
         return {
             'struct_type': list(
-                structure_types_visible_in(self.request.active_workspace)
+                structure_types_visible_in(workspace)
                 .order_by('name')
                 .values_list('pk', 'name')
             ),
+            'import_source': [(name, name) for name in import_sources],
         }
 
 

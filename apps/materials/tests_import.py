@@ -158,20 +158,47 @@ class MaterialImportServiceTests(TestCase):
         self.assertIn('источник::legacy', tag_names)
         self.assertIn('lab', tag_names)
 
-    def test_created_materials_get_import_source_note(self):
+    def test_created_materials_get_import_source_filename(self):
         report = MaterialImporter(
             workspace=self.workspace,
             source_filename='Сводная по материалам.xlsx',
         ).import_file(self._sample_csv())
         self.assertTrue(report.ok)
-        with_note = Material.objects.filter(
+        sourced = Material.objects.filter(
             home_workspace=self.workspace,
-            description__contains='Создано из файла импорта: Сводная по материалам.xlsx',
+            import_source_filename='Сводная по материалам.xlsx',
         )
-        self.assertEqual(with_note.count(), report.materials_created)
-        material = with_note.first()
-        self.assertEqual(material.import_source_filename, 'Сводная по материалам.xlsx')
+        self.assertEqual(sourced.count(), report.materials_created)
+        material = sourced.first()
+        self.assertNotIn('Создано из файла импорта', material.description or '')
         self.assertNotIn('Создано из файла импорта', material.description_display)
+
+    def test_reimport_updates_import_source_filename(self):
+        first = MaterialImporter(
+            workspace=self.workspace,
+            source_filename='old.xlsx',
+        ).import_file(self._sample_csv())
+        self.assertTrue(first.ok)
+        second = MaterialImporter(
+            workspace=self.workspace,
+            source_filename='Сводная по материалам.xlsx',
+        ).import_file(self._sample_csv())
+        self.assertTrue(second.ok)
+        self.assertEqual(second.materials_created, 0)
+        self.assertGreater(second.materials_updated, 0)
+        self.assertFalse(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                import_source_filename='old.xlsx',
+            ).exists()
+        )
+        self.assertEqual(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                import_source_filename='Сводная по материалам.xlsx',
+            ).count(),
+            Material.objects.filter(home_workspace=self.workspace).count(),
+        )
 
     def test_reimport_is_idempotent(self):
         importer = MaterialImporter(workspace=self.workspace)
