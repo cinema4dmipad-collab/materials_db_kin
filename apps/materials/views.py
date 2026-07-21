@@ -968,12 +968,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['draft_create_count'] = sum(1 for d in draft_rows if d.action == 'create')
         context['draft_update_count'] = sum(1 for d in draft_rows if d.action == 'update')
         context['draft_skip_count'] = sum(1 for d in draft_rows if d.action == 'skip')
-        # Ошибки валидации не блокируют «Применить» навсегда: можно пропустить
-        # проблемные строки / вернуться к маппингу и повторить.
-        context['can_apply'] = bool(draft_rows)
-        context['import_has_errors'] = bool(
+        has_errors = bool(
             getattr(self, 'import_report', None) and not self.import_report.ok
         )
+        context['import_has_errors'] = has_errors
+        # При ошибках валидации запись запрещена — только возврат к сопоставлению.
+        context['can_apply'] = bool(draft_rows) and not has_errors
         context['layout_hint'] = getattr(self, 'layout_hint', '')
         context['detected_layout'] = getattr(self, 'detected_layout', None)
         context['structure_types'] = getattr(
@@ -1295,8 +1295,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             messages.error(
                 request,
                 'Импорт не выполнен: есть ошибки валидации. '
-                'Можно пропустить проблемные строки и нажать «Перепроверить» / «Применить» снова '
-                'или вернуться к сопоставлению колонок.',
+                'Исправьте сопоставление колонок и соберите черновик заново.',
             )
             return self._render_review(request, path)
         if report.affected_material_ids:
@@ -1335,6 +1334,18 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         if structure_type is None:
             messages.error(request, 'Не выбран тип структуры.')
             return redirect('materials:import')
+        report = MaterialImporter(
+            workspace=request.active_workspace,
+            dry_run=True,
+        ).import_drafts(drafts, structure_type=structure_type)
+        if not report.ok:
+            self.import_report = report
+            messages.error(
+                request,
+                'Построчный режим недоступен: есть ошибки валидации. '
+                'Исправьте сопоставление колонок.',
+            )
+            return self._render_review(request, path)
         index = start_iterate(request.session, drafts)
         if index is None:
             clear_iterate_session(request.session)

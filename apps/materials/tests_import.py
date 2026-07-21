@@ -979,8 +979,8 @@ class MaterialImportUITests(TestCase):
         self.assertEqual(str(row[self.density_field.name]).rstrip('0').rstrip('.'), '260')
         self.assertTrue(material.tags.filter(name='марка::Е-стекло').exists())
 
-    def test_review_validation_errors_keep_navigation(self):
-        """При ошибках валидации можно вернуться к маппингу и перепроверить — не тупик."""
+    def test_review_validation_errors_block_apply(self):
+        """При ошибках валидации запись запрещена; остаётся путь к сопоставлению."""
         self._upload_and_configure_wide_sample()
         preview = self.client.post(
             reverse('materials:import'),
@@ -1000,8 +1000,6 @@ class MaterialImportUITests(TestCase):
             },
         )
         self.assertEqual(preview.status_code, 200)
-        self.assertContains(preview, 'К сопоставлению колонок')
-        self.assertContains(preview, 'Лист и структура')
 
         # Портим имя в черновике сессии → dry-run на review даёт жёсткую ошибку валидации
         session = self.client.session
@@ -1016,21 +1014,23 @@ class MaterialImportUITests(TestCase):
         review = self.client.get(reverse('materials:import') + '?step=review')
         self.assertEqual(review.status_code, 200)
         self.assertContains(review, 'import-validation-report')
+        self.assertContains(review, 'запись запрещена')
         self.assertContains(review, 'Исправить сопоставление')
-        self.assertContains(review, 'value="review_recheck"')
-        apply_html = review.content.decode()
-        self.assertNotRegex(apply_html, r'value="review_apply"[^>]*\bdisabled\b')
+        self.assertNotContains(review, 'value="review_apply"')
+        self.assertNotContains(review, 'value="review_iterate_start"')
+        self.assertNotContains(review, 'value="review_recheck"')
 
         back = self.client.get(reverse('materials:import') + '?step=mapping')
         self.assertEqual(back.status_code, 200)
         self.assertContains(back, 'import-map-constructor')
 
-        recheck = self.client.post(
+        blocked = self.client.post(
             reverse('materials:import'),
-            {'action': 'review_recheck', 'review_marker': '1', 'skip_0': '1'},
+            {'action': 'review_apply', 'review_marker': '1'},
         )
-        self.assertEqual(recheck.status_code, 200)
-        self.assertContains(recheck, 'К сопоставлению')
+        self.assertEqual(blocked.status_code, 200)
+        self.assertContains(blocked, 'запись запрещена')
+        self.assertFalse(Material.objects.filter(name__startswith='x' * 20).exists())
 
     def test_iterate_starts_from_mapping(self):
         self._upload_and_configure_wide_sample()

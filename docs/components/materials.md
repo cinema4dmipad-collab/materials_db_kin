@@ -74,7 +74,7 @@ Shared service: `apps/materials/imports/` (`MaterialImporter`).
 1. Upload  
 2. Sheet + header/group rows + **match policy** + required **StructureType**  
 3. **Mapping constructor** (1C-style): table «file column → expression (target field)» + catalog of material / structure / property targets; click row then catalog item to review auto-mapping; parse mode per column (auto / text / number)  
-4. **Staging draft / review** (skip rows, exclude fields/properties); on validation errors — back to mapping/configure, «Recheck», Apply stays available  
+4. **Staging draft / review** (skip rows, exclude fields/properties); on validation errors — Apply/iterate blocked, only «Fix mapping»  
 5. Apply → SQL structure row (`struct_props_id`) + optional `MaterialProperty` leftovers  
 
 Mapping profiles: model `MaterialImportProfile` (per workspace, includes `structure_type_id`).  
