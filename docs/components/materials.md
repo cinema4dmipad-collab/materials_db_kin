@@ -73,7 +73,7 @@ Shared service: `apps/materials/imports/` (`MaterialImporter`).
 **UI:** `/materials/import/` — hybrid wizard for arbitrary CSV/XLSX:
 1. Upload  
 2. Sheet + header/group rows + **match policy** + required **StructureType**  
-3. Column mapping: **structure fields first**, then reference `Property` (existing only — no auto-create)  
+3. **Mapping constructor** (1C-style): table «file column → expression (target field)» + catalog of material / structure / property targets; click row then catalog item to review auto-mapping; parse mode per column (auto / text / number)  
 4. **Staging draft / review** (skip rows, exclude fields/properties)  
 5. Apply → SQL structure row (`struct_props_id`) + optional `MaterialProperty` leftovers  
 

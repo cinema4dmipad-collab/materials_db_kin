@@ -22,6 +22,8 @@ from apps.materials.imports.mapping import (
     TARGET_SKIP,
     TARGET_STRUCTURE_PREFIX,
     find_duplicate_mapping_targets,
+    mapping_catalog_groups,
+    mapping_choices,
     missing_required_targets,
     required_import_targets,
     suggest_target,
@@ -39,6 +41,9 @@ from apps.materials.imports.staging import (
     MATCH_ALWAYS_CREATE,
     MATCH_BY_NAME,
     DraftMaterial,
+    DraftProperty,
+    DraftStructureValue,
+    apply_review_post,
     build_staging_draft,
     draft_to_import_rows,
 )
@@ -238,6 +243,36 @@ class MaterialImportMappingUnitTests(TestCase):
         self.assertEqual(dups[0]['target'], target)
         self.assertEqual(dups[0]['columns'], ['Разрывная основа', 'Разрывная уток'])
 
+    def test_mapping_catalog_groups(self):
+        structure_type = StructureType.objects.create(
+            name='Catalog map fabric',
+            code='catalog_map_fabric',
+            table_name='structures_catalog_map_fabric',
+        )
+        density_field = StructureField.objects.create(
+            structure_type=structure_type,
+            name='areal_density',
+            label='Плотность пов',
+            field_type='DecimalField',
+            sort_order=1,
+        )
+        choices = mapping_choices(
+            structure_fields=[density_field],
+            properties=[self.density],
+        )
+        groups = mapping_catalog_groups(choices)
+        group_ids = [group['id'] for group in groups]
+        self.assertIn('material', group_ids)
+        self.assertIn('structure', group_ids)
+        self.assertIn('property', group_ids)
+        self.assertIn('skip', group_ids)
+        material_targets = next(g for g in groups if g['id'] == 'material')['items']
+        self.assertTrue(any(item['target'] == TARGET_NAME for item in material_targets))
+        structure_targets = next(g for g in groups if g['id'] == 'structure')['items']
+        self.assertTrue(
+            any(item['target'] == f'{TARGET_STRUCTURE_PREFIX}{density_field.name}' for item in structure_targets)
+        )
+
     def test_merge_structure_payloads_prefers_nonblank(self):
         merged = merge_structure_sql_payloads(
             [
@@ -284,6 +319,19 @@ class MaterialImportMappingUnitTests(TestCase):
         compact = parse_property_cell('4050/50мм')
         self.assertEqual(compact['value'], '4050')
         self.assertEqual(compact['confidence'], 'ok')
+
+    def test_parse_plus_as_tolerance_from_excel(self):
+        """Сводные часто пишут «0,27+0,035» вместо «±»."""
+        tol = parse_property_cell('0,27+0,035')
+        self.assertEqual(tol['value_kind'], 'tolerance')
+        self.assertEqual(tol['value'], '0.27')
+        self.assertEqual(tol['value_b'], '0.035')
+        self.assertEqual(tol['confidence'], 'ok')
+
+        with_unit = parse_property_cell('12+1 /м')
+        self.assertEqual(with_unit['value_kind'], 'tolerance')
+        self.assertEqual(with_unit['value'], '12')
+        self.assertEqual(with_unit['value_b'], '1')
 
     def test_blank_placeholders_are_empty(self):
         from apps.materials.imports.value_parse import is_blank_cell
@@ -845,6 +893,23 @@ class MaterialImportUITests(TestCase):
             },
         )
         self.assertEqual(configure.status_code, 200)
+        return configure
+
+    def test_mapping_constructor_renders(self):
+        response = self._upload_and_configure_wide_sample()
+        self.assertContains(response, 'import-map-constructor')
+        self.assertContains(response, 'import-map-catalog')
+        self.assertContains(response, 'Поля для подстановки')
+        self.assertContains(response, 'Колонки файла')
+        self.assertContains(response, 'Куда писать')
+        self.assertContains(response, 'import-map-expr-slot')
+        self.assertContains(response, 'import-map-panel')
+        self.assertContains(response, 'data-drop-slot')
+        self.assertContains(response, 'draggable="true"')
+        self.assertContains(response, 'import_mapping_constructor.js')
+        self.assertContains(response, 'name="map_0"')
+        self.assertContains(response, 'name="parse_0"')
+        self.assertContains(response, 'data-target="material.name"')
 
     def test_duplicate_structure_mapping_blocks_preview(self):
         self._upload_and_configure_wide_sample()
@@ -986,6 +1051,95 @@ def _draft(*, source_row: int, action: str, name: str) -> DraftMaterial:
         tags='',
         action=action,
     )
+
+
+class MaterialImportReviewPostTests(TestCase):
+    def test_apply_review_post_keeps_includes_when_not_posted(self):
+        """Свёрнутый черновик не шлёт include_* — флаги из сессии должны сохраниться."""
+        draft = DraftMaterial(
+            source_row=2,
+            name='Fabric',
+            code='F-1',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Плотность',
+                    column_label='Плотность',
+                    raw='100',
+                    value_kind='scalar',
+                    value='100',
+                    value_b='',
+                    confidence='ok',
+                    note='число',
+                    include=True,
+                )
+            ],
+            properties=[
+                DraftProperty(
+                    property_name='note',
+                    property_id='1',
+                    column_label='Примечание',
+                    raw='x',
+                    value_kind='scalar',
+                    value='x',
+                    value_b='',
+                    confidence='ok',
+                    note='текст',
+                    include=True,
+                )
+            ],
+        )
+        updated = apply_review_post([draft], {'review_marker': '1'})
+        self.assertTrue(updated[0].structure_values[0].include)
+        self.assertTrue(updated[0].properties[0].include)
+        self.assertEqual(updated[0].action, 'create')
+
+    def test_apply_review_post_honours_include_checkboxes(self):
+        draft = DraftMaterial(
+            source_row=2,
+            name='Fabric',
+            code='F-1',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Плотность',
+                    column_label='Плотность',
+                    raw='100',
+                    value_kind='scalar',
+                    value='100',
+                    value_b='',
+                    confidence='ok',
+                    note='число',
+                    include=True,
+                )
+            ],
+            properties=[],
+        )
+        updated = apply_review_post(
+            [draft],
+            {'review_marker': '1'},  # include_struct_0_0 отсутствует → False
+        )
+        # без include_* в POST — не трогаем
+        self.assertTrue(updated[0].structure_values[0].include)
+
+        updated = apply_review_post(
+            [draft],
+            {'review_marker': '1', 'include_struct_0_0': '1'},
+        )
+        self.assertTrue(updated[0].structure_values[0].include)
+
+        draft.structure_values[0].include = True
+        updated = apply_review_post(
+            [draft],
+            {'review_marker': '1', 'include_0_0': '1'},  # только property-ключ, struct нет
+        )
+        self.assertFalse(updated[0].structure_values[0].include)
 
 
 class MaterialImportIterateUnitTests(TestCase):

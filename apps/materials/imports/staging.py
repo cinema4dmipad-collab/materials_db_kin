@@ -378,9 +378,17 @@ def drafts_from_session(raw: list[dict] | None) -> list[DraftMaterial]:
 
 
 def apply_review_post(drafts: list[DraftMaterial], post) -> list[DraftMaterial]:
-    """Обновляет draft из POST формы review (skip/include)."""
+    """Обновляет draft из POST формы review (skip/include).
+
+    Чекбоксы include_* живут в свёрнутом блоке деталей. Если их нет в POST
+    (блок не раскрывали / JS отключил перед submit) — сохраняем флаги из сессии,
+    иначе все поля стали бы include=False и импорт «молчал» или писал пустышки.
+    """
     if post.get('review_marker') != '1':
         return drafts
+    includes_posted = any(
+        key.startswith('include_') for key in post.keys()
+    )
     for index, draft in enumerate(drafts):
         if post.get(f'skip_{index}') == '1':
             draft.action = 'skip'
@@ -388,6 +396,8 @@ def apply_review_post(drafts: list[DraftMaterial], post) -> list[DraftMaterial]:
             draft.action = 'update'
         else:
             draft.action = 'create'
+        if not includes_posted:
+            continue
         for p_index, prop in enumerate(draft.properties):
             prop.include = post.get(f'include_{index}_{p_index}') == '1'
         for s_index, struct_val in enumerate(draft.structure_values):
@@ -571,7 +581,7 @@ def _is_numeric_parse(parsed: dict) -> bool:
     if parsed.get('value_kind') in ('range', 'tolerance'):
         return True
     note = parsed.get('note') or ''
-    if note in {'число', 'диапазон', '± погрешность'}:
+    if note in {'число', 'диапазон', '± погрешность'} or note.startswith('± погрешность'):
         return True
     # «число извлечено из … (единицы отброшены)» и аналоги
     return note.startswith('число извлечено')

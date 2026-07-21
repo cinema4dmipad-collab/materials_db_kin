@@ -130,6 +130,32 @@
         existing.value = submitter.value || '';
     }
 
+    /**
+     * Пока детали черновика свёрнуты, не шлём сотни include_* —
+     * сервер оставит флаги из сессии. Иначе легко упереться в лимит полей POST.
+     */
+    function trimReviewIncludes(form) {
+        if (!form.querySelector('input[name="review_marker"]')) {
+            return;
+        }
+        var details = document.getElementById('import-draft-details');
+        var expanded = details && details.classList.contains('show');
+        if (expanded) {
+            return;
+        }
+        form.querySelectorAll('input[name^="include_"]').forEach(function (el) {
+            el.disabled = true;
+        });
+    }
+
+    function hideBusy() {
+        busy = false;
+        overlay.hidden = true;
+        overlay.classList.remove('is-active');
+        overlay.setAttribute('aria-busy', 'false');
+        document.body.classList.remove('import-busy-lock');
+    }
+
     document.querySelectorAll('form').forEach(function (form) {
         form.addEventListener('submit', function (event) {
             if (form.getAttribute('data-import-busy') === '0') {
@@ -143,8 +169,20 @@
             if (submitter && submitter.getAttribute('data-import-busy') === '0') {
                 return;
             }
+            trimReviewIncludes(form);
             preserveSubmitter(form, submitter);
             showBusy(resolveAction(form, submitter));
         });
+    });
+
+    // Если запрос оборвался / bfcache — не оставляем вечный оверлей
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+            hideBusy();
+        }
+    });
+    window.addEventListener('pagehide', function () {
+        // навигация началась — оверлей снимется с новой страницей;
+        // на обрыве pageshow/visibility почистит
     });
 })();

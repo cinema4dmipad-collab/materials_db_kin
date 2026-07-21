@@ -107,6 +107,8 @@ class MaterialImporter:
                 f'Сократите название (макс. {Material._meta.get_field("name").max_length}), '
                 f'код (50), тег (50) или строковое поле. Детали: {exc}'
             )
+        except Exception as exc:  # noqa: BLE001 — показываем оператору вместо голого 500
+            report.add_error(f'Ошибка записи импорта: {exc}')
         return report
 
     def _count_planned(self, items, report: ImportReport) -> None:

@@ -39,6 +39,9 @@ def env_list(name: str, default: list[str] | None = None) -> list[str]:
 
 SECRET_KEY = env_str('SECRET_KEY')
 DEBUG = env_bool('DEBUG', False)
+# Кнопка «удалить результат последнего импорта» (сессия). По умолчанию = DEBUG;
+# на стенде можно включить без полного DEBUG: IMPORT_BATCH_UNDO=true
+IMPORT_BATCH_UNDO = env_bool('IMPORT_BATCH_UNDO', DEBUG)
 
 if not DEBUG and not SECRET_KEY:
     raise ImproperlyConfigured('SECRET_KEY обязателен при DEBUG=False.')
@@ -228,6 +231,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Большие HDF5-файлы (до 20 ГБ) не держим целиком в памяти — пишем во временный файл.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+# Импорт: черновик с десятками колонок × много строк даёт >1000 POST-полей (лимит Django по умолчанию).
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
 # Загружаемые файлы: S3 (если USE_S3=true и задан bucket) или локальная папка media/.
 AWS_ACCESS_KEY_ID = env_str('AWS_ACCESS_KEY_ID')
