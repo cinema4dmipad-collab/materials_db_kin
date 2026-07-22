@@ -1,72 +1,206 @@
 {% extends 'base.html' %}
+{% load ui_tags %}
 
 {% block title %}Дашборд — База композитов{% endblock %}
 
 {% block content %}
-<div class="app-hero">
-    <p class="app-hero__eyebrow">KEENETICA</p>
-    <h1 class="app-hero__title">База композитов</h1>
-    <p class="app-hero__subtitle">Учёт материалов, структур, образцов и сканов лазерно-ультразвуковой структуроскопии</p>
+<div class="dashboard-header mb-4">
+    <div class="dashboard-header__main">
+        <p class="dashboard-header__eyebrow mb-1">Рабочее пространство</p>
+        <h1 class="dashboard-header__workspace h4 mb-2">
+            {% if request.active_workspace %}{{ request.active_workspace.name }}{% else %}—{% endif %}
+        </h1>
+        <p class="dashboard-header__date mb-0">{{ dashboard_date }}</p>
+    </div>
+    <div class="dashboard-header__actions d-flex flex-wrap gap-2">
+        <a href="{% url 'materials:create' %}" class="btn btn-primary btn-sm">Создать материал</a>
+        <a href="{% url 'materials:import' %}" class="btn btn-outline-primary btn-sm">Импорт</a>
+        <a href="{% url 'samples:create' %}" class="btn btn-outline-secondary btn-sm">Создать образец</a>
+    </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header">
-        <h2 class="h5 mb-0">Сводка</h2>
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card dashboard-panel mb-4">
+            <div class="card-header py-2">
+                <h2 class="h6 mb-0">Требуют внимания</h2>
+            </div>
+            <div class="card-body p-0">
+                {% if attention_items %}
+                <ul class="list-group list-group-flush dashboard-attention">
+                    {% for item in attention_items %}
+                    <li class="list-group-item dashboard-attention__item">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div class="min-w-0">
+                                <a href="{{ item.url }}" class="fw-semibold text-decoration-none">
+                                    {{ item.label }}
+                                </a>
+                                {% if item.detail %}
+                                <div class="small text-muted text-truncate">{{ item.detail }}</div>
+                                {% endif %}
+                                {% if item.preview %}
+                                <ul class="dashboard-attention__preview small text-muted mb-0 mt-1">
+                                    {% for row in item.preview %}
+                                    <li>
+                                        {% if row.pk %}
+                                        <a href="{% if item.kind == 'samples_no_scans' %}{% url 'samples:detail' row.pk %}{% else %}{% url 'materials:detail' row.pk %}{% endif %}"
+                                           class="text-muted text-decoration-none">
+                                            <code>{{ row.code }}</code>
+                                            {% if row.material__code %} · {{ row.material__code }}{% endif %}
+                                        </a>
+                                        {% else %}
+                                        <code>{{ row.code }}</code>
+                                        {% endif %}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                {% endif %}
+                            </div>
+                            <span class="badge text-bg-warning rounded-pill flex-shrink-0">{{ item.count }}</span>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted small mb-0 p-3">Сейчас нет записей, требующих внимания.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card dashboard-panel">
+            <div class="card-header py-2">
+                <h2 class="h6 mb-0">Сводка</h2>
+            </div>
+            <div class="card-body py-2">
+                <div class="dashboard-metrics">
+                    <a href="{% url 'materials:list' %}" class="dashboard-metric">
+                        <span class="dashboard-metric__label">Материалы</span>
+                        <span class="dashboard-metric__value">{{ materials_owned_count }}</span>
+                        <span class="dashboard-metric__hint">в пространстве{% if materials_shared_count %} · {{ materials_shared_count }} общих{% endif %}</span>
+                    </a>
+                    <a href="{% url 'samples:list' %}" class="dashboard-metric">
+                        <span class="dashboard-metric__label">Образцы</span>
+                        <span class="dashboard-metric__value">{{ samples_count }}</span>
+                    </a>
+                    <a href="{% url 'scans_all' %}" class="dashboard-metric">
+                        <span class="dashboard-metric__label">Сканы</span>
+                        <span class="dashboard-metric__value">{{ scans_count }}</span>
+                    </a>
+                    <a href="{% url 'structures:select_type' %}" class="dashboard-metric">
+                        <span class="dashboard-metric__label">Типы структур</span>
+                        <span class="dashboard-metric__value">{{ structures_count }}</span>
+                    </a>
+                    <a href="{% url 'core:tag_list' %}" class="dashboard-metric">
+                        <span class="dashboard-metric__label">Теги</span>
+                        <span class="dashboard-metric__value">{{ tags_count }}</span>
+                        <span class="dashboard-metric__hint">пространства</span>
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="card-body">
-        <p class="text-muted mb-3">
-            Краткая статистика по базе. Подробнее — на странице
-            <a href="{% url 'core:help' %}">Справка</a>.
-        </p>
-        <div class="row g-3">
-            <div class="col-md-4">
-                <div class="card stat-card stat-card--materials text-center h-100">
-                    <div class="card-body">
-                        <h3 class="card-title h5">Материалы</h3>
-                        <p class="display-6 mb-0 stat-card__value">{{ materials_count }}</p>
-                        <a href="{% url 'materials:list' %}" class="btn btn-sm btn-outline-primary mt-2">Открыть список</a>
-                    </div>
-                </div>
+
+    <div class="col-lg-6">
+        <div class="card dashboard-panel mb-4">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <h2 class="h6 mb-0">Недавние материалы</h2>
+                <a href="{% url 'materials:list' %}" class="small">Все</a>
             </div>
-            <div class="col-md-4">
-                <div class="card stat-card stat-card--structures text-center h-100">
-                    <div class="card-body">
-                        <h3 class="card-title h5">Структуры</h3>
-                        <p class="display-6 mb-0 stat-card__value">{{ structures_count }}</p>
-                        <a href="{% url 'structures:select_type' %}" class="btn btn-sm btn-outline-primary mt-2">Типы структур</a>
-                    </div>
+            <div class="card-body p-0">
+                {% if recent_materials %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0 dashboard-feed">
+                        <thead>
+                            <tr>
+                                <th>Код</th>
+                                <th>Название</th>
+                                <th>Тип</th>
+                                <th class="text-nowrap">Создан</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for material in recent_materials %}
+                            <tr>
+                                <td>
+                                    {% url 'materials:detail' material.pk as material_detail_url %}
+                                    {% if material.struct_type %}
+                                    {% include 'includes/entity_code.html' with code=material.code url=material_detail_url tone=material.struct_type.display_color %}
+                                    {% else %}
+                                    {% include 'includes/entity_code.html' with code=material.code url=material_detail_url %}
+                                    {% endif %}
+                                </td>
+                                <td class="text-truncate" style="max-width: 12rem;">{{ material.name }}</td>
+                                <td class="small text-muted">
+                                    {% if material.struct_type %}{{ material.struct_type.name }}{% else %}—{% endif %}
+                                </td>
+                                <td class="small text-muted text-nowrap">{{ material.created_at|date:"d.m.Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% else %}
+                <p class="text-muted small mb-0 p-3">Материалов пока нет.</p>
+                {% endif %}
             </div>
-            <div class="col-md-4">
-                <div class="card stat-card stat-card--samples text-center h-100">
-                    <div class="card-body">
-                        <h3 class="card-title h5">Образцы</h3>
-                        <p class="display-6 mb-0 stat-card__value">{{ samples_count }}</p>
-                        <a href="{% url 'samples:list' %}" class="btn btn-sm btn-outline-primary mt-2">Открыть список</a>
-                    </div>
+        </div>
+
+        <div class="card dashboard-panel">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <h2 class="h6 mb-0">Недавние образцы</h2>
+                <a href="{% url 'samples:list' %}" class="small">Все</a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_samples %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0 dashboard-feed">
+                        <thead>
+                            <tr>
+                                <th>Код</th>
+                                <th>Материал</th>
+                                <th class="text-nowrap">Создан</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sample in recent_samples %}
+                            <tr>
+                                <td>
+                                    {% url 'samples:detail' sample.pk as sample_detail_url %}
+                                    {% if sample.material.struct_type %}
+                                    {% include 'includes/entity_code.html' with code=sample.code url=sample_detail_url tone=sample.material.struct_type.display_color %}
+                                    {% else %}
+                                    {% include 'includes/entity_code.html' with code=sample.code url=sample_detail_url %}
+                                    {% endif %}
+                                </td>
+                                <td class="small">
+                                    {% if sample.material %}
+                                    <code>{{ sample.material.code }}</code>
+                                    {% else %}
+                                    —
+                                    {% endif %}
+                                </td>
+                                <td class="small text-muted text-nowrap">{{ sample.created_at|date:"d.m.Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% else %}
+                <p class="text-muted small mb-0 p-3">Образцов пока нет.</p>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header">
-        <h2 class="h5 mb-0">Последние материалы</h2>
+<div class="card dashboard-panel dashboard-analytics-slot mt-4">
+    <div class="card-header py-2">
+        <h2 class="h6 mb-0">Аналитика</h2>
     </div>
-    <div class="card-body">
-        {% if recent_materials %}
-        <ul class="list-group list-group-flush">
-            {% for material in recent_materials %}
-            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                <span>{{ material.code }} — {{ material.name }}</span>
-                <a href="{% url 'materials:detail' material.pk %}" class="btn btn-sm btn-outline-secondary btn-action-view">Открыть</a>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="text-muted mb-0">Материалов пока нет.</p>
-        {% endif %}
+    <div class="card-body dashboard-analytics-slot__body">
+        <p class="text-muted small mb-0">
+            Скоро: динамика создания материалов и образцов, сводные графики по пространству.
+        </p>
     </div>
 </div>
 {% endblock %}

@@ -16,7 +16,10 @@ from apps.materials.imports.material_link import (
     ensure_material_ref_known,
 )
 from apps.materials.imports.report import ImportReport
-from apps.materials.imports.staging import DraftMaterial
+from apps.materials.imports.staging import (
+    RECOGNITION_UNRECOGNIZED,
+    DraftMaterial,
+)
 from apps.materials.imports.structure_values import (
     build_structure_sql_payload,
     empty_structure_sql_payload,
@@ -25,7 +28,11 @@ from apps.materials.imports.structure_values import (
 from apps.materials.imports.value_parse import is_blank_cell
 from apps.core.models import Tag
 from apps.materials.models import Material, MaterialProperty
-from apps.references.models import Property
+from apps.references.dictionaries import (
+    DICTIONARY_LABELS,
+    resolve_or_create_dictionary_item,
+)
+from apps.references.models import Availability, Manufacturer, Property, Technology
 from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 from apps.workspaces.models import Workspace
 
@@ -71,6 +78,12 @@ class HybridImportItem:
     properties: list[PropertyImportItem] = field(default_factory=list)
     structure_link_refs: dict[str, str] = field(default_factory=dict)
     row_number: int | None = None
+    manufacturer_id: str | None = None
+    availability_id: str | None = None
+    technology_id: str | None = None
+    manufacturer_create: tuple[str, str] | None = None
+    availability_create: tuple[str, str] | None = None
+    technology_create: tuple[str, str] | None = None
 
 
 def validate_drafts(
@@ -79,6 +92,8 @@ def validate_drafts(
     structure_type: StructureType,
     workspace: Workspace,
     report: ImportReport,
+    create_missing_dictionaries: bool = False,
+    dry_run: bool = False,
 ) -> list[HybridImportItem]:
     if not structure_type.is_created:
         report.add_error('Выбранный тип структуры ещё не создан (нет SQL-таблицы).')
@@ -93,6 +108,7 @@ def validate_drafts(
     }
     property_cache: dict[str, Property | None] = {}
     draft_index = MaterialLinkIndex.from_drafts(drafts)
+    dictionary_pending: dict = {}
     items: list[HybridImportItem] = []
 
     for draft in drafts:
@@ -140,6 +156,16 @@ def validate_drafts(
         sql_payloads = []
         structure_link_refs: dict[str, str] = {}
         for struct_val in draft.structure_values:
+            if getattr(struct_val, 'recognition', '') == RECOGNITION_UNRECOGNIZED:
+                # На dry_run предупреждение показывает UI шага записи; при реальной записи — блок.
+                if not dry_run:
+                    report.add_error(
+                        f'Поле «{struct_val.field_label or struct_val.field_name}» не распознано — '
+                        f'исправьте значение или проигнорируйте на шаге записи.',
+                        row=draft.source_row,
+                        column=struct_val.field_name,
+                    )
+                continue
             if not struct_val.include:
                 continue
             structure_field = structure_fields.get(struct_val.field_name)
@@ -184,6 +210,16 @@ def validate_drafts(
         structure_sql = merge_structure_sql_payloads(sql_payloads)
         prop_items: list[PropertyImportItem] = []
         for prop in draft.properties:
+            if getattr(prop, 'recognition', '') == RECOGNITION_UNRECOGNIZED:
+                if not dry_run:
+                    label = getattr(prop, 'property_label', '') or prop.property_name
+                    report.add_error(
+                        f'Свойство «{label}» не распознано — '
+                        f'исправьте значение или проигнорируйте на шаге записи.',
+                        row=draft.source_row,
+                        column='value',
+                    )
+                continue
             if not prop.include:
                 continue
             property_ref = _resolve_property(prop.property_name, property_cache)
@@ -240,10 +276,146 @@ def validate_drafts(
             )
             continue
 
+        manufacturer_id = None
+        manufacturer_create = None
+        manufacturer = None
+        if (draft.manufacturer or '').strip():
+            resolved = resolve_or_create_dictionary_item(
+                Manufacturer,
+                draft.manufacturer,
+                create_missing=create_missing_dictionaries,
+                dry_run=dry_run,
+                pending=dictionary_pending,
+            )
+            if resolved.error:
+                report.add_error(
+                    resolved.error,
+                    row=draft.source_row,
+                    column='manufacturer',
+                )
+                continue
+            if resolved.linked_by_code and resolved.item is not None:
+                report.add_dictionary_linked_by_code(
+                    DICTIONARY_LABELS[Manufacturer],
+                    draft.manufacturer.strip(),
+                    resolved.item.name,
+                    resolved.item.code,
+                )
+            if resolved.deferred_create:
+                report.add_dictionary_created(
+                    DICTIONARY_LABELS[Manufacturer],
+                    resolved.create_name,
+                    resolved.create_code,
+                )
+                manufacturer_create = (resolved.create_name, resolved.create_code)
+            elif resolved.item is not None:
+                if not resolved.matched_existing and not resolved.linked_by_code:
+                    report.add_dictionary_created(
+                        DICTIONARY_LABELS[Manufacturer],
+                        resolved.item.name,
+                        resolved.item.code,
+                    )
+                manufacturer = resolved.item
+                manufacturer_id = str(resolved.item.pk)
+
+        availability_id = None
+        availability_create = None
+        availability = None
+        if (draft.availability or '').strip():
+            resolved = resolve_or_create_dictionary_item(
+                Availability,
+                draft.availability,
+                create_missing=create_missing_dictionaries,
+                dry_run=dry_run,
+                pending=dictionary_pending,
+            )
+            if resolved.error:
+                report.add_error(
+                    resolved.error,
+                    row=draft.source_row,
+                    column='availability',
+                )
+                continue
+            if resolved.linked_by_code and resolved.item is not None:
+                report.add_dictionary_linked_by_code(
+                    DICTIONARY_LABELS[Availability],
+                    draft.availability.strip(),
+                    resolved.item.name,
+                    resolved.item.code,
+                )
+            if resolved.deferred_create:
+                report.add_dictionary_created(
+                    DICTIONARY_LABELS[Availability],
+                    resolved.create_name,
+                    resolved.create_code,
+                )
+                availability_create = (resolved.create_name, resolved.create_code)
+            elif resolved.item is not None:
+                if not resolved.matched_existing and not resolved.linked_by_code:
+                    report.add_dictionary_created(
+                        DICTIONARY_LABELS[Availability],
+                        resolved.item.name,
+                        resolved.item.code,
+                    )
+                availability = resolved.item
+                availability_id = str(resolved.item.pk)
+
+        technology_id = None
+        technology_create = None
+        technology = None
+        if (draft.technology or '').strip():
+            resolved = resolve_or_create_dictionary_item(
+                Technology,
+                draft.technology,
+                create_missing=create_missing_dictionaries,
+                dry_run=dry_run,
+                pending=dictionary_pending,
+            )
+            if resolved.error:
+                report.add_error(
+                    resolved.error,
+                    row=draft.source_row,
+                    column='technology',
+                )
+                continue
+            if resolved.linked_by_code and resolved.item is not None:
+                report.add_dictionary_linked_by_code(
+                    DICTIONARY_LABELS[Technology],
+                    draft.technology.strip(),
+                    resolved.item.name,
+                    resolved.item.code,
+                )
+            if resolved.deferred_create:
+                report.add_dictionary_created(
+                    DICTIONARY_LABELS[Technology],
+                    resolved.create_name,
+                    resolved.create_code,
+                )
+                technology_create = (resolved.create_name, resolved.create_code)
+            elif resolved.item is not None:
+                if not resolved.matched_existing and not resolved.linked_by_code:
+                    report.add_dictionary_created(
+                        DICTIONARY_LABELS[Technology],
+                        resolved.item.name,
+                        resolved.item.code,
+                    )
+                technology = resolved.item
+                technology_id = str(resolved.item.pk)
+
         # Пустые ячейки → NULL/пропуск; достаточно названия/кода, чтобы создать материал.
         has_identity = bool(draft.name or draft.code)
         has_payload = bool(
-            structure_sql or structure_link_refs or prop_items or tag_names or draft.description
+            structure_sql
+            or structure_link_refs
+            or prop_items
+            or tag_names
+            or draft.description
+            or manufacturer
+            or availability
+            or technology
+            or manufacturer_create
+            or availability_create
+            or technology_create
         )
         if not has_identity and not has_payload:
             report.add_error(
@@ -266,6 +438,12 @@ def validate_drafts(
                 properties=prop_items,
                 structure_link_refs=structure_link_refs,
                 row_number=draft.source_row,
+                manufacturer_id=manufacturer_id,
+                availability_id=availability_id,
+                technology_id=technology_id,
+                manufacturer_create=manufacturer_create,
+                availability_create=availability_create,
+                technology_create=technology_create,
             )
         )
     return items

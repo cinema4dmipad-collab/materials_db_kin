@@ -12,6 +12,9 @@ TARGET_CODE = 'material.code'
 TARGET_NAME = 'material.name'
 TARGET_DESCRIPTION = 'material.description'
 TARGET_TAGS = 'material.tags'
+TARGET_MANUFACTURER = 'material.manufacturer'
+TARGET_AVAILABILITY = 'material.availability'
+TARGET_TECHNOLOGY = 'material.technology'
 TARGET_PROPERTY_PREFIX = 'property:'
 TARGET_STRUCTURE_PREFIX = 'structure:'
 
@@ -20,6 +23,9 @@ MATERIAL_TARGETS = (
     (TARGET_CODE, 'Код материала'),
     (TARGET_NAME, 'Название'),
     (TARGET_DESCRIPTION, 'Описание'),
+    (TARGET_MANUFACTURER, 'Производитель'),
+    (TARGET_AVAILABILITY, 'Доступность'),
+    (TARGET_TECHNOLOGY, 'Технология'),
     (TARGET_TAGS, 'Теги (для «Марка» → марка::значение)'),
 )
 
@@ -167,8 +173,12 @@ def suggest_target(
         return TARGET_TAGS
     if any(token in hay for token in ('код', 'code', 'артикул', 'sku')) and _free(TARGET_CODE):
         return TARGET_CODE
-    if 'производител' in hay:
-        return TARGET_DESCRIPTION
+    if 'производител' in hay and _free(TARGET_MANUFACTURER):
+        return TARGET_MANUFACTURER
+    if any(token in hay for token in ('доступност', 'availability')) and _free(TARGET_AVAILABILITY):
+        return TARGET_AVAILABILITY
+    if any(token in hay for token in ('технолог', 'technology')) and _free(TARGET_TECHNOLOGY):
+        return TARGET_TECHNOLOGY
     if 'описан' in hay:
         return TARGET_DESCRIPTION
     if 'тег' in hay or 'tag' in hay:
@@ -249,12 +259,14 @@ def profile_payload_from_mapping(
     group_row,
     match_policy,
     structure_type_id=None,
+    create_missing_dictionaries: bool = False,
 ) -> dict:
     return {
         'sheet': sheet,
         'header_row': header_row,
         'group_row': group_row,
         'match_policy': match_policy,
+        'create_missing_dictionaries': bool(create_missing_dictionaries),
         'structure_type_id': structure_type_id or '',
         'columns': [
             {

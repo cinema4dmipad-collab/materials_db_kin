@@ -266,12 +266,18 @@ class QuerySetFilterMixin:
         options_map = self.get_choice_filter_options()
 
         for param, _field_name in self.choice_filters:
+            value = params.get(param, '').strip()
             filters.append(
                 {
                     'param': param,
                     'label': self.choice_filter_labels.get(param, param),
-                    'value': params.get(param, '').strip(),
+                    'value': value,
                     'options': options_map.get(param, []),
+                    'remove_url': (
+                        self._build_filter_url((param,))
+                        if value
+                        else ''
+                    ),
                 }
             )
 

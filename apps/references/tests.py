@@ -399,3 +399,44 @@ class PropertyViewsTests(TestCase):
         choice_prop.refresh_from_db()
         self.assertEqual(choice_prop.data_type, 'string')
         self.assertEqual(choice_prop.choices.count(), 0)
+
+    def test_property_bulk_delete(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
+        extra = Property.objects.create(
+            name='bulk_prop',
+            display_name='Bulk Prop',
+            unit='',
+            data_type='string',
+            group=self.group,
+        )
+        list_page = self.client.get(reverse('references:list'))
+        self.assertContains(list_page, 'data-list-bulk-toggle')
+        self.assertContains(list_page, reverse('references:bulk_delete'))
+
+        confirm = self.client.post(
+            reverse('references:bulk_delete'),
+            {'ids': [str(self.property.pk), str(extra.pk)]},
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, 'Density')
+        self.assertContains(confirm, 'Bulk Prop')
+
+        done = self.client.post(
+            reverse('references:bulk_delete'),
+            {
+                'ids': [str(self.property.pk), str(extra.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('references:list'))
+        self.assertFalse(Property.objects.filter(pk=self.property.pk).exists())
+        self.assertFalse(Property.objects.filter(pk=extra.pk).exists())
+
+    def test_operator_cannot_bulk_delete_properties(self):
+        login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
+        response = self.client.post(
+            reverse('references:bulk_delete'),
+            {'ids': [str(self.property.pk)], 'confirm': '1'},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Property.objects.filter(pk=self.property.pk).exists())

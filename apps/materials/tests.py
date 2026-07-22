@@ -2038,3 +2038,87 @@ class MaterialAttachmentViewsTests(TestCase):
         self.material.delete()
         self.assertFalse(MaterialAttachment.objects.filter(title='To delete').exists())
         self.assertFalse(attachment.file.storage.exists(file_name))
+
+class MaterialBulkDeleteTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.workspaces.models import BUILTIN_GROUP_MANAGER, Workspace
+        from apps.workspaces.services import assign_user_to_groups, ensure_default_groups
+        from apps.workspaces.test_utils import login_test_client
+
+        User = get_user_model()
+        self.workspace = Workspace.objects.create(slug='bulk-ws', name='Bulk WS')
+        ensure_default_groups(self.workspace)
+        self.user = User.objects.create_user('bulk-mgr', password='pass-123')
+        assign_user_to_groups(self.user, self.workspace, [BUILTIN_GROUP_MANAGER])
+        login_test_client(
+            self.client, user=self.user, workspace=self.workspace, password='pass-123'
+        )
+        self.layer_type = StructureType.objects.create(
+            name='Bulk panel',
+            code='bulk_panel',
+            table_name='structures_bulk_panel',
+            allow_layers=True,
+            is_created=True,
+        )
+        self.m1 = Material.objects.create(
+            code='BULK-1', name='One', home_workspace=self.workspace
+        )
+        self.m2 = Material.objects.create(
+            code='BULK-2', name='Two', home_workspace=self.workspace
+        )
+        self.m3 = Material.objects.create(
+            code='BULK-3',
+            name='Three',
+            home_workspace=self.workspace,
+            struct_type=self.layer_type,
+        )
+
+    def test_list_shows_select_controls(self):
+        response = self.client.get(reverse('materials:list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-list-bulk-toggle')
+        self.assertContains(response, 'name="ids"')
+        self.assertContains(response, reverse('materials:bulk_delete'))
+
+    def test_bulk_delete_confirm_then_delete(self):
+        confirm = self.client.post(
+            reverse('materials:bulk_delete'),
+            {'ids': [str(self.m1.pk), str(self.m2.pk)]},
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, 'BULK-1')
+        self.assertContains(confirm, 'BULK-2')
+        self.assertContains(confirm, 'Удалить выбранные')
+
+        done = self.client.post(
+            reverse('materials:bulk_delete'),
+            {
+                'ids': [str(self.m1.pk), str(self.m2.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('materials:list'))
+        self.assertFalse(Material.objects.filter(pk=self.m1.pk).exists())
+        self.assertFalse(Material.objects.filter(pk=self.m2.pk).exists())
+        self.assertTrue(Material.objects.filter(pk=self.m3.pk).exists())
+
+    def test_bulk_delete_skips_layer_material(self):
+        CompositeLayer.objects.create(
+            parent_material=self.m3,
+            material=self.m1,
+            layer_number=1,
+            angle=0,
+            thickness=0.2,
+        )
+        done = self.client.post(
+            reverse('materials:bulk_delete'),
+            {
+                'ids': [str(self.m1.pk), str(self.m2.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('materials:list'))
+        self.assertTrue(Material.objects.filter(pk=self.m1.pk).exists())
+        self.assertFalse(Material.objects.filter(pk=self.m2.pk).exists())

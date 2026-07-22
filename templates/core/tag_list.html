@@ -1,16 +1,26 @@
 {% extends 'base.html' %}
-{% load list_filter_tags %}
+{% load static list_filter_tags %}
 
 {% block title %}Теги — База композитов{% endblock %}
 
 {% block content %}
-<div class="card">
+<div class="card list-bulk" data-list-bulk>
     <div class="card-header">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
             <h1 class="h4 mb-0">Справочник тегов</h1>
-            {% if show_create_button %}
-            <a href="{% url 'core:tag_create' %}" class="btn btn-primary btn-sm">Создать</a>
-            {% endif %}
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                {% if tags and manageable_tag_ids %}
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm"
+                        data-list-bulk-toggle
+                        aria-pressed="false">
+                    Выбрать
+                </button>
+                {% endif %}
+                {% if show_create_button %}
+                <a href="{% url 'core:tag_create' %}" class="btn btn-primary btn-sm">Создать</a>
+                {% endif %}
+            </div>
         </div>
         <div class="tag-list-header-tabs d-flex flex-wrap align-items-end justify-content-between gap-3">
             <ul class="nav nav-tabs card-header-tabs tag-list-scope-tabs mb-0">
@@ -42,57 +52,82 @@
         {% endif %}
         {% include 'includes/list_filter_bar.html' %}
         {% if tags %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
-                <thead>
-                    <tr>
-                        <th>Название</th>
-                        <th>Описание</th>
-                        <th>Создал</th>
-                        <th>Материалов</th>
-                        <th>Образцов</th>
-                        <th>Сканов</th>
-                        <th>Создан</th>
-                        <th class="text-end">Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for tag in tags %}
-                    <tr>
-                        <td>
-                            <span class="entity-tag{% if tag.name|is_scoped_tag %} entity-tag--scoped{% endif %}{% if not tag.color %} tone-tag{% endif %}"
-                                  {% tag_badge_style tag %}{% if tag.description %} title="{{ tag.description }}"{% endif %}>
-                                {{ tag.name|scoped_tag_label }}
-                            </span>
-                            {% if tag.is_archived %}
-                            <span class="badge text-bg-secondary ms-1">архив</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-muted small">
-                            {% if tag.description %}{{ tag.description|truncatechars:60 }}{% else %}—{% endif %}
-                        </td>
-                        <td>{% include 'includes/creator_filter_link.html' with obj=tag %}</td>
-                        <td>{{ tag.material_count }}</td>
-                        <td>{{ tag.sample_count }}</td>
-                        <td>{{ tag.scan_count }}</td>
-                        <td>{{ tag.created_at|date:"d.m.Y" }}</td>
-                        <td class="text-end">
-                            {% if tag.pk in manageable_tag_ids %}
-                            <div class="table-actions">
-                                {% url 'core:tag_edit' tag.pk as tag_edit_url %}
-                                {% include 'includes/table_action_icon.html' with action='edit' url=tag_edit_url title='Изменить' %}
-                                {% url 'core:tag_delete' tag.pk as tag_delete_url %}
-                                {% include 'includes/table_action_icon.html' with action='delete' url=tag_delete_url title='Удалить' %}
-                            </div>
-                            {% else %}
-                            —
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <form method="post"
+              action="{% url 'core:tag_bulk_delete' %}"
+              data-list-bulk-form
+              data-confirm-title="Удаление тегов"
+              data-confirm-message="Удалить выбранные теги ({count})? Связи с материалами, образцами и сканами снимутся."
+              data-confirm-submit="Удалить выбранные">
+            {% csrf_token %}
+            {% include 'includes/list_bulk_toolbar.html' with bulk_id='tags' %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                    <thead>
+                        <tr>
+                            <th class="list-bulk-col" scope="col">
+                                <span class="visually-hidden">Выбор</span>
+                            </th>
+                            <th>Название</th>
+                            <th>Описание</th>
+                            <th>Создал</th>
+                            <th>Материалов</th>
+                            <th>Образцов</th>
+                            <th>Сканов</th>
+                            <th>Создан</th>
+                            <th class="text-end">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tag in tags %}
+                        <tr>
+                            <td class="list-bulk-col">
+                                {% if tag.pk in manageable_tag_ids %}
+                                <input type="checkbox"
+                                       class="form-check-input"
+                                       name="ids"
+                                       value="{{ tag.pk }}"
+                                       data-list-bulk-item
+                                       disabled
+                                       aria-label="Выбрать {{ tag.name }}">
+                                {% else %}
+                                <span class="list-bulk-col__empty" aria-hidden="true"></span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="entity-tag{% if tag.name|is_scoped_tag %} entity-tag--scoped{% endif %}{% if not tag.color %} tone-tag{% endif %}"
+                                      {% tag_badge_style tag %}{% if tag.description %} title="{{ tag.description }}"{% endif %}>
+                                    {{ tag.name|scoped_tag_label }}
+                                </span>
+                                {% if tag.is_archived %}
+                                <span class="badge text-bg-secondary ms-1">архив</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted small">
+                                {% if tag.description %}{{ tag.description|truncatechars:60 }}{% else %}—{% endif %}
+                            </td>
+                            <td>{% include 'includes/creator_filter_link.html' with obj=tag %}</td>
+                            <td>{{ tag.material_count }}</td>
+                            <td>{{ tag.sample_count }}</td>
+                            <td>{{ tag.scan_count }}</td>
+                            <td>{{ tag.created_at|date:"d.m.Y" }}</td>
+                            <td class="text-end">
+                                {% if tag.pk in manageable_tag_ids %}
+                                <div class="table-actions">
+                                    {% url 'core:tag_edit' tag.pk as tag_edit_url %}
+                                    {% include 'includes/table_action_icon.html' with action='edit' url=tag_edit_url title='Изменить' %}
+                                    {% url 'core:tag_delete' tag.pk as tag_delete_url %}
+                                    {% include 'includes/table_action_icon.html' with action='delete' url=tag_delete_url title='Удалить' %}
+                                </div>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
 
         <div class="p-3">
         {% include 'includes/pagination.html' %}
@@ -123,4 +158,8 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/list_bulk_select.js' %}?v={{ app_version }}-bulk2"></script>
 {% endblock %}

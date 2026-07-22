@@ -15,7 +15,11 @@
         <div class="text-nowrap">
             {% if sample_is_editable %}
             <a href="{% url 'samples:edit' sample.pk %}" class="btn btn-outline-primary btn-sm">Изменить</a>
-            <a href="{% url 'samples:delete' sample.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            <a href="{% url 'samples:delete' sample.pk %}"
+               class="btn btn-outline-danger btn-sm"
+               data-confirm-delete
+               data-confirm-title="Удаление образца"
+               data-confirm-message="Удалить образец «{{ sample.code }} — {{ sample.name }}» вместе со сканами и вложениями? Действие нельзя отменить.">Удалить</a>
             {% endif %}
             <a href="{% url 'samples:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
         </div>

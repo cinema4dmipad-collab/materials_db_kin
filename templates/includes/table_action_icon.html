@@ -1,14 +1,31 @@
 {% if method == 'post' %}
-<form method="post" action="{{ url }}" class="table-action-form d-inline">
+<form method="post" action="{{ url }}" class="table-action-form d-inline"
+      {% if confirm or action == 'delete' %}
+      data-confirm-delete-form
+      data-confirm-title="{{ confirm_title|default:'Удаление' }}"
+      data-confirm-message="{{ confirm|default:'Удалить эту запись? Действие нельзя отменить.' }}"
+      data-confirm-submit="{{ confirm_submit|default:'Удалить' }}"
+      {% endif %}>
     {% csrf_token %}
     <button type="submit"
             class="btn btn-sm table-action-btn btn-action-{{ action|default:'link' }}{% if extra_class %} {{ extra_class }}{% endif %}"
             title="{{ title }}"
-            aria-label="{{ title }}"
-            {% if confirm %}onclick="return confirm('{{ confirm|escapejs }}');"{% endif %}>
+            aria-label="{{ title }}">
         {% include 'includes/table_action_icon_svg.html' with action=action %}
     </button>
 </form>
+{% elif action == 'delete' or confirm_modal %}
+<a href="{{ url }}"
+   class="btn btn-sm table-action-btn btn-action-{{ action|default:'link' }}{% if extra_class %} {{ extra_class }}{% endif %}"
+   title="{{ title }}"
+   aria-label="{{ title }}"
+   data-confirm-delete
+   data-confirm-title="{{ confirm_title|default:'Удаление' }}"
+   data-confirm-message="{{ confirm|default:'Удалить эту запись? Действие нельзя отменить.' }}"
+   data-confirm-submit="{{ confirm_submit|default:'Удалить' }}"
+   {% if download_name %}data-download-name="{{ download_name }}"{% endif %}>
+    {% include 'includes/table_action_icon_svg.html' with action=action %}
+</a>
 {% else %}
 <a href="{{ url }}"
    class="btn btn-sm table-action-btn btn-action-{{ action|default:'link' }}{% if extra_class %} {{ extra_class }}{% endif %}"

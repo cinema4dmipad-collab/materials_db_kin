@@ -116,6 +116,37 @@ body.import-busy-lock {
     color: #fff;
 }
 
+.import-wizard-steps__item.is-warning .import-wizard-steps__dot,
+.import-wizard-steps__item.is-warning.is-current .import-wizard-steps__dot,
+.import-wizard-steps__item.is-warning.is-done .import-wizard-steps__dot {
+    background: #f0a500;
+    border-color: #e08e00;
+    box-shadow: 0 0 0 3px rgba(240, 165, 0, 0.22);
+    color: #fff;
+}
+
+.import-wizard-steps__item.is-error .import-wizard-steps__dot,
+.import-wizard-steps__item.is-error.is-current .import-wizard-steps__dot,
+.import-wizard-steps__item.is-error.is-done .import-wizard-steps__dot {
+    background: #d64545;
+    border-color: #c62828;
+    box-shadow: 0 0 0 3px rgba(214, 69, 69, 0.22);
+    color: #fff;
+}
+
+.import-wizard-steps__item.is-warning .import-wizard-steps__line,
+.import-wizard-steps__item.is-error .import-wizard-steps__line {
+    background: currentColor;
+}
+
+.import-wizard-steps__item.is-warning {
+    color: #e08e00;
+}
+
+.import-wizard-steps__item.is-error {
+    color: #c62828;
+}
+
 .import-wizard-steps__label {
     color: #64748b;
     font-size: 0.75rem;
@@ -133,6 +164,18 @@ body.import-busy-lock {
 
 .import-wizard-steps__item.is-current .import-wizard-steps__label {
     color: #0f172a;
+    font-weight: 600;
+}
+
+.import-wizard-steps__item.is-warning .import-wizard-steps__label,
+.import-wizard-steps__item.is-warning.is-current .import-wizard-steps__label {
+    color: #b7791f;
+    font-weight: 600;
+}
+
+.import-wizard-steps__item.is-error .import-wizard-steps__label,
+.import-wizard-steps__item.is-error.is-current .import-wizard-steps__label {
+    color: #c62828;
     font-weight: 600;
 }
 

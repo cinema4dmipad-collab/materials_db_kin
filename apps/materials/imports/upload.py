@@ -17,6 +17,7 @@ SESSION_GROUP_ROW = 'material_import_group_row'
 SESSION_MAPPING = 'material_import_mapping'
 SESSION_MODE = 'material_import_mode'
 SESSION_MATCH_POLICY = 'material_import_match_policy'
+SESSION_CREATE_MISSING_DICTIONARIES = 'material_import_create_missing_dictionaries'
 SESSION_DRAFT = 'material_import_draft'
 SESSION_STRUCTURE_TYPE_ID = 'material_import_structure_type_id'
 
@@ -68,6 +69,7 @@ def get_import_config(session) -> dict:
         'mapping': session.get(SESSION_MAPPING) or {},
         'mode': session.get(SESSION_MODE) or 'mapped',
         'match_policy': session.get(SESSION_MATCH_POLICY) or MATCH_BY_NAME,
+        'create_missing_dictionaries': bool(session.get(SESSION_CREATE_MISSING_DICTIONARIES)),
         'draft': session.get(SESSION_DRAFT) or [],
         'structure_type_id': session.get(SESSION_STRUCTURE_TYPE_ID) or '',
     }
@@ -82,6 +84,7 @@ def set_import_config(
     mapping: dict | None = None,
     mode: str | None = None,
     match_policy: str | None = None,
+    create_missing_dictionaries: bool | None = None,
     draft: list | None = None,
     structure_type_id: str | None = None,
     clear_draft: bool = False,
@@ -101,6 +104,8 @@ def set_import_config(
         session[SESSION_MODE] = mode
     if match_policy is not None:
         session[SESSION_MATCH_POLICY] = match_policy
+    if create_missing_dictionaries is not None:
+        session[SESSION_CREATE_MISSING_DICTIONARIES] = bool(create_missing_dictionaries)
     if draft is not None:
         session[SESSION_DRAFT] = draft
     if structure_type_id is not None:
@@ -124,6 +129,7 @@ def clear_import_session(session, *, delete_file: bool = True) -> None:
     session.pop(SESSION_MAPPING, None)
     session.pop(SESSION_MODE, None)
     session.pop(SESSION_MATCH_POLICY, None)
+    session.pop(SESSION_CREATE_MISSING_DICTIONARIES, None)
     session.pop(SESSION_DRAFT, None)
     session.pop(SESSION_STRUCTURE_TYPE_ID, None)
     clear_iterate_session(session)

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.materials.views import (
+    MaterialBulkDeleteView,
     MaterialCreateView,
     MaterialDeleteView,
     MaterialDetailView,
@@ -21,6 +22,7 @@ urlpatterns = [
     path('create/', MaterialCreateView.as_view(), name='create'),
     path('import/', MaterialImportView.as_view(), name='import'),
     path('import/example.csv', MaterialImportExampleView.as_view(), name='import_example'),
+    path('bulk-delete/', MaterialBulkDeleteView.as_view(), name='bulk_delete'),
     path('<uuid:pk>/link/', MaterialLinkView.as_view(), name='link'),
     path('<uuid:pk>/edit/', MaterialUpdateView.as_view(), name='edit'),
     path('<uuid:pk>/tags/', MaterialTagsUpdateView.as_view(), name='tags'),

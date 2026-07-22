@@ -31,7 +31,7 @@
             {% endif %}
             {% if can_delete_material %}
             {% url 'materials:delete' material.pk as material_delete_url %}
-            {% include 'includes/table_action_icon.html' with action='delete' url=material_delete_url title='Удалить' %}
+            {% include 'includes/table_action_icon.html' with action='delete' url=material_delete_url title='Удалить' confirm_title='Удаление материала' confirm='Удалить этот материал вместе со свойствами, образцами и сканами? Действие нельзя отменить.' %}
             {% endif %}
             <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm ms-1">К списку</a>
         </div>
@@ -47,6 +47,12 @@
         <dl class="row mb-0">
             <dt class="col-sm-3">Описание</dt>
             <dd class="col-sm-9">{{ material.description_display|default:"—" }}</dd>
+            <dt class="col-sm-3">Производитель</dt>
+            <dd class="col-sm-9">{{ material.manufacturer|default:"—" }}</dd>
+            <dt class="col-sm-3">Доступность</dt>
+            <dd class="col-sm-9">{{ material.availability|default:"—" }}</dd>
+            <dt class="col-sm-3">Технология</dt>
+            <dd class="col-sm-9">{{ material.technology|default:"—" }}</dd>
             <dt class="col-sm-3">Создал</dt>
             <dd class="col-sm-9">{{ material|creator_display }}</dd>
             <dt class="col-sm-3">Создан</dt>

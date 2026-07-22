@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}
+{% if item %}Редактирование {{ item.name }}{% else %}{{ dictionary.create_label }}{% endif %} — База композитов
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h1 class="h5 mb-0">
+                    {% if item %}Редактирование «{{ item.name }}»{% else %}{{ dictionary.create_label }}{% endif %}
+                    <span class="text-muted fw-normal">· {{ dictionary.label }}</span>
+                </h1>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate data-dictionary-form-mode="{% if item %}edit{% else %}create{% endif %}">
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                        <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">{% if item %}Сохранить{% else %}Создать{% endif %}</button>
+                        <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="{% static 'js/dictionary_name_autofill.js' %}"></script>
+{% endblock %}

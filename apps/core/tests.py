@@ -275,6 +275,31 @@ class TagViewsTests(AuthenticatedWorkspaceTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Tag.objects.filter(pk=self.workspace_tag.pk).exists())
 
+    def test_tag_bulk_delete_confirm_then_delete(self):
+        extra = Tag.objects.create(name='Extra', slug='extra-bulk', workspace=self.workspace)
+        list_page = self.client.get(reverse('core:tag_list'))
+        self.assertContains(list_page, 'data-list-bulk-toggle')
+        self.assertContains(list_page, reverse('core:tag_bulk_delete'))
+
+        confirm = self.client.post(
+            reverse('core:tag_bulk_delete'),
+            {'ids': [str(self.workspace_tag.pk), str(extra.pk)]},
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, 'Prepreg')
+        self.assertContains(confirm, 'Extra')
+
+        done = self.client.post(
+            reverse('core:tag_bulk_delete'),
+            {
+                'ids': [str(self.workspace_tag.pk), str(extra.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('core:tag_list'))
+        self.assertFalse(Tag.objects.filter(pk=self.workspace_tag.pk).exists())
+        self.assertFalse(Tag.objects.filter(pk=extra.pk).exists())
+
     def test_tag_list_archive_filter(self):
         Tag.objects.create(
             name='Old tag',
@@ -801,6 +826,22 @@ class QuerySetFilterMixinTests(TestCase):
         self.assertEqual(context['active_tags'][0]['remove_url'], '/samples/?tag=field')
         self.assertEqual(context['active_tags'][1]['remove_url'], '/samples/?tag=lab')
 
+    def test_choice_filter_chip_has_remove_url(self):
+        request = RequestFactory().get(
+            '/samples/',
+            {'object_type': 'test', 'tag': 'lab', 'q': 'alpha'},
+        )
+        view = _SampleFilterView(request)
+        context = view.get_filter_context()
+        object_type_filter = next(
+            item for item in context['list_filters'] if item['param'] == 'object_type'
+        )
+        self.assertEqual(object_type_filter['value'], 'test')
+        self.assertEqual(
+            object_type_filter['remove_url'],
+            '/samples/?tag=lab&q=alpha',
+        )
+
 
 class HelpPageTests(TestCase):
     def test_help_page_renders(self):
@@ -817,10 +858,61 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Импорт из файла')
         self.assertContains(response, 'источнику импорта')
         self.assertContains(response, 'пример большой таблицы')
+        self.assertContains(response, 'Производитель')
+        self.assertContains(response, 'Справочники материалов')
         self.assertContains(response, 'марка::')
         self.assertContains(response, '4050/ 50мм')
         self.assertContains(response, '± погрешностью')
         self.assertContains(response, 'Знаков после запятой')
+        self.assertContains(response, 'исправить значения вручную')
+        self.assertContains(response, 'между колонками')
+
+
+class DashboardTests(AuthenticatedWorkspaceTestCase):
+    def test_dashboard_renders_workspace_desktop(self):
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Требуют внимания')
+        self.assertContains(response, 'dashboard-analytics-slot')
+        self.assertContains(response, 'Сводка')
+        self.assertContains(response, self.workspace.name)
+        self.assertContains(response, 'Недавние материалы')
+        self.assertContains(response, 'Недавние образцы')
+
+    def test_dashboard_shows_russian_date(self):
+        from django.utils import timezone
+
+        from apps.core.views import format_dashboard_date
+
+        today = timezone.localdate()
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertContains(response, format_dashboard_date(today))
+
+    def test_dashboard_attention_material_without_struct_type(self):
+        Material.objects.create(
+            code='NO-STRUCT',
+            name='No structure',
+            home_workspace=self.workspace,
+        )
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertContains(response, 'Материалы без типа структуры')
+        self.assertContains(response, 'NO-STRUCT')
+
+    def test_dashboard_empty_attention_when_no_issues(self):
+        structure_type = StructureType.objects.create(
+            name='Dash panel',
+            code='dash_panel',
+            table_name='structures_dash_panel',
+            is_created=True,
+        )
+        Material.objects.create(
+            code='WITH-STRUCT',
+            name='Has structure',
+            home_workspace=self.workspace,
+            struct_type=structure_type,
+        )
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertContains(response, 'Сейчас нет записей, требующих внимания.')
 
 
 class AppVersionTests(TestCase):
