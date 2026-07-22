@@ -21,6 +21,7 @@ from apps.core.list_filters import (
     QuerySetFilterMixin,
 )
 from apps.core.creator import assign_creator
+from apps.materials.bulk import bulk_delete_materials
 from apps.materials.form_validation import (
     build_material_form_validation_summary,
     validation_flash_message,
@@ -77,9 +78,13 @@ from apps.materials.imports.staging import (
     MATCH_POLICIES,
     MATCH_BY_NAME,
     apply_review_post,
+    apply_unrecognized_ignore_all,
+    apply_unrecognized_manual_fixes,
     build_staging_draft,
     drafts_from_session,
     drafts_to_session,
+    has_unresolved_unrecognized,
+    iter_unrecognized_fields,
 )
 from apps.materials.imports.upload import (
     clear_import_session,
@@ -487,10 +492,16 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
     search_placeholder = 'Введите текст для поиска...'
     choice_filters = (
         ('struct_type', 'struct_type_id'),
+        ('manufacturer', 'manufacturer_id'),
+        ('availability', 'availability_id'),
+        ('technology', 'technology_id'),
         ('import_source', 'import_source_filename'),
     )
     choice_filter_labels = {
         'struct_type': 'Тип структуры',
+        'manufacturer': 'Производитель',
+        'availability': 'Доступность',
+        'technology': 'Технология',
         'import_source': 'Источник импорта',
     }
 
@@ -538,8 +549,14 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
         else:
             base_qs = materials_in_workspace_tab(workspace)
         return self.filter_queryset(
-            base_qs.select_related('struct_type', 'home_workspace', 'created_by_user')
-            .prefetch_related('tags')
+            base_qs.select_related(
+                'struct_type',
+                'home_workspace',
+                'created_by_user',
+                'manufacturer',
+                'availability',
+                'technology',
+            ).prefetch_related('tags')
         )
 
     def get_context_data(self, **kwargs):
@@ -610,11 +627,22 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
             .values_list('import_source_filename', flat=True)
             .distinct()
         )
+        from apps.references.models import Availability, Manufacturer, Technology
+
         return {
             'struct_type': list(
                 structure_types_visible_in(workspace)
                 .order_by('name')
                 .values_list('pk', 'name')
+            ),
+            'manufacturer': list(
+                Manufacturer.objects.order_by('name').values_list('pk', 'name')
+            ),
+            'availability': list(
+                Availability.objects.order_by('name').values_list('pk', 'name')
+            ),
+            'technology': list(
+                Technology.objects.order_by('name').values_list('pk', 'name')
             ),
             'import_source': [(name, name) for name in import_sources],
         }
@@ -640,7 +668,13 @@ class MaterialDetailView(AppViewMixin, DetailView):
     def get_queryset(self):
         return (
             materials_visible_in(self.request.active_workspace)
-            .select_related('struct_type', 'home_workspace')
+            .select_related(
+                'struct_type',
+                'home_workspace',
+                'manufacturer',
+                'availability',
+                'technology',
+            )
             .prefetch_related('tags')
         )
 
@@ -833,6 +867,108 @@ class MaterialDeleteView(AppViewMixin, PermissionRequiredMixin, MaterialEditable
             return redirect('materials:detail', pk=self.object.pk)
 
 
+class MaterialBulkDeleteView(AppViewMixin, PermissionRequiredMixin, View):
+    """Confirm and delete several materials from the list (select mode)."""
+
+    permission_codename = WorkspacePerm.MATERIAL_DELETE
+    template_name = 'materials/material_bulk_confirm_delete.html'
+    max_items = 100
+
+    def get(self, request, *args, **kwargs):
+        return redirect('materials:list')
+
+    def _parse_ids(self, request) -> list[str]:
+        raw = request.POST.getlist('ids')
+        seen: set[str] = set()
+        ids: list[str] = []
+        for value in raw:
+            key = (value or '').strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            ids.append(key)
+            if len(ids) >= self.max_items:
+                break
+        return ids
+
+    def post(self, request, *args, **kwargs):
+        ids = self._parse_ids(request)
+        if not ids:
+            messages.warning(request, 'Не выбрано ни одного материала.')
+            return redirect('materials:list')
+
+        workspace = request.active_workspace
+        materials = list(
+            materials_visible_in(workspace)
+            .filter(pk__in=ids)
+            .select_related('struct_type')
+            .prefetch_related('used_in_composite_layers__parent_material')
+        )
+        by_pk = {str(m.pk): m for m in materials}
+        ordered = [by_pk[i] for i in ids if i in by_pk]
+        deletable = []
+        blocked = []
+        for material in ordered:
+            if not can_delete_in_workspace(request.user, material, workspace):
+                blocked.append({'material': material, 'reason': 'нет прав на удаление'})
+                continue
+            if material.used_in_composite_layers.exists():
+                blocked.append(
+                    {
+                        'material': material,
+                        'reason': 'используется как слой в другом материале',
+                    }
+                )
+                continue
+            deletable.append(material)
+
+        if request.POST.get('confirm') != '1':
+            return self.render_to_response(
+                {
+                    'deletable': deletable,
+                    'blocked': blocked,
+                    'ids': [str(m.pk) for m in deletable],
+                }
+            )
+
+        if not deletable:
+            messages.warning(request, 'Нет материалов, которые можно удалить.')
+            return redirect('materials:list')
+
+        result = bulk_delete_materials(
+            user=request.user,
+            workspace=workspace,
+            pks=[str(m.pk) for m in deletable],
+        )
+        if result.deleted_count:
+            messages.success(
+                request,
+                f'Удалено материалов: {result.deleted_count}.',
+            )
+        if result.skipped_protected:
+            messages.warning(
+                request,
+                'Не удалены (используются как слой): '
+                + '; '.join(result.skipped_protected[:5])
+                + ('…' if len(result.skipped_protected) > 5 else ''),
+            )
+        if result.skipped_forbidden:
+            messages.warning(
+                request,
+                'Не удалены (нет прав): '
+                + '; '.join(result.skipped_forbidden[:5])
+                + ('…' if len(result.skipped_forbidden) > 5 else ''),
+            )
+        if result.errors:
+            messages.error(request, 'Ошибки: ' + '; '.join(result.errors[:3]))
+        return redirect('materials:list')
+
+    def render_to_response(self, context):
+        from django.template.response import TemplateResponse
+
+        return TemplateResponse(self.request, self.template_name, context)
+
+
 def _serialize_material_property(item):
     from apps.references.models import Property
 
@@ -933,6 +1069,15 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
     template_name = 'materials/material_import.html'
     form_class = MaterialImportForm
 
+    def _material_importer(self, request, *, dry_run: bool, source_filename: str | None = None):
+        config = get_import_config(request.session)
+        return MaterialImporter(
+            workspace=request.active_workspace,
+            dry_run=dry_run,
+            source_filename=source_filename,
+            create_missing_dictionaries=bool(config.get('create_missing_dictionaries')),
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         session = self.request.session
@@ -943,7 +1088,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['has_staged_file'] = path is not None
         context['import_report'] = getattr(self, 'import_report', None)
         context['step'] = getattr(self, 'wizard_step', 'upload')
-        wizard_steps = (
+        wizard_step_defs = (
             ('upload', 'Загрузка'),
             ('configure', 'Лист и уникальность'),
             ('mapping', 'Сопоставление колонок'),
@@ -951,17 +1096,17 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         )
         step_key = 'review' if context['step'] == 'iterate' else context['step']
         step_num = 1
-        step_label = wizard_steps[0][1]
-        for index, (key, label) in enumerate(wizard_steps, start=1):
+        step_label = wizard_step_defs[0][1]
+        for index, (key, label) in enumerate(wizard_step_defs, start=1):
             if key == step_key:
                 step_num = index
                 step_label = label
                 break
-        context['wizard_steps'] = wizard_steps
+        context['wizard_step_defs'] = wizard_step_defs
         context['wizard_step_num'] = step_num
-        context['wizard_step_total'] = len(wizard_steps)
+        context['wizard_step_total'] = len(wizard_step_defs)
         context['wizard_step_label'] = step_label
-        context['wizard_step_percent'] = int(round(100 * step_num / len(wizard_steps)))
+        context['wizard_step_percent'] = int(round(100 * step_num / len(wizard_step_defs)))
         context['sheet_names'] = getattr(self, 'sheet_names', [])
         context['config'] = config
         context['wide_table'] = getattr(self, 'wide_table', None)
@@ -987,12 +1132,23 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['draft_create_count'] = sum(1 for d in draft_rows if d.action == 'create')
         context['draft_update_count'] = sum(1 for d in draft_rows if d.action == 'update')
         context['draft_skip_count'] = sum(1 for d in draft_rows if d.action == 'skip')
-        has_errors = bool(
+        post = self.request.POST if self.request.method == 'POST' else None
+        context['unrecognized_fields'] = iter_unrecognized_fields(draft_rows, post=post)
+        context['has_unrecognized'] = bool(context['unrecognized_fields'])
+        context['unrecognized_count'] = len(context['unrecognized_fields'])
+        has_validation_errors = bool(
             getattr(self, 'import_report', None) and not self.import_report.ok
         )
-        context['import_has_errors'] = has_errors
-        # При ошибках валидации запись запрещена — только возврат к сопоставлению.
-        context['can_apply'] = bool(draft_rows) and not has_errors
+        context['import_has_validation_errors'] = has_validation_errors
+        # Обратная совместимость шаблонов/тестов
+        context['import_has_errors'] = has_validation_errors
+        context['import_needs_field_review'] = context['has_unrecognized']
+        # Ошибки валидации и нераспознанные поля блокируют запись по разным причинам.
+        context['can_apply'] = (
+            bool(draft_rows)
+            and not has_validation_errors
+            and not context['has_unrecognized']
+        )
         context['layout_hint'] = getattr(self, 'layout_hint', '')
         context['detected_layout'] = getattr(self, 'detected_layout', None)
         context['structure_types'] = getattr(
@@ -1011,8 +1167,40 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['iterate_report'] = getattr(self, 'iterate_report', None)
         context['show_structure_type_error'] = getattr(self, 'show_structure_type_error', False)
         context['show_mapping_errors'] = getattr(self, 'show_mapping_errors', False)
+        step_status = self._wizard_step_status(context)
+        context['wizard_step_status'] = step_status
+        context['wizard_steps'] = [
+            {
+                'key': key,
+                'label': label,
+                'status': step_status.get(key, ''),
+            }
+            for key, label in context['wizard_step_defs']
+        ]
         context.update(_import_debug_context(self.request))
         return context
+
+    def _wizard_step_status(self, context) -> dict[str, str]:
+        """Статус кружка шага: error (красный) | warning (жёлтый) | ''."""
+        status: dict[str, str] = {
+            'upload': '',
+            'configure': '',
+            'mapping': '',
+            'review': '',
+        }
+        if context.get('show_structure_type_error'):
+            status['configure'] = 'error'
+        if (
+            context.get('show_mapping_errors')
+            or context.get('missing_required_targets')
+            or context.get('duplicate_mapping_targets')
+        ):
+            status['mapping'] = 'error'
+        if context.get('import_has_validation_errors'):
+            status['review'] = 'error'
+        elif context.get('has_unrecognized'):
+            status['review'] = 'warning'
+        return status
 
     def _importable_structure_types(self):
         return StructureType.objects.filter(is_active=True, is_created=True).order_by('name')
@@ -1081,6 +1269,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             'map_iterate': self._handle_map_iterate,
             'review_apply': self._handle_review_apply,
             'review_recheck': self._handle_review_recheck,
+            'review_resolve_ignore': self._handle_review_resolve_ignore,
+            'review_resolve_manual': self._handle_review_resolve_manual,
             'review_iterate_start': self._handle_review_iterate_start,
             'iterate_apply': self._handle_iterate_apply,
             'iterate_skip': self._handle_iterate_skip,
@@ -1143,6 +1333,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             messages.error(request, 'Номера строк должны быть числами.')
             return self._render_configure(request, path)
         match_policy = (request.POST.get('match_policy') or MATCH_BY_NAME).strip()
+        create_missing_dictionaries = request.POST.get('create_missing_dictionaries') == '1'
         sheet = (request.POST.get('sheet') or '').strip()
         structure_type_id = (request.POST.get('structure_type_id') or '').strip()
         if not structure_type_id:
@@ -1159,6 +1350,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             header_row=header_row,
             group_row=group_row,
             match_policy=match_policy,
+            create_missing_dictionaries=create_missing_dictionaries,
             structure_type_id=structure_type_id,
             mapping={},
             clear_draft=True,
@@ -1180,8 +1372,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 'target': value or TARGET_SKIP,
                 'parse': parse_mode,
             }
-        match_policy = (request.POST.get('match_policy') or MATCH_BY_NAME).strip()
-        set_import_config(request.session, mapping=mapping, match_policy=match_policy)
+        # Уникальность и справочники задаются на шаге «Лист и уникальность» —
+        # здесь их значения в сессии не трогаем.
+        set_import_config(
+            request.session,
+            mapping=mapping,
+        )
         targets = [normalize_mapping_entry(v)[0] for v in mapping.values()]
         if TARGET_NAME not in targets:
             messages.error(
@@ -1283,10 +1479,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         path, drafts, structure_type, early = self._load_review_drafts(request)
         if early is not None:
             return early
-        self.import_report = MaterialImporter(
-            workspace=request.active_workspace,
-            dry_run=True,
-        ).import_drafts(drafts, structure_type=structure_type)
+        self.import_report = self._material_importer(request, dry_run=True).import_drafts(
+            drafts, structure_type=structure_type
+        )
         if self.import_report.ok:
             messages.success(
                 request,
@@ -1300,12 +1495,59 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             )
         return self._render_review(request, path)
 
+    def _handle_review_resolve_ignore(self, request):
+        path, drafts, structure_type, early = self._load_review_drafts(request)
+        if early is not None:
+            return early
+        drafts = apply_unrecognized_ignore_all(drafts)
+        set_import_config(request.session, draft=drafts_to_session(drafts))
+        return self._apply_import_drafts(
+            request,
+            path,
+            drafts,
+            structure_type,
+            ignored_unrecognized=True,
+        )
+
+    def _handle_review_resolve_manual(self, request):
+        path, drafts, structure_type, early = self._load_review_drafts(request)
+        if early is not None:
+            return early
+        drafts, errors = apply_unrecognized_manual_fixes(drafts, request.POST)
+        if errors:
+            for error in errors[:8]:
+                messages.error(request, error)
+            if len(errors) > 8:
+                messages.error(request, f'… и ещё {len(errors) - 8} полей без корректного значения.')
+            self.draft_rows = drafts
+            return self._render_review(request, path)
+        set_import_config(request.session, draft=drafts_to_session(drafts))
+        return self._apply_import_drafts(request, path, drafts, structure_type)
+
     def _handle_review_apply(self, request):
         path, drafts, structure_type, early = self._load_review_drafts(request)
         if early is not None:
             return early
-        report = MaterialImporter(
-            workspace=request.active_workspace,
+        if has_unresolved_unrecognized(drafts):
+            messages.warning(
+                request,
+                'Сначала исправьте или пропустите нераспознанные поля — '
+                'это не ошибка черновика, а значения, которые система не разобрала автоматически.',
+            )
+            return self._render_review(request, path)
+        return self._apply_import_drafts(request, path, drafts, structure_type)
+
+    def _apply_import_drafts(
+        self,
+        request,
+        path,
+        drafts,
+        structure_type,
+        *,
+        ignored_unrecognized: bool = False,
+    ):
+        report = self._material_importer(
+            request,
             dry_run=False,
             source_filename=get_import_session_name(request.session),
         ).import_drafts(drafts, structure_type=structure_type)
@@ -1324,11 +1566,17 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 material_ids=report.affected_material_ids,
             )
         clear_import_session(request.session, delete_file=True)
+        ignored_note = (
+            ' Нераспознанные поля проигнорированы и остались пустыми.'
+            if ignored_unrecognized
+            else ''
+        )
         messages.success(
             request,
             'Импорт выполнен: '
             f'материалов создано {report.materials_created}, обновлено {report.materials_updated}; '
             f'свойств создано {report.properties_created}, обновлено {report.properties_updated}.'
+            + ignored_note
             + (
                 f' Отладка: можно удалить {len(report.affected_material_ids)} материал(ов) одной кнопкой.'
                 if settings.IMPORT_BATCH_UNDO and report.affected_material_ids
@@ -1353,10 +1601,15 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         if structure_type is None:
             messages.error(request, 'Не выбран тип структуры.')
             return redirect('materials:import')
-        report = MaterialImporter(
-            workspace=request.active_workspace,
-            dry_run=True,
-        ).import_drafts(drafts, structure_type=structure_type)
+        if has_unresolved_unrecognized(drafts):
+            messages.warning(
+                request,
+                'Построчный режим станет доступен после исправления или пропуска нераспознанных полей.',
+            )
+            return self._render_review(request, path)
+        report = self._material_importer(request, dry_run=True).import_drafts(
+            drafts, structure_type=structure_type
+        )
         if not report.ok:
             self.import_report = report
             messages.error(
@@ -1401,8 +1654,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         drafts[index] = draft
         set_import_config(request.session, draft=drafts_to_session(drafts))
 
-        report = MaterialImporter(
-            workspace=request.active_workspace,
+        report = self._material_importer(
+            request,
             dry_run=False,
             source_filename=get_import_session_name(request.session),
         ).import_drafts([draft], structure_type=structure_type)
@@ -1558,6 +1811,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             group_row=config.get('group_row'),
             match_policy=config.get('match_policy'),
             structure_type_id=config.get('structure_type_id'),
+            create_missing_dictionaries=bool(config.get('create_missing_dictionaries')),
         )
         MaterialImportProfile.objects.update_or_create(
             workspace=request.active_workspace,
@@ -1584,6 +1838,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             request.session,
             mapping=mapping,
             match_policy=profile.config.get('match_policy') or MATCH_BY_NAME,
+            create_missing_dictionaries=bool(profile.config.get('create_missing_dictionaries')),
             structure_type_id=profile.config.get('structure_type_id') or '',
             header_row=int(profile.config.get('header_row') or config.get('header_row') or 1),
             group_row=int(profile.config.get('group_row') or 0),
@@ -1647,10 +1902,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         drafts, structure_type, build_error = self._build_drafts(request, path)
         if build_error is not None:
             return build_error
-        self.import_report = MaterialImporter(
-            workspace=request.active_workspace,
-            dry_run=True,
-        ).import_drafts(drafts, structure_type=structure_type)
+        self.import_report = self._material_importer(request, dry_run=True).import_drafts(
+            drafts, structure_type=structure_type
+        )
         uncertain = sum(1 for d in drafts if d.has_uncertain)
         if self.import_report.ok and uncertain:
             messages.warning(
@@ -1781,10 +2035,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             return self._render_configure(request, path)
         # Не перетираем отчёт, если его уже посчитали в этом запросе (apply/recheck).
         if getattr(self, 'import_report', None) is None:
-            self.import_report = MaterialImporter(
-                workspace=request.active_workspace,
-                dry_run=True,
-            ).import_drafts(self.draft_rows, structure_type=structure_type)
+            self.import_report = self._material_importer(request, dry_run=True).import_drafts(
+                self.draft_rows, structure_type=structure_type
+            )
         self.selected_structure_type = structure_type
         self.wizard_step = 'review'
         self.sheet_names = list_sheet_names(path)
@@ -1819,10 +2072,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         self.draft_rows = drafts
         self.wizard_step = 'iterate'
         if getattr(self, 'iterate_report', None) is None and structure_type is not None:
-            self.iterate_report = MaterialImporter(
-                workspace=request.active_workspace,
-                dry_run=True,
-            ).import_drafts([self.iterate_draft], structure_type=structure_type)
+            self.iterate_report = self._material_importer(request, dry_run=True).import_drafts(
+                [self.iterate_draft], structure_type=structure_type
+            )
         return self.render_to_response(self.get_context_data(form=self.get_form_class()()))
 
     def _load_table(self, path, config):

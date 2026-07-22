@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block title %}Справочники материалов — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Справочники материалов</h1>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-4">
+            Готовые списки для карточки материала: кто произвёл, есть ли на складе, какая технология.
+            Общие для всей системы (не зависят от пространства).
+            {% if is_system_admin %}
+            Добавлять и менять значения могут только администраторы.
+            {% else %}
+            Просмотр доступен всем; изменение — только администраторам.
+            {% endif %}
+        </p>
+        <div class="row g-3">
+            {% for card in dictionary_cards %}
+            <div class="col-md-4">
+                <a href="{{ card.list_url }}" class="text-decoration-none">
+                    <div class="border rounded p-3 h-100 hover-shadow">
+                        <h2 class="h5 mb-2">{{ card.label }}</h2>
+                        <p class="mb-0 text-muted small">{{ card.count }} всего</p>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

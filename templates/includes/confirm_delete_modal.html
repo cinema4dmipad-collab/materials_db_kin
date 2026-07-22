@@ -1,0 +1,26 @@
+{# Global delete confirmation dialog (Bootstrap). Driven by static/js/confirm_delete.js #}
+<div class="modal fade" id="app-confirm-delete-modal" tabindex="-1"
+     aria-labelledby="app-confirm-delete-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="app-confirm-delete-title" data-confirm-delete-title>
+                    Удаление
+                </h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body" data-confirm-delete-body>
+                Удалить эту запись? Действие нельзя отменить.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-danger" data-confirm-delete-submit>
+                    Удалить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<form id="app-confirm-delete-form" method="post" class="d-none" hidden aria-hidden="true">
+    {% csrf_token %}
+</form>

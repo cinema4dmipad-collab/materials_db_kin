@@ -2,12 +2,64 @@ from django import forms
 from django.forms import inlineformset_factory
 
 from apps.references.constants import DEFAULT_PROPERTY_DECIMAL_PLACES, MAX_PROPERTY_DECIMAL_PLACES
-from apps.references.models import Property, PropertyChoice, PropertyGroup
+from apps.references.models import Availability, Manufacturer, Property, PropertyChoice, PropertyGroup, Technology
 from apps.structures.identifiers import normalize_identifier
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
 _BOOTSTRAP_TEXTAREA = {'class': 'form-control', 'rows': 3}
+
+
+class _DictionaryItemFormBase(forms.ModelForm):
+    class Meta:
+        fields = ['name', 'code', 'description']
+        widgets = {
+            'name': forms.TextInput(attrs={**_BOOTSTRAP_INPUT, 'data-dictionary-name-source': 'true'}),
+            'code': forms.TextInput(attrs={**_BOOTSTRAP_INPUT, 'data-dictionary-code-target': 'true'}),
+            'description': forms.Textarea(attrs=_BOOTSTRAP_TEXTAREA),
+        }
+        labels = {
+            'name': 'Название',
+            'code': 'Код',
+            'description': 'Описание',
+        }
+        help_texts = {
+            'code': 'Латинский идентификатор. Можно оставить пустым — заполнится из названия.',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['code'].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        name = (cleaned_data.get('name') or '').strip()
+        code = (cleaned_data.get('code') or '').strip()
+        if not name:
+            self.add_error('name', 'Укажите название.')
+        if not code and name:
+            code = normalize_identifier(name, max_length=64)
+        if not code:
+            self.add_error('code', 'Укажите код или название.')
+        else:
+            cleaned_data['code'] = code
+        cleaned_data['name'] = name
+        return cleaned_data
+
+
+class ManufacturerForm(_DictionaryItemFormBase):
+    class Meta(_DictionaryItemFormBase.Meta):
+        model = Manufacturer
+
+
+class AvailabilityForm(_DictionaryItemFormBase):
+    class Meta(_DictionaryItemFormBase.Meta):
+        model = Availability
+
+
+class TechnologyForm(_DictionaryItemFormBase):
+    class Meta(_DictionaryItemFormBase.Meta):
+        model = Technology
 
 
 class PropertyForm(forms.ModelForm):

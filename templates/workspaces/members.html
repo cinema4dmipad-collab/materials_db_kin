@@ -149,24 +149,19 @@
 
                             {% include 'includes/table_action_icon.html' with action='edit' url=member_edit_url title='Изменить' %}
 
-                            <form method="post" action="{% url 'workspaces:member_delete' workspace.pk member.user.pk %}" class="table-action-form d-inline">
-
+                            <form method="post"
+                                  action="{% url 'workspaces:member_delete' workspace.pk member.user.pk %}"
+                                  class="table-action-form d-inline"
+                                  data-confirm-delete-form
+                                  data-confirm-title="Удаление участника"
+                                  data-confirm-message="Удалить участника из пространства?">
                                 {% csrf_token %}
-
                                 <button type="submit"
-
                                         class="btn btn-sm table-action-btn btn-action-delete"
-
                                         title="Удалить"
-
-                                        aria-label="Удалить"
-
-                                        onclick="return confirm('Удалить участника из пространства?');">
-
+                                        aria-label="Удалить">
                                     {% include 'includes/table_action_icon_svg.html' with action='delete' %}
-
                                 </button>
-
                             </form>
 
                             </div>

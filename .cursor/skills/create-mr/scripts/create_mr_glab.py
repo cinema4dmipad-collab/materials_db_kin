@@ -62,6 +62,14 @@ def extract_existing_mr_iid(resp: Dict[str, Any]) -> Optional[int]:
 
 
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Create/update GitLab MR via origin-glab.")
+    parser.add_argument("--description-file", default="mr_description.md")
+    parser.add_argument("--title", required=True)
+    parser.add_argument("--target", default="develop")
+    args = parser.parse_args()
+
     repo_root = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         check=True,
@@ -69,9 +77,12 @@ def main() -> int:
         text=True,
     ).stdout.strip()
     root = Path(repo_root)
-    description = (root / "mr_description.md").read_text(encoding="utf-8").strip()
+    description_path = Path(args.description_file)
+    if not description_path.is_absolute():
+        description_path = root / description_path
+    description = description_path.read_text(encoding="utf-8").strip()
     if not description:
-        raise RuntimeError("mr_description.md is empty")
+        raise RuntimeError(f"{description_path} is empty")
 
     branch = subprocess.run(
         ["git", "branch", "--show-current"],
@@ -79,8 +90,8 @@ def main() -> int:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    target = "develop"
-    title = "feat(workspaces): material links, create-from-template, and shared sample access"
+    target = args.target.strip() or "develop"
+    title = args.title.strip()
 
     subprocess.run(["git", "push", "-u", REMOTE, branch], check=True)
 

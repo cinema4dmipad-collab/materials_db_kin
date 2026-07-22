@@ -20,6 +20,30 @@ class Material(WorkspaceVisibilityMixin, models.Model):
     # Длинные «названия» из сводных (укладка, ориентации слоёв) — нормальны для композитов.
     name = models.CharField(max_length=1000, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
+    manufacturer = models.ForeignKey(
+        'references.Manufacturer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='materials',
+        verbose_name='Производитель',
+    )
+    availability = models.ForeignKey(
+        'references.Availability',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='materials',
+        verbose_name='Доступность',
+    )
+    technology = models.ForeignKey(
+        'references.Technology',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='materials',
+        verbose_name='Технология',
+    )
     struct_type = models.ForeignKey(
         'structures.StructureType',
         on_delete=models.PROTECT,

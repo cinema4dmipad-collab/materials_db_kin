@@ -72,10 +72,14 @@
             {% if filter.value %}
                 {% for value, label in filter.options %}
                     {% if filter.value == value|stringformat:'s' %}
-        <span class="list-filter-chip">
+        <a href="{{ filter.remove_url }}"
+           class="list-filter-chip list-filter-chip--removable"
+           title="Убрать фильтр «{{ filter.label }}»"
+           aria-label="Убрать фильтр «{{ filter.label }}»: {{ label }}">
             <span class="list-filter-chip__key">{{ filter.label }}</span>
             {{ label }}
-        </span>
+            <span class="list-filter-chip__remove" aria-hidden="true">&times;</span>
+        </a>
                     {% endif %}
                 {% endfor %}
             {% endif %}

@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление {{ item.name }} — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Удаление из справочника «{{ dictionary.label }}»</h1>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            Вы уверены, что хотите удалить
+            <strong>{{ item.name }}</strong> (<code>{{ item.code }}</code>)?
+            {% if material_count %}
+            У {{ material_count }} материал{{ material_count|pluralize:"а,ов" }} поле станет пустым.
+            {% endif %}
+        </div>
+        <form method="post" class="d-flex gap-2">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Удалить</button>
+            <a href="{% url 'references:dictionary_list' dictionary_slug %}" class="btn btn-outline-secondary">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

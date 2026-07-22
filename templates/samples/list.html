@@ -1,62 +1,93 @@
 {% extends 'base.html' %}
-{% load ui_tags %}
+{% load static ui_tags %}
 
 {% block title %}Образцы — База композитов{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+<div class="card list-bulk" data-list-bulk>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h1 class="h4 mb-0">Образцы</h1>
-        <a href="{% url 'samples:create' %}" class="btn btn-primary btn-sm">Создать</a>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            {% if samples %}
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm"
+                    data-list-bulk-toggle
+                    aria-pressed="false">
+                Выбрать
+            </button>
+            {% endif %}
+            <a href="{% url 'samples:create' %}" class="btn btn-primary btn-sm">Создать</a>
+        </div>
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
         {% if samples %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
-                <thead>
-                    <tr>
-                        <th>Код</th>
-                        <th>Название</th>
-                        <th>Материал</th>
-                        <th>Тип объекта</th>
-                        <th>Теги</th>
-                        <th>Создал</th>
-                        <th>Создан</th>
-                        <th class="text-end">Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for sample in samples %}
-                    <tr>
-                        <td>
-                            {% url 'samples:detail' sample.pk as sample_detail_url %}
-                            {% include 'includes/entity_code.html' with code=sample.code url=sample_detail_url tone=sample.material.struct_type.display_color %}
-                        </td>
-                        <td>{{ sample.name }}</td>
-                        <td>
-                            {% url 'materials:detail' sample.material.pk as sample_material_url %}
-                            {% include 'includes/entity_code.html' with code=sample.material.code url=sample_material_url tone=sample.material.struct_type.display_color %}
-                        </td>
-                        <td>{% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type use_object_type_filter=True %}</td>
-                        <td>{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</td>
-                        <td>{% include 'includes/creator_filter_link.html' with obj=sample %}</td>
-                        <td>{{ sample.created_at|date:"d.m.Y H:i" }}</td>
-                        <td class="text-end">
-                            <div class="table-actions">
-                            {% url 'samples:detail' sample.pk as sample_detail_url %}
-                            {% include 'includes/table_action_icon.html' with action='view' url=sample_detail_url title='Просмотр' %}
-                            {% url 'samples:edit' sample.pk as sample_edit_url %}
-                            {% include 'includes/table_action_icon.html' with action='edit' url=sample_edit_url title='Изменить' %}
-                            {% url 'samples:delete' sample.pk as sample_delete_url %}
-                            {% include 'includes/table_action_icon.html' with action='delete' url=sample_delete_url title='Удалить' %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <form method="post"
+              action="{% url 'samples:bulk_delete' %}"
+              data-list-bulk-form
+              data-confirm-title="Удаление образцов"
+              data-confirm-message="Удалить выбранные образцы ({count}) вместе со сканами и вложениями? Действие нельзя отменить."
+              data-confirm-submit="Удалить выбранные">
+            {% csrf_token %}
+            {% include 'includes/list_bulk_toolbar.html' with bulk_id='samples' %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                    <thead>
+                        <tr>
+                            <th class="list-bulk-col" scope="col">
+                                <span class="visually-hidden">Выбор</span>
+                            </th>
+                            <th>Код</th>
+                            <th>Название</th>
+                            <th>Материал</th>
+                            <th>Тип объекта</th>
+                            <th>Теги</th>
+                            <th>Создал</th>
+                            <th>Создан</th>
+                            <th class="text-end">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sample in samples %}
+                        <tr>
+                            <td class="list-bulk-col">
+                                <input type="checkbox"
+                                       class="form-check-input"
+                                       name="ids"
+                                       value="{{ sample.pk }}"
+                                       data-list-bulk-item
+                                       disabled
+                                       aria-label="Выбрать {{ sample.code }}">
+                            </td>
+                            <td>
+                                {% url 'samples:detail' sample.pk as sample_detail_url %}
+                                {% include 'includes/entity_code.html' with code=sample.code url=sample_detail_url tone=sample.material.struct_type.display_color %}
+                            </td>
+                            <td>{{ sample.name }}</td>
+                            <td>
+                                {% url 'materials:detail' sample.material.pk as sample_material_url %}
+                                {% include 'includes/entity_code.html' with code=sample.material.code url=sample_material_url tone=sample.material.struct_type.display_color %}
+                            </td>
+                            <td>{% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type use_object_type_filter=True %}</td>
+                            <td>{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</td>
+                            <td>{% include 'includes/creator_filter_link.html' with obj=sample %}</td>
+                            <td>{{ sample.created_at|date:"d.m.Y H:i" }}</td>
+                            <td class="text-end">
+                                <div class="table-actions">
+                                {% url 'samples:detail' sample.pk as sample_detail_url %}
+                                {% include 'includes/table_action_icon.html' with action='view' url=sample_detail_url title='Просмотр' %}
+                                {% url 'samples:edit' sample.pk as sample_edit_url %}
+                                {% include 'includes/table_action_icon.html' with action='edit' url=sample_edit_url title='Изменить' %}
+                                {% url 'samples:delete' sample.pk as sample_delete_url %}
+                                {% include 'includes/table_action_icon.html' with action='delete' url=sample_delete_url title='Удалить' %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
 
         <div class="p-3">
         {% include 'includes/pagination.html' %}
@@ -73,4 +104,8 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/list_bulk_select.js' %}?v={{ app_version }}-bulk2"></script>
 {% endblock %}

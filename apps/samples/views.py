@@ -4,10 +4,12 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
+from django.template.response import TemplateResponse
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.core.bulk import parse_bulk_ids
 from apps.core.creator import assign_creator
 from apps.core.file_download import build_file_download_response
 
@@ -375,6 +377,57 @@ class SampleDeleteView(AppViewMixin, DeleteView):
 
     def get_queryset(self):
         return samples_in_workspace(self.request.active_workspace)
+
+
+class SampleBulkDeleteView(AppViewMixin, View):
+    template_name = 'includes/bulk_confirm_delete.html'
+    max_items = 100
+
+    def get(self, request, *args, **kwargs):
+        return redirect('samples:list')
+
+    def post(self, request, *args, **kwargs):
+        ids = parse_bulk_ids(request, max_items=self.max_items)
+        if not ids:
+            messages.warning(request, 'Не выбрано ни одного образца.')
+            return redirect('samples:list')
+
+        workspace = request.active_workspace
+        samples = list(
+            samples_in_workspace(workspace).filter(pk__in=ids).select_related('material')
+        )
+        by_pk = {str(s.pk): s for s in samples}
+        deletable = [by_pk[i] for i in ids if i in by_pk]
+
+        if request.POST.get('confirm') != '1':
+            return TemplateResponse(
+                request,
+                self.template_name,
+                {
+                    'page_title': 'Удаление выбранных образцов',
+                    'warning_text': (
+                        f'Будут удалены <strong>{len(deletable)}</strong> образец(ов) '
+                        'вместе со сканами и вложениями.'
+                    ),
+                    'deletable': [
+                        {'label': s.name, 'code': s.code} for s in deletable
+                    ],
+                    'blocked': [],
+                    'ids': [str(s.pk) for s in deletable],
+                    'cancel_url': reverse('samples:list'),
+                },
+            )
+
+        if not deletable:
+            messages.warning(request, 'Нет образцов для удаления.')
+            return redirect('samples:list')
+
+        deleted = 0
+        for sample in deletable:
+            sample.delete()
+            deleted += 1
+        messages.success(request, f'Удалено образцов: {deleted}.')
+        return redirect('samples:list')
 
 
 class SampleAttachmentMixin:

@@ -14,7 +14,8 @@ from apps.materials.imports.report import ImportReport
 from apps.materials.imports.staging import DraftMaterial
 from apps.materials.imports.validate import HybridImportItem, validate_drafts, validate_rows
 from apps.materials.models import Material, MaterialProperty
-from apps.references.models import Property
+from apps.references.dictionaries import materialize_pending_dictionary
+from apps.references.models import Availability, Manufacturer, Property, Technology
 from apps.structures.models import StructureType
 from apps.structures.table_storage import insert_row, update_row
 from apps.workspaces.models import Workspace
@@ -27,10 +28,13 @@ class MaterialImporter:
         workspace: Workspace,
         dry_run: bool = False,
         source_filename: str | None = None,
+        create_missing_dictionaries: bool = False,
     ):
         self.workspace = workspace
         self.dry_run = dry_run
         self.source_filename = (source_filename or '').strip()
+        self.create_missing_dictionaries = create_missing_dictionaries
+        self._dictionary_apply_pending: dict = {}
 
     def import_file(self, path: Path | str) -> ImportReport:
         file_path = Path(path)
@@ -76,11 +80,14 @@ class MaterialImporter:
         structure_type: StructureType,
     ) -> ImportReport:
         report = ImportReport(dry_run=self.dry_run)
+        self._dictionary_apply_pending = {}
         items = validate_drafts(
             drafts,
             structure_type=structure_type,
             workspace=self.workspace,
             report=report,
+            create_missing_dictionaries=self.create_missing_dictionaries,
+            dry_run=self.dry_run,
         )
         if report.errors:
             return report
@@ -294,6 +301,39 @@ class MaterialImporter:
             defaults['name'] = item.name
         if self.source_filename:
             defaults['import_source_filename'] = self.source_filename
+        manufacturer_id = item.manufacturer_id
+        if not manufacturer_id and item.manufacturer_create:
+            manufacturer = materialize_pending_dictionary(
+                Manufacturer,
+                item.manufacturer_create[0],
+                item.manufacturer_create[1],
+                self._dictionary_apply_pending,
+            )
+            manufacturer_id = str(manufacturer.pk)
+        availability_id = item.availability_id
+        if not availability_id and item.availability_create:
+            availability = materialize_pending_dictionary(
+                Availability,
+                item.availability_create[0],
+                item.availability_create[1],
+                self._dictionary_apply_pending,
+            )
+            availability_id = str(availability.pk)
+        technology_id = item.technology_id
+        if not technology_id and item.technology_create:
+            technology = materialize_pending_dictionary(
+                Technology,
+                item.technology_create[0],
+                item.technology_create[1],
+                self._dictionary_apply_pending,
+            )
+            technology_id = str(technology.pk)
+        if manufacturer_id:
+            defaults['manufacturer_id'] = manufacturer_id
+        if availability_id:
+            defaults['availability_id'] = availability_id
+        if technology_id:
+            defaults['technology_id'] = technology_id
 
         if item.existing_pk:
             material = Material.objects.get(pk=item.existing_pk, home_workspace=self.workspace)

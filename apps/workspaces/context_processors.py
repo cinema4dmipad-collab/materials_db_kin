@@ -45,7 +45,14 @@ def workspace_navigation(request):
             'icon': 'bi-sliders',
             'url': reverse('references:list'),
             'visible': can(WorkspacePerm.PROPERTY_VIEW),
-            'is_active': lambda n, u: n == 'references',
+            'is_active': lambda n, u: n == 'references' and not (u or '').startswith('dictionary'),
+        },
+        {
+            'label': 'Справочники',
+            'icon': 'bi-journal-bookmark',
+            'url': reverse('references:dictionary_hub'),
+            'visible': can(WorkspacePerm.PROPERTY_VIEW),
+            'is_active': lambda n, u: n == 'references' and (u or '').startswith('dictionary'),
         },
         {
             'label': 'Теги',

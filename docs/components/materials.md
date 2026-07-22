@@ -6,7 +6,7 @@ Central catalog of composite materials.
 
 ## Model
 
-**Material** — code, name, description, `struct_type` (FK to StructureType), tags, `home_workspace`, `visibility_mode`, creator (`created_by_user`), timestamps.
+**Material** — code, name, description, optional FKs to global dictionaries (`manufacturer`, `availability`, `technology`), `struct_type` (FK to StructureType), tags, `home_workspace`, `visibility_mode`, creator (`created_by_user`), timestamps, `import_source_filename`.
 
 Related data:
 

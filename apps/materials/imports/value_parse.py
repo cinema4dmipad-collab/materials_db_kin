@@ -28,6 +28,17 @@ PARSE_MODES_SHORT = (
 CONFIDENCE_OK = 'ok'
 CONFIDENCE_UNCERTAIN = 'uncertain'
 
+# Ячейки, требующие ручного ввода техника (dual warp/weft, пометки «на 1дм» и т.п.)
+_ANNOTATION_PREFIX_RE = re.compile(
+    r'^\s*\([^)]+\)\s+',
+    re.UNICODE,
+)
+# Два числовых значения через «/» (160(+10)/100(±10), 160/100) — не strip-width «4050/50мм»
+_STRIP_WIDTH_SUFFIX_RE = re.compile(
+    r'^[+]?\d+(?:[.,]\d+)?\s*[a-zA-Zа-яА-ЯёЁ%°µμ/]{1,8}\s*$',
+    re.UNICODE,
+)
+
 # Типичные «пустые» значения в сводных Excel (прочерк, н/д и т.п.)
 _BLANK_CELL_RE = re.compile(
     r'^(?:'
@@ -40,8 +51,9 @@ _BLANK_CELL_RE = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# «30±3», а также текстовые варианты «30+/-3», «30+-3»
 _TOLERANCE_RE = re.compile(
-    r'^\s*([+-]?\d+(?:[.,]\d+)?)\s*[±]\s*([+]?\d+(?:[.,]\d+)?)\s*$',
+    r'^\s*([+-]?\d+(?:[.,]\d+)?)\s*(?:±|\+/-|\+-)\s*([+]?\d+(?:[.,]\d+)?)\s*$',
     re.UNICODE,
 )
 # В сводных часто пишут «0,27+0,035» / «12+1 /м» вместо «±»
@@ -60,9 +72,12 @@ _NUMBER_WITH_UNIT_RE = re.compile(
     r'^\s*([+-]?\d+(?:[.,]\d+)?)\s*[a-zA-Zа-яА-ЯёЁ%°²³µμ]+[a-zA-Zа-яА-ЯёЁ0-9%°²³µμ/\-\s]*$',
     re.UNICODE,
 )
-# «4050/50мм», «4050 / 50 мм» — нагрузка на ширину полоски: берём первое число
+# «4050/50мм», «4050 / 50 мм» — нагрузка на ширину полоски: берём первое число.
+# После второго числа только единицы (без второго «/»), иначе это основа/уток
+# вроде «900/2200 Н/50мм».
 _NUMBER_PER_STRIP_RE = re.compile(
-    r'^\s*([+-]?\d+(?:[.,]\d+)?)\s*/\s*[+]?\d+(?:[.,]\d+)?\s*[a-zA-Zа-яА-ЯёЁ%°²³µμ]*\s*$',
+    r'^\s*([+-]?\d+(?:[.,]\d+)?)\s*/\s*[+]?\d+(?:[.,]\d+)?\s*'
+    r'[a-zA-Zа-яА-ЯёЁ%°²³µμ]+(?:\s*[a-zA-Zа-яА-ЯёЁ%°²³µμ]+)*\s*$',
     re.UNICODE,
 )
 
@@ -203,6 +218,44 @@ def _looks_messy(text: str) -> bool:
     if text.count(' ') > 4 and any(ch.isdigit() for ch in text):
         return True
     if re.search(r'\d', text) and re.search(r'[A-Za-zА-Яа-я]', text):
+        return True
+    return False
+
+
+def _is_dual_numeric_slash(text: str) -> bool:
+    """Два числа через «/» (основа/уток), не «4050/50мм»."""
+    if '/' not in text:
+        return False
+    if _NUMBER_PER_STRIP_RE.match(text):
+        return False
+    left, right = text.split('/', 1)
+    left = left.strip()
+    right = right.strip()
+    if not left or not right:
+        return False
+    if _STRIP_WIDTH_SUFFIX_RE.match(right):
+        return False
+    left_num = re.match(r'^[+]?\d+(?:[.,]\d+)?', left)
+    right_num = re.match(r'^[+]?\d+(?:[.,]\d+)?', right)
+    return bool(left_num and right_num)
+
+
+def needs_manual_recognition(raw, parsed: dict | None, *, expects_number: bool) -> bool:
+    """
+    True если ячейку нельзя автоматически положить в числовое поле без участия техника.
+    """
+    if not expects_number:
+        return False
+    if parsed is None:
+        return False
+    text = str(raw).replace('\u00a0', ' ').strip()
+    if not text:
+        return False
+    if _ANNOTATION_PREFIX_RE.match(text):
+        return True
+    if _is_dual_numeric_slash(text):
+        return True
+    if parsed.get('confidence') == CONFIDENCE_UNCERTAIN:
         return True
     return False
 

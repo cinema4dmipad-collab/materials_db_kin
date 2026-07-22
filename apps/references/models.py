@@ -7,6 +7,40 @@ from apps.core.unit_display import looks_like_unit
 from apps.references.constants import DEFAULT_PROPERTY_DECIMAL_PLACES
 
 
+class ReferenceDictionaryItem(models.Model):
+    """Глобальный справочник-константа (производитель, доступность, технология…)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=64, unique=True, verbose_name='Код')
+    name = models.CharField(max_length=200, unique=True, verbose_name='Название')
+    description = models.TextField(blank=True, verbose_name='Описание')
+
+    class Meta:
+        abstract = True
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Manufacturer(ReferenceDictionaryItem):
+    class Meta(ReferenceDictionaryItem.Meta):
+        verbose_name = 'производитель'
+        verbose_name_plural = 'производители'
+
+
+class Availability(ReferenceDictionaryItem):
+    class Meta(ReferenceDictionaryItem.Meta):
+        verbose_name = 'доступность'
+        verbose_name_plural = 'доступность'
+
+
+class Technology(ReferenceDictionaryItem):
+    class Meta(ReferenceDictionaryItem.Meta):
+        verbose_name = 'технология'
+        verbose_name_plural = 'технологии'
+
+
 class PropertyGroup(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)

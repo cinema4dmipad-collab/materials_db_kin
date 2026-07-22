@@ -492,12 +492,18 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             'code',
             'name',
             'description',
+            'manufacturer',
+            'availability',
+            'technology',
             'struct_type',
         ]
         widgets = {
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'description': forms.Textarea(attrs={**_BOOTSTRAP_INPUT, 'rows': 3}),
+            'manufacturer': forms.Select(attrs=_BOOTSTRAP_SELECT),
+            'availability': forms.Select(attrs=_BOOTSTRAP_SELECT),
+            'technology': forms.Select(attrs=_BOOTSTRAP_SELECT),
             'struct_type': forms.Select(attrs=structure_type_select_widget_attrs()),
         }
 
@@ -523,6 +529,14 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             is_active=True,
         ).order_by('name')
         self.fields['struct_type'].empty_label = 'Без типа структуры'
+        from apps.references.models import Availability, Manufacturer, Technology
+
+        self.fields['manufacturer'].queryset = Manufacturer.objects.order_by('name')
+        self.fields['manufacturer'].empty_label = '— не указан —'
+        self.fields['availability'].queryset = Availability.objects.order_by('name')
+        self.fields['availability'].empty_label = '— не указана —'
+        self.fields['technology'].queryset = Technology.objects.order_by('name')
+        self.fields['technology'].empty_label = '— не указана —'
         self.structure_type = self._selected_structure_type()
         self.structure_fields = []
         self.structure_decimal_fields = []

@@ -43,15 +43,23 @@ from apps.materials.imports.staging import (
     DraftMaterial,
     DraftProperty,
     DraftStructureValue,
+    RECOGNITION_IGNORED,
+    RECOGNITION_MANUAL,
+    RECOGNITION_OK,
+    RECOGNITION_UNRECOGNIZED,
     apply_review_post,
+    apply_unrecognized_ignore_all,
+    apply_unrecognized_manual_fixes,
     build_staging_draft,
     draft_to_import_rows,
     drafts_from_session,
     drafts_to_session,
+    has_unresolved_unrecognized,
+    iter_unrecognized_fields,
 )
 from apps.materials.imports.upload import get_import_config, set_import_config
-from apps.materials.imports.value_parse import parse_property_cell
-from apps.materials.imports.wide import detect_header_layout, load_wide_table
+from apps.materials.imports.value_parse import needs_manual_recognition, parse_property_cell
+from apps.materials.imports.wide import WideColumn, WideTable, detect_header_layout, load_wide_table
 from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Property, PropertyGroup
 from apps.structures.models import StructureField, StructureType
@@ -656,6 +664,168 @@ class MaterialImportHybridTests(TestCase):
         material = Material.objects.get(code='NAME-ONLY-1', home_workspace=self.workspace)
         self.assertEqual(material.name, 'Только название')
         self.assertIsNone(material.struct_props_id)
+
+    def test_unknown_manufacturer_errors_without_create_option(self):
+        from apps.materials.imports.staging import DraftMaterial
+
+        drafts = [
+            DraftMaterial(
+                source_row=2,
+                name='С тканью',
+                code='DICT-ERR-1',
+                description='',
+                tags='',
+                action='create',
+                manufacturer='Unknown Vendor XYZ',
+            ),
+        ]
+        report = MaterialImporter(workspace=self.workspace).import_drafts(
+            drafts,
+            structure_type=self.structure_type,
+        )
+        self.assertFalse(report.ok)
+        self.assertTrue(any('не найден' in err.message for err in report.errors))
+
+    def test_create_missing_dictionaries_with_dedupe(self):
+        from apps.materials.imports.staging import DraftMaterial
+        from apps.references.models import Manufacturer
+
+        drafts = [
+            DraftMaterial(
+                source_row=2,
+                name='Мат A',
+                code='DICT-A',
+                description='',
+                tags='',
+                action='create',
+                manufacturer='Solvay Specialty',
+            ),
+            DraftMaterial(
+                source_row=3,
+                name='Мат B',
+                code='DICT-B',
+                description='',
+                tags='',
+                action='create',
+                manufacturer='solvay specialty',
+            ),
+            DraftMaterial(
+                source_row=4,
+                name='Мат C',
+                code='DICT-C',
+                description='',
+                tags='',
+                action='create',
+                # Same normalized code as existing seed "Hexcel" → link, not create
+                manufacturer='HEXCEL!!!',
+            ),
+        ]
+        dry = MaterialImporter(
+            workspace=self.workspace,
+            dry_run=True,
+            create_missing_dictionaries=True,
+        ).import_drafts(drafts, structure_type=self.structure_type)
+        self.assertTrue(dry.ok, dry.errors)
+        self.assertEqual(len(dry.dictionaries_created), 1)
+        self.assertIn('Solvay Specialty', dry.dictionaries_created[0])
+        self.assertTrue(dry.dictionaries_linked_by_code)
+        self.assertFalse(Manufacturer.objects.filter(name='Solvay Specialty').exists())
+
+        report = MaterialImporter(
+            workspace=self.workspace,
+            create_missing_dictionaries=True,
+        ).import_drafts(drafts, structure_type=self.structure_type)
+        self.assertTrue(report.ok, report.errors)
+        vendor = Manufacturer.objects.get(name='Solvay Specialty')
+        self.assertEqual(Manufacturer.objects.filter(name__iexact='solvay specialty').count(), 1)
+        hexcel = Manufacturer.objects.get(code='hexcel')
+        self.assertEqual(Material.objects.get(code='DICT-A').manufacturer_id, vendor.pk)
+        self.assertEqual(Material.objects.get(code='DICT-B').manufacturer_id, vendor.pk)
+        self.assertEqual(Material.objects.get(code='DICT-C').manufacturer_id, hexcel.pk)
+
+    def test_create_reuses_on_integrity_error(self):
+        """If insert races/collides, reuse existing row instead of hard error."""
+        from apps.materials.imports.staging import DraftMaterial
+        from apps.references.dictionaries import resolve_or_create_dictionary_item
+        from apps.references.models import Manufacturer
+
+        existing = Manufacturer.objects.create(name='Sino-Composites', code='sino_composites')
+        # Simulate path that tries to create the same again (pending empty).
+        result = resolve_or_create_dictionary_item(
+            Manufacturer,
+            'Sino-Composites',
+            create_missing=True,
+            dry_run=False,
+            pending={},
+        )
+        self.assertIsNone(result.error)
+        self.assertEqual(result.item.pk, existing.pk)
+        self.assertTrue(result.matched_existing)
+
+        # Name differs but code would collide — should link by code, not error.
+        result2 = resolve_or_create_dictionary_item(
+            Manufacturer,
+            'Sino Composites',
+            create_missing=True,
+            dry_run=False,
+            pending={},
+        )
+        self.assertIsNone(result2.error, result2.error)
+        self.assertEqual(result2.item.pk, existing.pk)
+        self.assertTrue(result2.linked_by_code)
+
+        drafts = [
+            DraftMaterial(
+                source_row=2,
+                name='SC mat',
+                code='SC-1',
+                description='',
+                tags='',
+                action='create',
+                manufacturer='Sino-Composites',
+            ),
+        ]
+        report = MaterialImporter(
+            workspace=self.workspace,
+            create_missing_dictionaries=True,
+        ).import_drafts(drafts, structure_type=self.structure_type)
+        self.assertTrue(report.ok, report.errors)
+        self.assertEqual(Material.objects.get(code='SC-1').manufacturer_id, existing.pk)
+
+    def test_ambiguous_dictionary_match_is_error(self):
+        from apps.materials.imports.staging import DraftMaterial
+        from apps.references.models import Manufacturer
+
+        Manufacturer.objects.create(name='Acme One', code='acme_one')
+        Manufacturer.objects.create(name='Acme', code='shared_token')
+        # Craft collision: raw text matching two rows is hard with unique name/code.
+        # Use same iexact on code for one and name for another via identical token:
+        Manufacturer.objects.filter(code='shared_token').update(code='acme')
+        # Now "acme" matches code of second; add third with name Acme Dup - wait name Acme exists.
+        # Two matches: code__iexact=acme → one row; name__iexact=acme → same row if name is Acme.
+        # For true ambiguity need name of A matching code of B:
+        Manufacturer.objects.filter(name='Acme One').update(code='other')
+        Manufacturer.objects.filter(name='Acme').update(name='Other Acme', code='acme_x')
+        Manufacturer.objects.create(name='Token', code='dup_key')
+        Manufacturer.objects.create(name='dup_key', code='dup_key_2')
+
+        drafts = [
+            DraftMaterial(
+                source_row=2,
+                name='Amb',
+                code='DICT-AMB',
+                description='',
+                tags='',
+                action='create',
+                manufacturer='dup_key',
+            ),
+        ]
+        report = MaterialImporter(
+            workspace=self.workspace,
+            create_missing_dictionaries=True,
+        ).import_drafts(drafts, structure_type=self.structure_type)
+        self.assertFalse(report.ok)
+        self.assertTrue(any('неоднозначно' in err.message for err in report.errors))
 
     def test_rows_without_name_become_validation_errors(self):
         """Без названия нельзя тихо пропустить строку — нужна ошибка валидации."""
@@ -1329,6 +1499,295 @@ class MaterialImportIterateUnitTests(TestCase):
         updated = apply_iterate_row_post(draft, {'name': '  new name  ', 'code': '  NEW-1  '})
         self.assertEqual(updated.name, 'new name')
         self.assertEqual(updated.code, 'NEW-1')
+
+
+class MaterialImportUnrecognizedFieldTests(TestCase):
+    def setUp(self):
+        self.workspace = ensure_legacy_workspace()
+        self.structure_type, self.density_field = create_import_structure_type(
+            code='unrecognized_fabric',
+            table_name='structures_unrecognized_fabric',
+        )
+        group = PropertyGroup.objects.create(name='Unrecognized import group', sort_order=1)
+        self.breaking_prop = Property.objects.create(
+            name='breaking_load',
+            display_name='Разрывная',
+            data_type='number',
+            group=group,
+        )
+
+    def tearDown(self):
+        SQLExecutor.drop_table(self.structure_type)
+
+    def test_needs_manual_recognition_for_dual_slash_and_annotation(self):
+        dual_raw = '160(+10)/100(±10)'
+        dual_parsed = parse_property_cell(dual_raw)
+        self.assertTrue(needs_manual_recognition(dual_raw, dual_parsed, expects_number=True))
+
+        annotation_raw = '(на 1дм) основа/уток'
+        annotation_parsed = parse_property_cell(annotation_raw)
+        self.assertTrue(needs_manual_recognition(annotation_raw, annotation_parsed, expects_number=True))
+
+        clean_parsed = parse_property_cell('260')
+        self.assertFalse(needs_manual_recognition('260', clean_parsed, expects_number=True))
+
+        strip_parsed = parse_property_cell('4050/50мм')
+        self.assertFalse(needs_manual_recognition('4050/50мм', strip_parsed, expects_number=True))
+
+        # Без единиц это основа/уток, а не «на полоску»
+        dual_bare = parse_property_cell('900/2200')
+        self.assertTrue(needs_manual_recognition('900/2200', dual_bare, expects_number=True))
+
+    def test_text_parse_mode_on_number_field_uses_auto_parse(self):
+        """Для number-поля режим «Текст» в staging переключается на авто — «30±3» не ломается."""
+        table = WideTable(
+            sheet_name='CSV',
+            header_row=1,
+            columns=[
+                WideColumn(index=0, label='Наименование'),
+                WideColumn(index=1, label='Плотность'),
+            ],
+            rows=[{0: 'Ткань A', 1: '30±3'}],
+            preview_rows=[{0: 'Ткань A', 1: '30±3'}],
+        )
+        mapping = {
+            '0': {'target': 'material.name', 'parse': 'auto'},
+            '1': {'target': f'property:{self.breaking_prop.pk}', 'parse': 'text'},
+        }
+        drafts = build_staging_draft(
+            table,
+            mapping,
+            workspace=self.workspace,
+            match_policy=MATCH_BY_NAME,
+            structure_type_id=str(self.structure_type.pk),
+        )
+        prop = drafts[0].properties[0]
+        self.assertEqual(prop.recognition, RECOGNITION_OK)
+        self.assertEqual(prop.value, '30')
+        self.assertEqual(prop.value_b, '3')
+        self.assertEqual(prop.property_label, 'Разрывная')
+
+    def test_tolerance_slash_variants_parse(self):
+        for raw in ('30±3', '30 +/- 3', '30+-3'):
+            parsed = parse_property_cell(raw)
+            self.assertEqual(parsed['value_kind'], 'tolerance', raw)
+            self.assertEqual(parsed['value'], '30', raw)
+            self.assertEqual(parsed['value_b'], '3', raw)
+
+    def test_warp_weft_with_units_needs_manual_recognition(self):
+        raw = '900/2200 Н/50мм'
+        parsed = parse_property_cell(raw)
+        self.assertTrue(needs_manual_recognition(raw, parsed, expects_number=True))
+        strip = parse_property_cell('4050/50мм')
+        self.assertFalse(needs_manual_recognition('4050/50мм', strip, expects_number=True))
+        self.assertEqual(strip['value'], '4050')
+
+    def test_validate_blocks_unresolved_unrecognized_fields(self):
+        from apps.materials.imports.validate import validate_drafts
+        from apps.materials.imports.report import ImportReport
+
+        draft = DraftMaterial(
+            source_row=3,
+            name='Ткань A',
+            code='fab-a',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name=self.density_field.name,
+                    field_label='Плотность пов',
+                    column_label='Плотность',
+                    raw='900/2200 Н/50мм',
+                    value_kind='scalar',
+                    value='',
+                    value_b='',
+                    confidence='uncertain',
+                    note='не распознано автоматически',
+                    include=True,
+                    recognition=RECOGNITION_UNRECOGNIZED,
+                )
+            ],
+        )
+        dry_report = ImportReport(dry_run=True)
+        validate_drafts(
+            [draft],
+            structure_type=self.structure_type,
+            workspace=self.workspace,
+            report=dry_report,
+            dry_run=True,
+        )
+        self.assertTrue(dry_report.ok)
+
+        apply_report = ImportReport(dry_run=False)
+        validate_drafts(
+            [draft],
+            structure_type=self.structure_type,
+            workspace=self.workspace,
+            report=apply_report,
+            dry_run=False,
+        )
+        self.assertFalse(apply_report.ok)
+        self.assertTrue(any('не распознано' in err.message for err in apply_report.errors))
+
+    def test_build_staging_marks_unrecognized_numeric_cells(self):
+        table = WideTable(
+            sheet_name='CSV',
+            header_row=1,
+            columns=[
+                WideColumn(index=0, label='Наименование'),
+                WideColumn(index=1, label='Разрывная основа/уток'),
+            ],
+            rows=[{0: 'Ткань A', 1: '160(+10)/100(±10)'}],
+            preview_rows=[{0: 'Ткань A', 1: '160(+10)/100(±10)'}],
+        )
+        mapping = {
+            '0': {'target': 'material.name', 'parse': 'auto'},
+            '1': {'target': f'structure:{self.density_field.name}', 'parse': 'auto'},
+        }
+        drafts = build_staging_draft(
+            table,
+            mapping,
+            workspace=self.workspace,
+            match_policy=MATCH_BY_NAME,
+            structure_type_id=str(self.structure_type.pk),
+        )
+        self.assertEqual(len(drafts), 1)
+        struct = drafts[0].structure_values[0]
+        self.assertEqual(struct.recognition, RECOGNITION_UNRECOGNIZED)
+        self.assertEqual(struct.raw, '160(+10)/100(±10)')
+        self.assertTrue(has_unresolved_unrecognized(drafts))
+        self.assertEqual(len(iter_unrecognized_fields(drafts)), 1)
+
+    def test_apply_unrecognized_ignore_all_clears_values(self):
+        draft = DraftMaterial(
+            source_row=2,
+            name='Ткань A',
+            code='fab-a',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Плотность пов',
+                    column_label='Разрывная',
+                    raw='160(+10)/100(±10)',
+                    value_kind='scalar',
+                    value='',
+                    value_b='',
+                    confidence='uncertain',
+                    note='не распознано автоматически',
+                    include=True,
+                    recognition=RECOGNITION_UNRECOGNIZED,
+                )
+            ],
+        )
+        updated = apply_unrecognized_ignore_all([draft])[0]
+        struct = updated.structure_values[0]
+        self.assertEqual(struct.recognition, RECOGNITION_IGNORED)
+        self.assertFalse(struct.include)
+        self.assertFalse(has_unresolved_unrecognized([updated]))
+
+    def test_apply_unrecognized_manual_fixes_parses_values(self):
+        draft = DraftMaterial(
+            source_row=2,
+            name='Ткань A',
+            code='fab-a',
+            description='',
+            tags='',
+            action='create',
+            properties=[
+                DraftProperty(
+                    property_name='Разрывная',
+                    property_id=str(self.breaking_prop.pk),
+                    column_label='Разрывная основа/уток',
+                    raw='160(+10)/100(±10)',
+                    value_kind='scalar',
+                    value='',
+                    value_b='',
+                    confidence='uncertain',
+                    note='не распознано автоматически',
+                    include=True,
+                    recognition=RECOGNITION_UNRECOGNIZED,
+                )
+            ],
+        )
+        updated, errors = apply_unrecognized_manual_fixes(
+            [draft],
+            {'fix_prop_0_0': '160 ± 10'},
+        )
+        self.assertEqual(errors, [])
+        prop = updated[0].properties[0]
+        self.assertEqual(prop.recognition, RECOGNITION_MANUAL)
+        self.assertEqual(prop.value, '160')
+        self.assertEqual(prop.value_b, '10')
+        self.assertFalse(has_unresolved_unrecognized(updated))
+
+    def test_apply_unrecognized_manual_fixes_skips_individual_field(self):
+        draft = DraftMaterial(
+            source_row=2,
+            name='Ткань A',
+            code='fab-a',
+            description='',
+            tags='',
+            action='create',
+            properties=[
+                DraftProperty(
+                    property_name='Разрывная',
+                    property_id=str(self.breaking_prop.pk),
+                    column_label='Разрывная основа/уток',
+                    raw='160(+10)/100(±10)',
+                    value_kind='scalar',
+                    value='',
+                    value_b='',
+                    confidence='uncertain',
+                    note='не распознано автоматически',
+                    include=True,
+                    recognition=RECOGNITION_UNRECOGNIZED,
+                )
+            ],
+        )
+        updated, errors = apply_unrecognized_manual_fixes(
+            [draft],
+            {'skip_fix_prop_0_0': '1'},
+        )
+        self.assertEqual(errors, [])
+        prop = updated[0].properties[0]
+        self.assertEqual(prop.recognition, RECOGNITION_IGNORED)
+        self.assertFalse(prop.include)
+
+    def test_iter_unrecognized_fields_prefills_raw_value(self):
+        draft = DraftMaterial(
+            source_row=18,
+            name='Ткань A',
+            code='fab-a',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Разрывная нагрузка',
+                    column_label='Разрывная основа',
+                    raw='900/2200 Н/50мм',
+                    value_kind='scalar',
+                    value='',
+                    value_b='',
+                    confidence='uncertain',
+                    note='не распознано автоматически',
+                    include=True,
+                    recognition=RECOGNITION_UNRECOGNIZED,
+                )
+            ],
+        )
+        items = iter_unrecognized_fields([draft])
+        self.assertEqual(items[0]['fix_value'], '900/2200 Н/50мм')
+        items_after_post = iter_unrecognized_fields(
+            [draft],
+            post={'fix_struct_0_0': '900'},
+        )
+        self.assertEqual(items_after_post[0]['fix_value'], '900')
 
 
 class MaterialImportDebugUndoTests(TestCase):

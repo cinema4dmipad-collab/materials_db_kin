@@ -4,7 +4,7 @@
 {% block title %}Импорт материалов — База композитов{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-map3" rel="stylesheet">
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-map4" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -33,15 +33,18 @@
              aria-valuenow="{{ wizard_step_num }}"
              aria-label="Прогресс мастера импорта: {{ wizard_step_label }}">
             <ol class="import-wizard-steps__list">
-                {% for key, label in wizard_steps %}
-                <li class="import-wizard-steps__item{% if forloop.counter < wizard_step_num %} is-done{% elif forloop.counter == wizard_step_num %} is-current{% endif %}">
+                {% for item in wizard_steps %}
+                <li class="import-wizard-steps__item{% if forloop.counter < wizard_step_num %} is-done{% elif forloop.counter == wizard_step_num %} is-current{% endif %}{% if item.status == 'error' %} is-error{% elif item.status == 'warning' %} is-warning{% endif %}">
                     {% if not forloop.first %}
                     <span class="import-wizard-steps__line" aria-hidden="true"></span>
                     {% endif %}
                     <span class="import-wizard-steps__dot" aria-hidden="true">
-                        {% if forloop.counter < wizard_step_num %}✓{% else %}{{ forloop.counter }}{% endif %}
+                        {% if item.status == 'error' %}!
+                        {% elif item.status == 'warning' %}!
+                        {% elif forloop.counter < wizard_step_num %}✓
+                        {% else %}{{ forloop.counter }}{% endif %}
                     </span>
-                    <span class="import-wizard-steps__label">{{ label }}</span>
+                    <span class="import-wizard-steps__label">{{ item.label }}</span>
                 </li>
                 {% endfor %}
             </ol>
@@ -113,6 +116,20 @@
                     {% endfor %}
                 </select>
                 <div class="form-text">«По названию» — разным Т-23/Т-13 не мешает общая марка Е-стекло</div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-check mt-4">
+                    <input type="checkbox" class="form-check-input" name="create_missing_dictionaries"
+                           value="1" id="import-create-missing-dictionaries"
+                           {% if config.create_missing_dictionaries %}checked{% endif %}>
+                    <label class="form-check-label" for="import-create-missing-dictionaries">
+                        Создавать неизвестные значения справочников
+                    </label>
+                    <div class="form-text">
+                        Производитель / доступность / технология: если нет в справочнике — создать
+                        (с проверкой дубликатов по имени и коду). В отчёте проверки будет список.
+                    </div>
+                </div>
             </div>
             <div class="col-md-6">
                 <label class="form-label" for="import-structure-type">
@@ -223,15 +240,6 @@
               class="import-map-constructor-form"
               data-required-targets="{% for target, label in required_import_targets %}{{ target }}{% if not forloop.last %},{% endif %}{% endfor %}">
             {% csrf_token %}
-            <div class="mb-3 col-md-5">
-                <label class="form-label" for="map-match-policy">Уникальность записей</label>
-                <select name="match_policy" id="map-match-policy" class="form-select form-select-sm">
-                    {% for value, label in match_policies %}
-                    <option value="{{ value }}"{% if config.match_policy == value %} selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
             <div class="import-map-constructor mb-3">
                 <section class="import-map-panel import-map-constructor__main" aria-label="Сопоставление колонок">
                     <div class="import-map-panel__head">
@@ -369,32 +377,160 @@
         <p class="small text-muted mb-3">
             Файл: <strong>{{ staged_filename }}</strong>
             {% if selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
+            · <a href="{% url 'materials:import' %}?step=mapping">Сопоставление</a>
+            · <a href="{% url 'materials:import' %}?step=configure">Лист и структура</a>
         </p>
 
-        <div class="d-flex flex-wrap gap-2 mb-3">
-            <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-outline-primary btn-sm">
-                ← К сопоставлению колонок
-            </a>
-            <a href="{% url 'materials:import' %}?step=configure" class="btn btn-outline-secondary btn-sm">
-                ← Лист и структура
-            </a>
+        {% if has_unrecognized %}
+        <div class="import-unrecognized-panel mb-3" id="import-unrecognized-fields">
+            <div class="import-unrecognized-panel__title">
+                <span class="badge text-bg-warning me-2">Предупреждение</span>
+                Нераспознанные значения
+            </div>
+            <p class="import-unrecognized-panel__meta mb-2">
+                Черновик: {{ draft_create_count }} созд.{% if draft_update_count %}, {{ draft_update_count }} обн.{% endif %}
+                · требуют внимания: <strong>{{ unrecognized_count }}</strong>
+            </p>
+            <p class="import-unrecognized-panel__hint mb-3" id="import-unrecognized-hint">
+                Отредактируйте значение в поле с оранжевой рамкой или отметьте «Пропустить».
+                После подтверждения импорт запишется сразу — без промежуточного экрана.
+            </p>
+            <form method="post" class="mb-0" id="import-unrecognized-form">
+                {% csrf_token %}
+                <div class="table-responsive import-unrecognized-table-wrap mb-3">
+                    <table class="table table-sm align-middle mb-0 import-unrecognized-table">
+                        <thead>
+                            <tr>
+                                <th>Строка</th>
+                                <th>Материал</th>
+                                <th>Колонка Excel</th>
+                                <th>Поле / свойство</th>
+                                <th style="min-width: 20rem;">Исправить значение</th>
+                                <th class="text-center" style="width: 6rem;">Пропустить</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in unrecognized_fields %}
+                            <tr>
+                                <td>{{ item.source_row }}</td>
+                                <td>{{ item.material_label }}</td>
+                                <td>{{ item.column_label }}</td>
+                                <td>{{ item.target_label }}</td>
+                                <td>
+                                    <label class="import-unrecognized-input-wrap mb-0">
+                                        <span class="visually-hidden">
+                                            Исправить значение для {{ item.column_label }}
+                                        </span>
+                                        <input type="text"
+                                               class="form-control import-unrecognized-input"
+                                               name="{{ item.input_name }}"
+                                               value="{{ item.fix_value }}"
+                                               autocomplete="off"
+                                               spellcheck="false"
+                                               placeholder="Число, диапазон или ±"
+                                               aria-describedby="import-unrecognized-hint">
+                                    </label>
+                                </td>
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input"
+                                           name="{{ item.skip_name }}" value="1"
+                                           {% if item.skip_checked %}checked{% endif %}
+                                           title="Не записывать это поле">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="submit" name="action" value="review_resolve_manual"
+                            class="btn btn-primary"
+                            data-import-busy="1">
+                        Сохранить исправления и записать
+                    </button>
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            data-bs-toggle="modal"
+                            data-bs-target="#import-ignore-unrecognized-modal">
+                        Игнорировать все и записать
+                    </button>
+                </div>
+            </form>
         </div>
 
-        {% if import_has_errors %}
+        <div class="modal fade" id="import-ignore-unrecognized-modal" tabindex="-1"
+             aria-labelledby="import-ignore-unrecognized-title" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title fs-5" id="import-ignore-unrecognized-title">
+                            Игнорировать нераспознанные поля?
+                        </h2>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-2">
+                            Если продолжить, <strong>{{ unrecognized_count }}</strong>
+                            {% if unrecognized_count == 1 %}поле останется пустым{% else %}полей останутся пустыми{% endif %}
+                            после записи материалов.
+                        </p>
+                        <p class="mb-0 small text-muted">
+                            Значения из Excel для этих свойств не будут сохранены.
+                            Остальные поля черновика запишутся как обычно.
+                        </p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                            Отменить
+                        </button>
+                        <button type="submit"
+                                form="import-unrecognized-form"
+                                name="action"
+                                value="review_resolve_ignore"
+                                class="btn btn-warning"
+                                data-bs-dismiss="modal"
+                                data-import-busy="1">
+                            Всё равно продолжить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if import_has_validation_errors and import_report and import_report.errors %}
+        <div class="card border-danger mb-3" id="import-validation-report">
+            <div class="card-header py-2">
+                <span class="fw-semibold text-danger">Также есть ошибки валидации</span>
+                <span class="small text-muted ms-2">Исправьте их после нераспознанных полей</span>
+            </div>
+            <div class="card-body py-2">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Строка</th><th>Колонка</th><th>Ошибка</th></tr></thead>
+                        <tbody>
+                            {% for error in import_report.errors %}
+                            <tr>
+                                <td>{{ error.row|default:"—" }}</td>
+                                <td>{% if error.column %}<code>{{ error.column }}</code>{% else %}—{% endif %}</td>
+                                <td>{{ error.message }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+
+        {% if import_has_validation_errors %}
         <div class="alert alert-danger py-3 mb-3">
             <div class="fw-semibold mb-1">Есть ошибки валидации — запись запрещена</div>
-            <p class="mb-2 small">
-                «Применить» и построчный режим недоступны, пока ошибки не устранены.
+            <p class="mb-0 small">
+                Подробности — в блоке «Проверка перед записью» ниже.
                 Вернитесь к сопоставлению колонок, поправьте маппинг и снова соберите черновик.
             </p>
-            <div class="d-flex flex-wrap gap-2">
-                <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-primary btn-sm">
-                    Исправить сопоставление
-                </a>
-                <a href="#import-validation-report" class="btn btn-outline-secondary btn-sm">
-                    Смотреть ошибки
-                </a>
-            </div>
         </div>
         {% endif %}
 
@@ -408,6 +544,9 @@
                 {% endif %}
                 {% if uncertain_count %}
                 <li class="text-warning">Сомнительных строк: {{ uncertain_count }}</li>
+                {% endif %}
+                {% if unrecognized_count %}
+                <li class="text-warning">Нераспознанных полей: {{ unrecognized_count }}</li>
                 {% endif %}
             </ul>
         </div>
@@ -535,7 +674,7 @@
                 </p>
             </div>
 
-            {% if import_has_errors %}
+            {% if import_has_validation_errors %}
             <div class="d-flex flex-wrap gap-2 align-items-center">
                 <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-primary">
                     Исправить сопоставление
@@ -555,12 +694,10 @@
                         {% if not can_apply %}disabled{% endif %}>
                     Перейти в построчный режим
                 </button>
-                <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-link btn-sm">
-                    ← К сопоставлению
-                </a>
             </div>
             {% endif %}
         </form>
+        {% endif %}
         {% endif %}
 
         {% if has_staged_file and step == 'iterate' and iterate_draft %}
@@ -717,7 +854,7 @@
     </div>
 </div>
 
-{% if import_report %}
+{% if import_report and step == 'review' and not has_unrecognized %}
 <div class="card mb-4" id="import-validation-report">
     <div class="card-header">
         <h2 class="h5 mb-0">{% if import_report.dry_run %}Проверка перед записью{% else %}Результат{% endif %}</h2>
@@ -743,13 +880,6 @@
                 </tbody>
             </table>
         </div>
-        {% if step == 'review' %}
-        <div class="d-flex flex-wrap gap-2 mt-3">
-            <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-outline-primary btn-sm">
-                ← К сопоставлению колонок
-            </a>
-        </div>
-        {% endif %}
         {% elif import_report.ok %}
         <p class="text-success mb-0">Ошибок валидации нет.</p>
         {% endif %}
@@ -771,6 +901,6 @@
 {% block extra_scripts %}
 <script src="{% static 'js/import_busy.js' %}?v={{ app_version }}-map3"></script>
 {% if step == 'mapping' %}
-<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map4"></script>
+<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map5"></script>
 {% endif %}
 {% endblock %}

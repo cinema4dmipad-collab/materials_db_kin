@@ -11,7 +11,11 @@
         </div>
         <div class="text-nowrap">
             <a href="{% url 'structures:edit' structure_type.code record.id %}" class="btn btn-primary btn-sm">Изменить</a>
-            <a href="{% url 'structures:delete' structure_type.code record.id %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            <a href="{% url 'structures:delete' structure_type.code record.id %}"
+               class="btn btn-outline-danger btn-sm"
+               data-confirm-delete
+               data-confirm-title="Удаление записи"
+               data-confirm-message="Удалить запись «{{ record_label }}» типа «{{ structure_type.name }}»? Действие нельзя отменить.">Удалить</a>
             <a href="{% url 'structures:list' structure_type.code %}" class="btn btn-outline-secondary btn-sm">К списку</a>
         </div>
     </div>

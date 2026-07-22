@@ -107,6 +107,37 @@ class SampleViewsTests(TestCase):
 
         self.assertTrue(Sample.objects.filter(code='SMP-UI-002').exists())
 
+    def test_sample_bulk_delete(self):
+        other = Sample.objects.create(
+            code='SMP-UI-BULK',
+            name='Bulk sample',
+            material=self.material,
+            object_type='test',
+            workspace=self.legacy_workspace,
+        )
+        list_page = self.client.get(reverse('samples:list'))
+        self.assertContains(list_page, 'data-list-bulk-toggle')
+        self.assertContains(list_page, reverse('samples:bulk_delete'))
+
+        confirm = self.client.post(
+            reverse('samples:bulk_delete'),
+            {'ids': [str(self.sample.pk), str(other.pk)]},
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, 'UI sample')
+        self.assertContains(confirm, 'Bulk sample')
+
+        done = self.client.post(
+            reverse('samples:bulk_delete'),
+            {
+                'ids': [str(self.sample.pk), str(other.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('samples:list'))
+        self.assertFalse(Sample.objects.filter(pk=self.sample.pk).exists())
+        self.assertFalse(Sample.objects.filter(pk=other.pk).exists())
+
     def test_sample_list_filters_by_object_type_search(self):
         Sample.objects.create(
             code='SMP-UI-CTRL',

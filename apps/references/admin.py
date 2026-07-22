@@ -1,6 +1,27 @@
 from django.contrib import admin
 
-from .models import Property, PropertyChoice, PropertyGroup
+from .models import Availability, Manufacturer, Property, PropertyChoice, PropertyGroup, Technology
+
+
+class DictionaryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code']
+    search_fields = ['name', 'code', 'description']
+    ordering = ['name']
+
+
+@admin.register(Manufacturer)
+class ManufacturerAdmin(DictionaryAdmin):
+    pass
+
+
+@admin.register(Availability)
+class AvailabilityAdmin(DictionaryAdmin):
+    pass
+
+
+@admin.register(Technology)
+class TechnologyAdmin(DictionaryAdmin):
+    pass
 
 
 @admin.register(PropertyGroup)

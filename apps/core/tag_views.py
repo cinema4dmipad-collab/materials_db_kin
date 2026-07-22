@@ -1,9 +1,13 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count
+from django.shortcuts import redirect
+from django.template.response import TemplateResponse
 from django.urls import reverse, reverse_lazy
+from django.views import View
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
+from apps.core.bulk import parse_bulk_ids
 from apps.core.context_processors import invalidate_all_tag_suggestions_cache, invalidate_tag_suggestions_cache
 from apps.core.creator import assign_creator
 from apps.core.forms import TagForm
@@ -299,3 +303,77 @@ class TagDeleteView(AppViewMixin, DeleteView):
             invalidate_tag_suggestions_cache(workspace_id)
         messages.success(self.request, f'Тег «{name}» удалён.')
         return response
+
+
+class TagBulkDeleteView(AppViewMixin, View):
+    template_name = 'includes/bulk_confirm_delete.html'
+    max_items = 100
+
+    def get(self, request, *args, **kwargs):
+        return redirect('core:tag_list')
+
+    def post(self, request, *args, **kwargs):
+        ids = parse_bulk_ids(request, max_items=self.max_items)
+        if not ids:
+            messages.warning(request, 'Не выбрано ни одного тега.')
+            return redirect('core:tag_list')
+
+        workspace = request.active_workspace
+        tags = list(tags_in_workspace(workspace).filter(pk__in=ids))
+        by_pk = {str(t.pk): t for t in tags}
+        deletable = []
+        blocked = []
+        for key in ids:
+            tag = by_pk.get(key)
+            if tag is None:
+                continue
+            if not can_manage_tag(request.user, tag, workspace):
+                blocked.append({'label': tag.name, 'code': '', 'reason': 'нет прав'})
+                continue
+            deletable.append(tag)
+
+        if request.POST.get('confirm') != '1':
+            return TemplateResponse(
+                request,
+                self.template_name,
+                {
+                    'page_title': 'Удаление выбранных тегов',
+                    'warning_text': (
+                        f'Будут удалены <strong>{len(deletable)}</strong> тег(ов). '
+                        'Связи с материалами, образцами и сканами снимутся.'
+                    ),
+                    'deletable': [
+                        {'label': t.name, 'code': ''} for t in deletable
+                    ],
+                    'blocked': blocked,
+                    'ids': [str(t.pk) for t in deletable],
+                    'cancel_url': reverse('core:tag_list'),
+                },
+            )
+
+        if not deletable:
+            messages.warning(request, 'Нет тегов, которые можно удалить.')
+            return redirect('core:tag_list')
+
+        deleted = 0
+        touched_global = False
+        workspace_ids: set = set()
+        for tag in deletable:
+            if not can_manage_tag(request.user, tag, workspace):
+                continue
+            name = tag.name
+            if tag.is_global:
+                touched_global = True
+            elif tag.workspace_id:
+                workspace_ids.add(tag.workspace_id)
+            tag.delete()
+            deleted += 1
+        if touched_global:
+            invalidate_all_tag_suggestions_cache()
+        for ws_id in workspace_ids:
+            invalidate_tag_suggestions_cache(ws_id)
+        if deleted:
+            messages.success(request, f'Удалено тегов: {deleted}.')
+        if blocked:
+            messages.warning(request, f'Пропущено (нет прав): {len(blocked)}.')
+        return redirect('core:tag_list')

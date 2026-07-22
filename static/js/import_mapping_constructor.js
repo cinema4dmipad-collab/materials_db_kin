@@ -93,7 +93,7 @@
             slot.setAttribute('draggable', isSkip ? 'false' : 'true');
             slot.title = isSkip
                 ? 'Перетащите поле сюда или выберите строку и кликните поле справа'
-                : 'Перетащите обратно в каталог, чтобы очистить';
+                : 'Перетащите в другую колонку или обратно в каталог';
         }
         var labelEl = rowLabelEl(row);
         if (labelEl) {
@@ -156,7 +156,8 @@
         return { counts: counts, columns: columns };
     }
 
-    function canAssignTarget(row, target) {
+    function canAssignTarget(row, target, options) {
+        options = options || {};
         if (!target || MULTI_OK[target]) {
             return true;
         }
@@ -164,8 +165,29 @@
         if (input && input.value === target) {
             return true;
         }
-        var usage = targetUsage();
-        return !usage.counts[target];
+        var ignoreIndex = options.ignoreColumnIndex;
+        var taken = rows.some(function (other) {
+            if (other === row) {
+                return false;
+            }
+            if (
+                ignoreIndex != null
+                && other.getAttribute('data-column-index') === String(ignoreIndex)
+            ) {
+                // Перенос из другой колонки: текущий «владелец» цели не блокирует drop.
+                return false;
+            }
+            var otherInput = rowTargetInput(other);
+            return !!(otherInput && otherInput.value === target);
+        });
+        return !taken;
+    }
+
+    function assignOptionsFromPayload(payload) {
+        if (payload && payload.source === 'row' && payload.columnIndex != null) {
+            return { ignoreColumnIndex: payload.columnIndex };
+        }
+        return {};
     }
 
     function refreshCatalogState() {
@@ -252,7 +274,7 @@
         if (payload.source === 'row' && String(payload.columnIndex) === row.getAttribute('data-column-index')) {
             return;
         }
-        var allowed = canAssignTarget(row, payload.target);
+        var allowed = canAssignTarget(row, payload.target, assignOptionsFromPayload(payload));
         slot.classList.toggle('is-drop-hover', allowed);
         slot.classList.toggle('is-drop-blocked', !allowed);
         row.classList.toggle('is-drop-over', true);
@@ -269,7 +291,11 @@
             clearRowExpression(row);
             return;
         }
-        if (!canAssignTarget(row, target)) {
+        var assignOpts = {};
+        if (options.clearSourceRow) {
+            assignOpts.ignoreColumnIndex = options.clearSourceRow.getAttribute('data-column-index');
+        }
+        if (!canAssignTarget(row, target, assignOpts)) {
             return;
         }
         assignTarget(row, target, label);
@@ -288,9 +314,27 @@
         if (sourceRow === row) {
             return;
         }
+        // Перенос между колонками: в пустую — move, в занятую — swap.
+        if (sourceRow) {
+            if (!canAssignTarget(row, payload.target, { ignoreColumnIndex: payload.columnIndex })) {
+                return;
+            }
+            var destInput = rowTargetInput(row);
+            var destTarget = destInput ? destInput.value : SKIP;
+            var destLabel = destInput
+                ? (destInput.getAttribute('data-label') || optionLabel(destTarget))
+                : '';
+            assignTarget(row, payload.target, payload.label);
+            if (destTarget && destTarget !== SKIP) {
+                assignTarget(sourceRow, destTarget, destLabel);
+            } else {
+                clearRowExpression(sourceRow);
+            }
+            selectRow(row);
+            return;
+        }
         applyTargetToRow(row, payload.target, payload.label, {
             fromDrag: true,
-            clearSourceRow: sourceRow,
         });
     }
 
@@ -502,7 +546,11 @@
                     return;
                 }
                 event.preventDefault();
-                event.dataTransfer.dropEffect = canAssignTarget(row, payload.target)
+                event.dataTransfer.dropEffect = canAssignTarget(
+                    row,
+                    payload.target,
+                    assignOptionsFromPayload(payload)
+                )
                     ? (payload.source === 'row' ? 'move' : 'copy')
                     : 'none';
                 clearDropHover();
@@ -591,11 +639,6 @@
         catalogSearch.addEventListener('input', function () {
             filterCatalog(catalogSearch.value);
         });
-    }
-
-    var policy = document.getElementById('map-match-policy');
-    if (policy) {
-        policy.addEventListener('change', refreshState);
     }
 
     rows.forEach(function (row) {
