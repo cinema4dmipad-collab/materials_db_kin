@@ -686,6 +686,38 @@ class MaterialImportHybridTests(TestCase):
         self.assertFalse(report.ok)
         self.assertTrue(any('не найден' in err.message for err in report.errors))
 
+    def test_dictionary_create_is_deferred_until_apply(self):
+        """Validate must not insert dictionary rows before the import transaction."""
+        from apps.materials.imports.report import ImportReport
+        from apps.materials.imports.staging import DraftMaterial
+        from apps.materials.imports.validate import validate_drafts
+        from apps.references.models import Manufacturer
+
+        drafts = [
+            DraftMaterial(
+                source_row=2,
+                name='Мат Deferred',
+                code='DICT-DEF',
+                description='',
+                tags='',
+                action='create',
+                manufacturer='Brand New Deferred Co',
+            ),
+        ]
+        report = ImportReport(dry_run=False)
+        items = validate_drafts(
+            drafts,
+            structure_type=self.structure_type,
+            workspace=self.workspace,
+            report=report,
+            create_missing_dictionaries=True,
+            dry_run=False,
+        )
+        self.assertTrue(report.ok, report.errors)
+        self.assertTrue(items)
+        self.assertIsNotNone(items[0].manufacturer_create)
+        self.assertFalse(Manufacturer.objects.filter(name='Brand New Deferred Co').exists())
+
     def test_create_missing_dictionaries_with_dedupe(self):
         from apps.materials.imports.staging import DraftMaterial
         from apps.references.models import Manufacturer

@@ -111,14 +111,18 @@ def resolve_or_create_dictionary_item(
     dry_run: bool,
     pending: dict,
 ) -> DictionaryResolveResult:
-    """Resolve by name/code; optionally plan or create a new dictionary row.
+    """Resolve by name/code; optionally plan a new dictionary row (never insert here).
+
+    Missing values with ``create_missing=True`` are always **deferred**
+    (``deferred_create`` + pending). Inserts happen in
+    ``materialize_pending_dictionary`` during import apply inside
+    ``transaction.atomic``, so a failed import does not leave orphans.
 
     Duplicate guards:
     - case-insensitive name or code match → reuse existing;
     - ambiguous (2+ rows match the raw text) → error;
     - normalized code collides with another row → reuse that row (linked_by_code);
-    - IntegrityError on create → reuse colliding row (savepoint-safe);
-    - several file values share one code → one create, later rows reuse pending.
+    - several file values share one code → one pending create, later rows reuse it.
     """
     text = (raw or '').strip()
     if not text:
@@ -171,20 +175,18 @@ def resolve_or_create_dictionary_item(
         pending[code_key] = result
         return result
 
-    if dry_run:
-        result = DictionaryResolveResult(
-            create_name=text,
-            create_code=code,
-            deferred_create=True,
-        )
-        pending[name_key] = result
-        pending[code_key] = result
-        return result
-
-    result = _create_or_reuse(model, text=text, code=code, label=label)
-    if result.item is not None or result.error:
-        pending[name_key] = result
-        pending[code_key] = result
+    # Always defer inserts: validate runs outside the import transaction.
+    # Rows are created in apply via materialize_pending_dictionary (inside atomic),
+    # so a failed import does not leave orphan dictionary entries.
+    # ``dry_run`` is kept for call-site compatibility; creation is deferred either way.
+    _ = dry_run
+    result = DictionaryResolveResult(
+        create_name=text,
+        create_code=code,
+        deferred_create=True,
+    )
+    pending[name_key] = result
+    pending[code_key] = result
     return result
 
 

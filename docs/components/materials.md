@@ -72,10 +72,10 @@ Shared service: `apps/materials/imports/` (`MaterialImporter`).
 
 **UI:** `/materials/import/` — hybrid wizard for arbitrary CSV/XLSX:
 1. Upload  
-2. Sheet + header/group rows + **match policy** + required **StructureType**  
-3. **Mapping constructor** (1C-style): table «file column → expression (target field)» + catalog of material / structure / property targets; click row then catalog item to review auto-mapping; parse mode per column (auto / text / number)  
-4. **Staging draft / review** (skip rows, exclude fields/properties); on validation errors — Apply/iterate blocked, only «Fix mapping»  
-5. Apply → SQL structure row (`struct_props_id`) + optional `MaterialProperty` leftovers  
+2. Sheet + header/group rows + **match policy** + «create missing dictionaries» + required **StructureType**  
+3. **Mapping constructor**: drag targets from catalog ↔ columns (move/swap between rows); parse mode per column (auto / text / number)  
+4. **Staging / review**: unrecognized numeric cells (dual warp/weft, messy text, dates-as-numbers) block apply until fixed or ignored; then write immediately  
+5. Apply → SQL structure row (`struct_props_id`) + optional `MaterialProperty`; new dictionary rows are created **inside** the same DB transaction as materials
 
 Mapping profiles: model `MaterialImportProfile` (per workspace, includes `structure_type_id`).  
 Permission: `material.create`.
@@ -110,7 +110,8 @@ poetry run python manage.py import_materials path/to/file.xlsx --workspace legac
 * Empty cells stay empty (`NULL` / omitted): import does not apply `StructureField.default_value` and does not invent values; a row with only name/code is enough to create a material.
 * Mapped structure/property fields appear in the review draft even when the cell is blank (written as empty/`NULL`). Unchecking include (or mapping to skip) ignores the field even if Excel has a value.
 * After column mapping, choose apply mode: **batch** (full draft review, then write all) or **row-by-row** (go straight to the first draft; confirm/skip each active row; committed rows stay if a later row fails).
-* Numeric cells may include units or strip width (`12,5 мм`, `4050/ 50мм`): the leading number is stored; the unit suffix is discarded (field unit comes from the structure/property).
+* Numeric cells may include units or strip width (`12,5 мм`, `4050/ 50мм`): the leading number is stored; the unit suffix is discarded (field unit comes from the structure/property). Dual values like `900/2200 Н/50мм` or `160(+10)/100(±10)` require technician review.
+* Missing manufacturer/availability/technology with «create missing» are deferred until apply (no orphan dictionary rows if import rolls back).
 * Each create/update via import sets `Material.import_source_filename` to the source file basename (last import wins). The materials list has a choice filter «Источник импорта».
 * Mapping requires «Название» (`material.name`); rows without a name fail validation (not silently skipped).
 * Demo files: `apps/materials/fixtures/import_examples/materials_wide_demo.xlsx` (+ CSV); download links on the import upload step (`/materials/import/example.csv`, `?kind=csv|cli`).

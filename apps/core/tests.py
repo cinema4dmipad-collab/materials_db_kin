@@ -864,6 +864,8 @@ class HelpPageTests(TestCase):
         self.assertContains(response, '4050/ 50мм')
         self.assertContains(response, '± погрешностью')
         self.assertContains(response, 'Знаков после запятой')
+        self.assertContains(response, 'исправить значения вручную')
+        self.assertContains(response, 'между колонками')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):

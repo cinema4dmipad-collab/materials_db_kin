@@ -33,7 +33,7 @@ Forms: `apps/references/forms.py`. Access: `can_manage_properties()` / system ad
 ## Integration
 
 * **Materials / samples** — property picker adds rows to formset; user enters value only
-* **Import** — manufacturer / availability / technology resolve from global dictionaries; optional **create missing** with duplicate guards (name/code) and dry-run report
+* **Import** — manufacturer / availability / technology resolve from global dictionaries; optional **create missing** with duplicate guards (name/code). Creates are deferred until apply and run inside the same DB transaction as materials (no orphan dictionary rows on failed import).
 * **Structure types** — `property_mapping.py` maps Property → StructureField when adding from catalog
 * **Admin** — property groups and bulk admin actions
 
