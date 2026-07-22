@@ -63,6 +63,19 @@
             </div>
             <button type="submit" class="btn btn-primary">Загрузить и продолжить</button>
         </form>
+        <p class="form-text mt-3 mb-0">
+            Примеры для проверки:
+            <a href="{% url 'materials:import_example' %}">большая таблица Excel</a>
+            ·
+            <a href="{% url 'materials:import_example' %}?kind=csv">то же CSV</a>
+            ·
+            <a href="{% url 'materials:import_example' %}?kind=cli">формат CLI</a>
+        </p>
+        <p class="form-text">
+            Для Excel-примера: строка групп = <strong>1</strong>, строка заголовков = <strong>2</strong>,
+            «Наименование» → «Название», «Марка» → теги. Поля вроде «Плотность пов» сопоставьте
+            с полями выбранного типа структуры (если таких полей нет — пропустите или заведите в типе).
+        </p>
         {% endif %}
 
         {% if has_staged_file and step == 'configure' %}
@@ -84,13 +97,13 @@
                 <label class="form-label" for="import-header-row">Строка заголовков</label>
                 <input type="number" min="1" name="header_row" id="import-header-row"
                        class="form-control" value="{{ config.header_row|default:2 }}">
-                <div class="form-text">Для «Сводная…» обязательно <strong>2</strong> (Наименование, Марка…)</div>
+                <div class="form-text">Для большой таблицы Excel часто <strong>2</strong> (Наименование, Марка…)</div>
             </div>
             <div class="col-md-3">
                 <label class="form-label" for="import-group-row">Строка групп</label>
                 <input type="number" min="0" name="group_row" id="import-group-row"
                        class="form-control" value="{{ config.group_row|default:1 }}">
-                <div class="form-text">Для сводной — <strong>1</strong> («Ткань / Волокно…»)</div>
+                <div class="form-text">Если сверху есть группы колонок — обычно <strong>1</strong> («Ткань / Волокно…»)</div>
             </div>
             <div class="col-md-3">
                 <label class="form-label" for="import-match-policy">Уникальность записей</label>
@@ -147,6 +160,26 @@
             <a href="{% url 'materials:import' %}?step=configure">вернитесь к настройке</a>.
             {% endif %}
             Колонка <strong>Наименование</strong> → <strong>Название</strong>; параметры ткани — в <strong>поля структуры</strong>.
+        </div>
+
+        <div class="alert alert-danger py-2 small{% if not missing_required_targets %} d-none{% endif %}"
+             id="import-missing-required"
+             role="alert">
+            <div class="fw-semibold mb-1">Нельзя продолжить: не сопоставлено обязательное поле</div>
+            <p class="mb-1">
+                Назначьте колонку файла на поле
+                {% for target, label in missing_required_targets %}
+                «{{ label }}»{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                «Название»
+                {% endfor %}
+                — иначе материалы не создать.
+            </p>
+            <ul class="mb-0 ps-3" id="import-missing-required-list">
+                {% for target, label in missing_required_targets %}
+                <li data-target="{{ target }}">{{ label }}</li>
+                {% endfor %}
+            </ul>
         </div>
 
         <div class="alert alert-danger py-2 small{% if not duplicate_mapping_targets %} d-none{% endif %}"
@@ -304,11 +337,11 @@
             <div class="sticky-form-actions" role="region" aria-label="Действия сопоставления">
                 <div class="sticky-form-actions__inner">
                     <button type="submit" name="action" value="map_preview" class="btn btn-primary import-map-continue"
-                            {% if duplicate_mapping_targets %}disabled{% endif %}>
+                            {% if duplicate_mapping_targets or missing_required_targets %}disabled{% endif %}>
                         Собрать черновик (пакетно)
                     </button>
                     <button type="submit" name="action" value="map_iterate" class="btn btn-outline-primary import-map-continue"
-                            {% if duplicate_mapping_targets %}disabled{% endif %}>
+                            {% if duplicate_mapping_targets or missing_required_targets %}disabled{% endif %}>
                         Идти построчно
                     </button>
                 </div>
@@ -324,7 +357,7 @@
             <input type="hidden" name="action" value="save_profile">
             <div class="col-md-6">
                 <label class="form-label">Сохранить текущий маппинг как профиль</label>
-                <input type="text" name="profile_name" class="form-control form-control-sm" placeholder="Напр. Сводная ткани">
+                <input type="text" name="profile_name" class="form-control form-control-sm" placeholder="Напр. Ткани из Excel">
             </div>
             <div class="col-md-3">
                 <button type="submit" class="btn btn-outline-primary btn-sm">Сохранить профиль</button>
@@ -738,6 +771,6 @@
 {% block extra_scripts %}
 <script src="{% static 'js/import_busy.js' %}?v={{ app_version }}-map3"></script>
 {% if step == 'mapping' %}
-<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map3"></script>
+<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map4"></script>
 {% endif %}
 {% endblock %}

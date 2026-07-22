@@ -5,7 +5,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.core.paginator import InvalidPage
-from django.http import FileResponse, HttpResponseRedirect, JsonResponse
+from django.http import FileResponse, Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, UpdateView, View
@@ -1125,7 +1125,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         )
         messages.info(
             request,
-            'Файл загружен. Для сводной обычно: строка заголовков = 2, строка групп = 1. '
+            'Файл загружен. Для большой таблицы Excel обычно: строка заголовков = 2, строка групп = 1. '
             'В сопоставлении должна быть колонка «Наименование» → поле «Название».',
         )
         return redirect('materials:import')
@@ -1840,15 +1840,25 @@ class MaterialImportExampleView(AppViewMixin, PermissionRequiredMixin, View):
     http_method_names = ['get']
 
     def get(self, request, *args, **kwargs):
-        path = (
-            Path(__file__).resolve().parent
-            / 'fixtures'
-            / 'import_examples'
-            / 'materials_sample.csv'
-        )
+        examples_dir = Path(__file__).resolve().parent / 'fixtures' / 'import_examples'
+        kind = (request.GET.get('kind') or 'wide').strip().lower()
+        if kind == 'cli':
+            path = examples_dir / 'materials_sample.csv'
+            filename = 'materials_import_example.csv'
+            content_type = 'text/csv; charset=utf-8'
+        elif kind == 'csv':
+            path = examples_dir / 'materials_wide_demo.csv'
+            filename = 'materials_wide_demo.csv'
+            content_type = 'text/csv; charset=utf-8'
+        else:
+            path = examples_dir / 'materials_wide_demo.xlsx'
+            filename = 'materials_wide_demo.xlsx'
+            content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        if not path.is_file():
+            raise Http404('Пример файла не найден')
         return FileResponse(
             path.open('rb'),
             as_attachment=True,
-            filename='materials_import_example.csv',
-            content_type='text/csv; charset=utf-8',
+            filename=filename,
+            content_type=content_type,
         )
