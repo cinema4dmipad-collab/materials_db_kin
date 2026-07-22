@@ -19,6 +19,8 @@
         .filter(Boolean);
     var dupBox = document.getElementById('import-duplicate-targets');
     var dupList = document.getElementById('import-duplicate-list');
+    var missingBox = document.getElementById('import-missing-required');
+    var missingList = document.getElementById('import-missing-required-list');
     var catalogSearch = document.getElementById('import-map-catalog-search');
     var clearRowBtn = document.getElementById('import-map-clear-row');
     var resetAllBtn = document.getElementById('import-map-reset-all');
@@ -36,6 +38,10 @@
         if (target) {
             targetLabels[target] = btn.getAttribute('data-label') || target;
         }
+    });
+    var requiredLabels = {};
+    required.forEach(function (target) {
+        requiredLabels[target] = targetLabels[target] || (target === 'material.name' ? 'Название' : target);
     });
 
     function rowTargetInput(row) {
@@ -360,8 +366,25 @@
             }).join('');
         }
 
+        var mappedTargets = {};
+        rows.forEach(function (row) {
+            var input = rowTargetInput(row);
+            if (input && input.value) {
+                mappedTargets[input.value] = true;
+            }
+        });
+        var missingRequired = required.filter(function (target) {
+            return !mappedTargets[target];
+        });
+        if (missingBox && missingList) {
+            missingBox.classList.toggle('d-none', missingRequired.length === 0);
+            missingList.innerHTML = missingRequired.map(function (target) {
+                return '<li data-target="' + target + '">' + (requiredLabels[target] || target) + '</li>';
+            }).join('');
+        }
+
         form.querySelectorAll('.import-map-continue').forEach(function (button) {
-            button.disabled = duplicateTargets.length > 0;
+            button.disabled = duplicateTargets.length > 0 || missingRequired.length > 0;
         });
 
         refreshCatalogState();

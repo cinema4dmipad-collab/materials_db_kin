@@ -657,6 +657,34 @@ class MaterialImportHybridTests(TestCase):
         self.assertEqual(material.name, 'Только название')
         self.assertIsNone(material.struct_props_id)
 
+    def test_rows_without_name_become_validation_errors(self):
+        """Без названия нельзя тихо пропустить строку — нужна ошибка валидации."""
+        from apps.materials.imports.wide import WideColumn, WideTable
+
+        table = WideTable(
+            sheet_name='CSV',
+            header_row=1,
+            columns=[WideColumn(index=0, label='Плотность пов')],
+            rows=[{0: 260}],
+            preview_rows=[{0: 260}],
+        )
+        drafts = build_staging_draft(
+            table,
+            {'0': {'target': f'structure:{self.density_field.name}', 'parse': 'auto'}},
+            workspace=self.workspace,
+            match_policy=MATCH_BY_NAME,
+            structure_type_id=str(self.structure_type.pk),
+        )
+        self.assertTrue(drafts)
+        self.assertNotEqual(drafts[0].action, 'skip')
+        self.assertFalse(drafts[0].name)
+        report = MaterialImporter(workspace=self.workspace, dry_run=True).import_drafts(
+            drafts,
+            structure_type=self.structure_type,
+        )
+        self.assertFalse(report.ok)
+        self.assertTrue(any('название' in err.message.lower() for err in report.errors))
+
     def test_hybrid_import_keeps_mapped_empty_structure_field_as_null(self):
         from apps.core.property_number_value import VALUE_KIND_SCALAR
         from apps.materials.imports.staging import DraftMaterial, DraftStructureValue
@@ -940,6 +968,31 @@ class MaterialImportUITests(TestCase):
         self.assertContains(response, 'name="map_0"')
         self.assertContains(response, 'name="parse_0"')
         self.assertContains(response, 'data-target="material.name"')
+
+    def test_mapping_without_name_blocked(self):
+        self._upload_and_configure_wide_sample()
+        blocked = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'match_policy': MATCH_BY_NAME,
+                'map_0': 'skip',
+                'parse_0': 'auto',
+                'map_1': 'skip',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(blocked.status_code, 200)
+        self.assertContains(blocked, 'import-map-constructor')
+        self.assertContains(blocked, 'не сопоставлено обязательное поле')
+        self.assertContains(blocked, 'Название')
+        self.assertNotContains(blocked, 'Итог по черновику')
 
     def test_duplicate_structure_mapping_blocks_preview(self):
         self._upload_and_configure_wide_sample()

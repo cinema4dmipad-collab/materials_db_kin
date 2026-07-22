@@ -100,7 +100,8 @@ def validate_drafts(
             continue
         if not draft.name and draft.action == 'create':
             report.add_error(
-                'Для нового материала укажите name хотя бы в одной строке.',
+                'Для нового материала укажите название '
+                '(сопоставьте колонку с полем «Название» или заполните ячейку в файле).',
                 row=draft.source_row,
                 column='name',
             )

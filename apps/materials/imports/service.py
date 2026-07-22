@@ -45,7 +45,9 @@ class MaterialImporter:
         if report.errors:
             return report
         if not items:
-            report.add_error('Нет строк для импорта.')
+            report.add_error(
+                'Нет строк для импорта. Проверьте, что в файле есть строки с названием/кодом.'
+            )
             return report
 
         if self.dry_run:
@@ -83,7 +85,10 @@ class MaterialImporter:
         if report.errors:
             return report
         if not items:
-            report.add_error('Нет строк для импорта.')
+            report.add_error(
+                'Нет строк для импорта. Проверьте сопоставление «Название» '
+                'и что в файле есть строки данных с названием.'
+            )
             return report
 
         if self.dry_run:

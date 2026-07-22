@@ -35,7 +35,7 @@ MATCH_BY_NAME = 'name'
 MATCH_ALWAYS_CREATE = 'always_create'
 
 MATCH_POLICIES = (
-    (MATCH_BY_NAME, 'По названию (рекомендуется для сводных)'),
+    (MATCH_BY_NAME, 'По названию (удобно для больших таблиц Excel)'),
     (MATCH_BY_CODE, 'По коду материала'),
     (MATCH_ALWAYS_CREATE, 'Всегда создавать новые записи'),
 )
@@ -256,24 +256,9 @@ def build_staging_draft(
             name = code
             warnings.append('Название взято из кода')
 
-        # Строка только с пустыми/прочерковыми свойствами и без идентичности — пропускаем
+        # Без названия и кода строку не пропускаем тихо: пусть валидация покажет ошибку.
         if not name and not code:
-            warnings.append('Нет названия/кода — строка пропущена')
-            drafts.append(
-                DraftMaterial(
-                    source_row=excel_row,
-                    name='',
-                    code='',
-                    description=fields['description'],
-                    tags=tags,
-                    action='skip',
-                    struct_type_id=str(structure_type_id or ''),
-                    warnings=warnings,
-                    structure_values=struct_vals,
-                    properties=props,
-                )
-            )
-            continue
+            warnings.append('Нет названия и кода')
 
         action, existing_pk, code, extra_warnings = _resolve_identity(
             workspace=workspace,

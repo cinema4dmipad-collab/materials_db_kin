@@ -816,6 +816,7 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Общие цветные теги')
         self.assertContains(response, 'Импорт из файла')
         self.assertContains(response, 'источнику импорта')
+        self.assertContains(response, 'пример большой таблицы')
         self.assertContains(response, 'марка::')
         self.assertContains(response, '4050/ 50мм')
         self.assertContains(response, '± погрешностью')
