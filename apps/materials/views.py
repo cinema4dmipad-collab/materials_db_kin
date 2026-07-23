@@ -1,3 +1,6 @@
+import logging
+from pathlib import Path
+
 from django.conf import settings
 from django import forms
 from django.contrib import messages
@@ -8,9 +11,10 @@ from django.core.paginator import InvalidPage
 from django.http import FileResponse, Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, UpdateView, View
 
-from pathlib import Path
+logger = logging.getLogger(__name__)
 
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
@@ -22,6 +26,11 @@ from apps.core.list_filters import (
 )
 from apps.core.creator import assign_creator
 from apps.materials.bulk import bulk_delete_materials
+from apps.materials.export import (
+    EXPORT_ROW_LIMIT,
+    MaterialExportError,
+    materials_xlsx_response,
+)
 from apps.materials.form_validation import (
     build_material_form_validation_summary,
     validation_flash_message,
@@ -646,6 +655,91 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
             ),
             'import_source': [(name, name) for name in import_sources],
         }
+
+
+class MaterialExportView(AppViewMixin, View):
+    """Download selected materials as a convenient XLSX table."""
+
+    def _wants_json(self, request) -> bool:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return True
+        accept = (request.headers.get('Accept') or '').lower()
+        return 'application/json' in accept
+
+    def _error_response(self, request, message: str, *, status: int = 400):
+        if self._wants_json(request):
+            return JsonResponse({'ok': False, 'error': message}, status=status)
+        messages.warning(request, message)
+        return redirect('materials:list')
+
+    def get(self, request, *args, **kwargs):
+        return self._error_response(
+            request,
+            'Чтобы выгрузить материалы в Excel, нажмите «Выбрать», отметьте строки '
+            'одного типа структуры и снова «Выгрузить в Excel».',
+            status=405,
+        )
+
+    def _parse_ids(self, request) -> list:
+        raw = request.POST.getlist('ids')
+        seen: set[str] = set()
+        ids = []
+        for value in raw:
+            key = (value or '').strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            ids.append(key)
+            if len(ids) >= EXPORT_ROW_LIMIT:
+                break
+        return ids
+
+    def post(self, request, *args, **kwargs):
+        ids = self._parse_ids(request)
+        if not ids:
+            return self._error_response(
+                request,
+                'Сначала выберите материалы в списке, затем нажмите «Выгрузить в Excel».',
+            )
+
+        workspace = request.active_workspace
+        scope = (request.POST.get('scope') or MATERIAL_SCOPE_WORKSPACE).strip()
+        if scope not in MATERIAL_SCOPE_CHOICES:
+            scope = MATERIAL_SCOPE_WORKSPACE
+        if scope == MATERIAL_SCOPE_SHARED:
+            base_qs = materials_shared_in(workspace)
+        else:
+            base_qs = materials_in_workspace_tab(workspace)
+
+        queryset = base_qs.filter(pk__in=ids)
+        if not queryset.exists():
+            return self._error_response(
+                request,
+                'Среди выбранных нет материалов, доступных для выгрузки.',
+            )
+
+        order_map = {str(pk): index for index, pk in enumerate(ids)}
+        ordered_pks = sorted(
+            queryset.values_list('pk', flat=True),
+            key=lambda pk: order_map.get(str(pk), 10**9),
+        )
+        stamp = timezone.localdate().isoformat()
+        try:
+            return materials_xlsx_response(
+                queryset,
+                row_limit=EXPORT_ROW_LIMIT,
+                filename=f'materials_{stamp}.xlsx',
+                preferred_order=ordered_pks,
+            )
+        except MaterialExportError as exc:
+            return self._error_response(request, str(exc))
+        except Exception:  # noqa: BLE001
+            logger.exception('Material Excel export failed')
+            return self._error_response(
+                request,
+                'Не удалось сформировать файл Excel. Попробуйте ещё раз или уменьшите выборку.',
+                status=500,
+            )
 
 
 class MaterialEditableMixin:

@@ -10,6 +10,7 @@ Project documentation for **materials_db_v1** — web database of composite mate
 * [Architecture](architecture/index.md) — System architecture, Django apps, data model
   * [Technology Stack](architecture/tech-stack.md) — Technologies and libraries
   * [Testing](architecture/testing.md) — Test suite structure and CI
+  * [Export / analytics draft](architecture/analytics-draft.md) — Excel export first; analytics UI deferred (RU)
 * [Components](components/index.md) — Main application modules
 * [Configuration](configuration/index.md) — Setup and environment variables
   * [Environment Reference](configuration/environment.md) — `.env` variables and deployment profiles

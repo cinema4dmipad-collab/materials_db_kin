@@ -20,6 +20,7 @@ Related data:
 | URL | Action |
 |-----|--------|
 | `/materials/` | List — tabs **Пространство** / **Общие** |
+| `/materials/export/` | Download filtered list as XLSX (same filters/scope as list; all property columns) |
 | `/materials/create/` | Create (own workspace only) |
 | `/materials/import/` | UI import CSV/XLSX (preview dry-run, then apply); requires `material.create` |
 | `/materials/import/example.csv` | Download sample CSV |
@@ -36,6 +37,10 @@ Sub-routes: attachments, samples tab (`materials/sample_urls.py`, `attachment_ur
 * **Общие** — `materials_shared_in(active_workspace)` (published materials visible in workspace, including own published)
 
 Shared materials from other workspaces are read-only in the active workspace.
+
+### Excel export
+
+`POST /materials/export/` with selected material `ids` (list UI: «Выбрать» → checkboxes → «Выгрузить в Excel»). Selection must share **one** `StructureType` (client + server checks). Output: code, name, non-empty metadata (no tags), **all fields of that structure type**, plus catalog properties present on the rows — not an import round-trip. Cap: 10 000 rows. Implementation: `apps/materials/export.py`.
 
 ## Material picker
 

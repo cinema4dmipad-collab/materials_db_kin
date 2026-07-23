@@ -566,6 +566,9 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertEqual(list_page.status_code, 200)
         self.assertContains(list_page, 'Источник импорта')
         self.assertContains(list_page, 'Сводная по материалам.xlsx')
+        self.assertContains(list_page, 'Выгрузить в Excel')
+        self.assertContains(list_page, 'data-materials-export')
+        self.assertContains(list_page, 'materials-export-need-select-modal')
 
         filtered = self.client.get(
             reverse('materials:list'),
@@ -575,6 +578,115 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(filtered, 'MAT-SRC-002')
         self.assertNotContains(filtered, 'MAT-SRC-001')
         self.assertNotContains(filtered, 'MAT-SRC-003')
+
+    def test_material_export_single_structure_with_structure_fields(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from apps.core.tag_utils import assign_tags
+        from apps.references.models import Property
+
+        density = Property.objects.create(
+            name='density_export',
+            display_name='Density',
+            data_type='number',
+            unit='g/cm3',
+            decimal_places=2,
+        )
+        row_a = self.insert_structure_row(title='Panel A', thickness='12.50')
+        row_b = self.insert_structure_row(title='Panel B', thickness='3.00')
+        with_props = self.create_material(
+            code='MAT-EXP-001',
+            name='Exportable',
+            struct_type=self.structure_type,
+            struct_props_id=row_a,
+            import_source_filename='export-demo.xlsx',
+        )
+        assign_tags(with_props, ['export-tag'], workspace=self.legacy_workspace)
+        MaterialProperty.objects.create(material=with_props, property=density, value='1.55')
+        other_same_type = self.create_material(
+            code='MAT-EXP-002',
+            name='Same type',
+            struct_type=self.structure_type,
+            struct_props_id=row_b,
+        )
+        other_type = self.create_structure_type()
+        other_row = SQLExecutor.insert(
+            other_type,
+            {'title': 'Other', 'thickness': '1.00'},
+        )
+        self.assertTrue(other_row.get('success'), other_row.get('error'))
+        mixed = self.create_material(
+            code='MAT-EXP-003',
+            name='Other structure',
+            struct_type=other_type,
+            struct_props_id=other_row['id'],
+        )
+        plain = self.create_material(code='MAT-EXP-004', name='No structure')
+
+        get_response = self.client.get(reverse('materials:export'))
+        self.assertEqual(get_response.status_code, 302)
+
+        empty_post = self.client.post(
+            reverse('materials:export'),
+            {},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(empty_post.status_code, 400)
+
+        mixed_post = self.client.post(
+            reverse('materials:export'),
+            {'ids': [str(with_props.pk), str(mixed.pk)], 'scope': 'workspace'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(mixed_post.status_code, 400)
+        self.assertIn('error', mixed_post.json())
+
+        no_struct_post = self.client.post(
+            reverse('materials:export'),
+            {'ids': [str(plain.pk)], 'scope': 'workspace'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(no_struct_post.status_code, 400)
+
+        response = self.client.post(
+            reverse('materials:export'),
+            {'ids': [str(with_props.pk), str(other_same_type.pk)], 'scope': 'workspace'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            response['Content-Type'],
+        )
+        self.assertTrue(response.content[:2] == b'PK')
+        wb = load_workbook(BytesIO(response.content))
+        ws = wb['Материалы']
+        headers = [cell.value for cell in ws[1]]
+        self.assertIn('Код', headers)
+        self.assertIn('Название', headers)
+        self.assertIn('Title', headers)
+        self.assertIn('Thickness', headers)
+        self.assertIn('Skin material', headers)
+        self.assertIn('Density', headers)
+        self.assertIn('Тип структуры', headers)
+        self.assertNotIn('Создал', headers)
+        self.assertNotIn('Дата создания', headers)
+        codes = [row[0].value for row in ws.iter_rows(min_row=2) if row[0].value]
+        self.assertEqual(codes, ['MAT-EXP-001', 'MAT-EXP-002'])
+        data_row = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
+        row_by_header = dict(zip(headers, data_row))
+        self.assertEqual(row_by_header['Название'], 'Exportable')
+        self.assertEqual(row_by_header['Title'], 'Panel A')
+        self.assertEqual(row_by_header['Thickness'], '12,50')
+        self.assertEqual(row_by_header['Density'], '1,55')
+        self.assertNotIn('Теги', headers)
+        header_cell = ws['A1']
+        self.assertEqual(header_cell.border.left.color.rgb, '00000000')
+        self.assertEqual(header_cell.border.left.style, 'thin')
+        self.assertTrue(header_cell.font.bold)
 
     def test_material_list_combines_structure_type_search_with_multiple_tags(self):
         tagged = self.create_material(

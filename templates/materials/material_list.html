@@ -9,12 +9,20 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
             <h1 class="h4 mb-0">Материалы</h1>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-                {% if materials and material_deletable_pks %}
+                {% if materials %}
                 <button type="button"
                         class="btn btn-outline-secondary btn-sm"
                         data-list-bulk-toggle
                         aria-pressed="false">
                     Выбрать
+                </button>
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm"
+                        data-materials-export
+                        data-export-url="{% url 'materials:export' %}"
+                        data-export-scope="{{ material_scope }}"
+                        data-csrf="{{ csrf_token }}">
+                    Выгрузить в Excel
                 </button>
                 {% endif %}
                 {% if material_scope == 'workspace' %}
@@ -42,7 +50,7 @@
         {% endif %}
         {% if material_scope == 'shared' %}
         <p class="text-muted small px-3 pt-3 mb-0">
-            Опубликованные материалы, доступные в этом пространстве — с общей видимостью или из других пространств. Чужие материалы доступны только для просмотра.
+            Опубликованные материалы, доступные в этом пространстве — с общей видимостью или из других пространств. Чужие материалы можно просматривать, но не редактировать.
         </p>
         {% endif %}
         {% include 'includes/list_filter_bar.html' %}
@@ -54,7 +62,11 @@
               data-confirm-message="Удалить выбранные материалы ({count})? Связанные свойства, образцы и сканы будут удалены. Действие нельзя отменить."
               data-confirm-submit="Удалить выбранные">
             {% csrf_token %}
+            {% if material_deletable_pks %}
             {% include 'includes/list_bulk_toolbar.html' with bulk_id='materials' %}
+            {% else %}
+            {% include 'includes/list_bulk_toolbar.html' with bulk_id='materials' bulk_show_delete=False %}
+            {% endif %}
             <div class="table-responsive">
                 <table class="table table-striped table-hover align-middle mb-0 app-data-table">
                     <thead>
@@ -78,17 +90,14 @@
                         {% for material in materials %}
                         <tr>
                             <td class="list-bulk-col">
-                                {% if material.pk in material_deletable_pks %}
                                 <input type="checkbox"
                                        class="form-check-input"
                                        name="ids"
                                        value="{{ material.pk }}"
                                        data-list-bulk-item
+                                       data-struct-type-id="{% if material.struct_type_id %}{{ material.struct_type_id }}{% endif %}"
                                        disabled
                                        aria-label="Выбрать {{ material.code }}">
-                                {% else %}
-                                <span class="list-bulk-col__empty" aria-hidden="true"></span>
-                                {% endif %}
                             </td>
                             <td>
                                 {% url 'materials:detail' material.pk as material_detail_url %}
@@ -160,8 +169,64 @@
         {% endif %}
     </div>
 </div>
+
+<div class="modal fade" id="materials-export-need-select-modal" tabindex="-1"
+     aria-labelledby="materials-export-need-select-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="materials-export-need-select-title">Выгрузка в Excel</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                Сначала выберите материалы в списке (кнопка <strong>«Выбрать»</strong>), отметьте нужные строки
+                <strong>одного типа структуры</strong>, затем снова нажмите <strong>«Выгрузить в Excel»</strong>.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Понятно</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="materials-export-structure-modal" tabindex="-1"
+     aria-labelledby="materials-export-structure-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="materials-export-structure-title">Один тип структуры</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body" data-materials-export-structure-body>
+                В одном файле можно выгрузить только материалы одного типа структуры.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Понятно</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="materials-export-error-modal" tabindex="-1"
+     aria-labelledby="materials-export-error-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="materials-export-error-title">Выгрузка не удалась</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body" data-materials-export-error-body>
+                Не удалось выгрузить файл. Попробуйте ещё раз.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="{% static 'js/list_bulk_select.js' %}?v={{ app_version }}-bulk2"></script>
+<script src="{% static 'js/materials_export.js' %}?v={{ app_version }}-export3"></script>
 {% endblock %}
