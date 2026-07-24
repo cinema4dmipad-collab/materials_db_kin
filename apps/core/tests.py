@@ -866,6 +866,8 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Знаков после запятой')
         self.assertContains(response, 'исправить значения вручную')
         self.assertContains(response, 'между колонками')
+        self.assertContains(response, 'Выгрузить в Excel')
+        self.assertContains(response, 'одного типа структуры')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):

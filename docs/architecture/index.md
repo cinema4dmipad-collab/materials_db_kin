@@ -2,7 +2,7 @@
 
 This section describes the overall architecture of Materials DB: Django apps, dynamic structure storage, and request flow.
 
-**Related**: [Technology Stack](tech-stack.md) · [Testing](testing.md) · [Workspaces & RBAC](workspaces-rbac.md) · [Права пользователей (таблицы)](workspaces-permissions.md)
+**Related**: [Technology Stack](tech-stack.md) · [Testing](testing.md) · [Workspaces & RBAC](workspaces-rbac.md) · [Права пользователей (таблицы)](workspaces-permissions.md) · [Export / analytics draft](analytics-draft.md)
 
 ## System Architecture
 

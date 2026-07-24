@@ -5,6 +5,7 @@ from apps.materials.views import (
     MaterialCreateView,
     MaterialDeleteView,
     MaterialDetailView,
+    MaterialExportView,
     MaterialImportExampleView,
     MaterialImportView,
     MaterialLinkView,
@@ -19,6 +20,7 @@ app_name = 'materials'
 
 urlpatterns = [
     path('', MaterialListView.as_view(), name='list'),
+    path('export/', MaterialExportView.as_view(), name='export'),
     path('create/', MaterialCreateView.as_view(), name='create'),
     path('import/', MaterialImportView.as_view(), name='import'),
     path('import/example.csv', MaterialImportExampleView.as_view(), name='import_example'),
