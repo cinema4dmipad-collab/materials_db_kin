@@ -860,6 +860,8 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'пример большой таблицы')
         self.assertContains(response, 'Производитель')
         self.assertContains(response, 'Справочные свойства')
+        self.assertContains(response, 'ту же модалку выбора')
+        self.assertContains(response, 'Доступные теги')
         self.assertContains(response, 'Справочники материалов')
         self.assertContains(response, 'марка::')
         self.assertContains(response, '4050/ 50мм')

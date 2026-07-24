@@ -58,10 +58,11 @@ Used in: sample form, composite layers, structure dynamic fields.
 
 Key blocks:
 
-1. **Basic fields** — code, name, type, tags
-2. **Properties** — table with picker (`material_properties_formset.js`); no manual property name entry. For `number`: value kind (scalar / range / ±) via `property_number_value.js`
-3. **Structure fields** — dynamic fields from selected type (when SQL table exists); decimal fields support the same range/tolerance UI when configured
-4. **Composite layers** — if `allow_layers` on type; toolbar + DnD table (`composite_layers_formset.js`)
+1. **Basic fields** — code, name, description, structure type, tags
+2. **Dictionary fields** — manufacturer / availability / technology in a separate card («Справочные свойства»); rows appear via «Добавить» (`material_dictionary_fields.js`), values via shared `choice-picker`. Empty dictionaries are hidden on the detail card.
+3. **Properties** — table with picker (`material_properties_formset.js`); no manual property name entry. For `number`: value kind (scalar / range / ±) via `property_number_value.js`
+4. **Structure fields** — dynamic fields from selected type (when SQL table exists); decimal fields support the same range/tolerance UI when configured
+5. **Composite layers** — if `allow_layers` on type; toolbar + DnD table (`composite_layers_formset.js`)
 
 Changing structure type reloads the form to load new dynamic fields.
 
@@ -77,9 +78,9 @@ Shared service: `apps/materials/imports/` (`MaterialImporter`).
 
 **UI:** `/materials/import/` — hybrid wizard for arbitrary CSV/XLSX:
 1. Upload  
-2. Sheet + header/group rows + **match policy** + «create missing dictionaries» + required **StructureType**  
+2. Sheet + header/group rows + **match policy** + «create missing dictionaries» + required **StructureType** (same modal picker as the material form; only types with a created SQL table)  
 3. **Mapping constructor**: drag targets from catalog ↔ columns (move/swap between rows); parse mode per column (auto / text / number)  
-4. **Staging / review**: unrecognized numeric cells (dual warp/weft, messy text, dates-as-numbers) block apply until fixed or ignored; then write immediately  
+4. **Staging / review**: unrecognized numeric cells (dual warp/weft, messy text, dates-as-numbers) block apply until fixed or ignored; then write immediately. Rows without a material name are **skipped** (warning), not hard-blocked.  
 5. Apply → SQL structure row (`struct_props_id`) + optional `MaterialProperty`; new dictionary rows are created **inside** the same DB transaction as materials
 
 Mapping profiles: model `MaterialImportProfile` (per workspace, includes `structure_type_id`).  
