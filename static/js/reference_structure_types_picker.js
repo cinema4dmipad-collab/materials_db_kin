@@ -109,7 +109,10 @@
         var selectedValue = selectedRadioValue();
         var groupEl = document.createElement('div');
         groupEl.className = 'reference-properties-group';
-        groupEl.appendChild(renderEmptyOption(selectedValue));
+        var allowEmpty = !activeSelect || activeSelect.getAttribute('data-allow-empty') !== 'false';
+        if (allowEmpty) {
+            groupEl.appendChild(renderEmptyOption(selectedValue));
+        }
 
         structureTypes.forEach(function (item) {
             var itemEl = document.createElement('label');

@@ -443,25 +443,44 @@ a.list-filter-active-tag.entity-tag:not(.entity-tag--scoped):focus-visible .list
 }
 
 .tag-input-existing {
-    padding: 0.35rem 0.5rem 0.4rem;
-    border: 1px dashed rgba(0, 118, 121, 0.18);
-    border-radius: 0.3rem;
-    background: rgba(0, 118, 121, 0.04);
-    transition: border-color 0.15s ease, background-color 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.4rem 0.5rem 0.45rem;
+    border: 1px solid var(--kx-border, #e4e7ec);
+    border-radius: 0.4rem;
+    background: var(--kx-surface-muted, #f8fafb);
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tag-input-existing--filtered {
-    border-color: rgba(0, 118, 121, 0.4);
-    background: #eef8f8;
+    border-color: rgba(0, 118, 121, 0.35);
+    background: #fff;
+    box-shadow: 0 0 0 0.12rem rgba(0, 118, 121, 0.08);
+}
+
+.tag-input-existing__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.2rem 0.5rem;
 }
 
 .tag-input-existing__label {
-    font-size: 0.625rem;
+    font-size: 0.7rem;
     font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    color: var(--kx-text-muted);
-    margin-bottom: 0.25rem;
+    line-height: 1.2;
+    color: var(--kx-text-muted, #667085);
+    letter-spacing: 0;
+    text-transform: none;
+    margin: 0;
+}
+
+.tag-input-existing__hint {
+    font-size: 0.675rem;
+    line-height: 1.2;
+    color: var(--kx-text-muted, #98a2b3);
 }
 
 .tag-input-existing__list {
@@ -471,66 +490,103 @@ a.list-filter-active-tag.entity-tag:not(.entity-tag--scoped):focus-visible .list
     align-content: flex-start;
     gap: 0.25rem;
     min-height: 0;
-    max-height: 4.5rem;
-    padding-right: 0.1rem;
+    max-height: 4.25rem;
+    padding: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 118, 121, 0.35) transparent;
+}
+
+.tag-input-existing__list::-webkit-scrollbar {
+    width: 0.3rem;
+}
+
+.tag-input-existing__list::-webkit-scrollbar-thumb {
+    background: rgba(0, 118, 121, 0.28);
+    border-radius: 999px;
+}
+
+.tag-input-existing__empty {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    color: var(--kx-text-muted, #667085);
 }
 
 .tag-input-existing .entity-tag {
-    min-height: 1.15rem;
-    font-size: 0.6875rem;
-    box-shadow: none;
-}
-
-.tag-input-existing .entity-tag--scoped {
-    box-shadow: none;
+    min-height: 1.2rem;
+    font-size: 0.7rem;
 }
 
 .tag-input-existing .entity-tag .entity-tag__text,
 .tag-input-existing .entity-tag .entity-tag__text-scoped {
-    padding: 0.05rem 0.3rem;
+    padding: 0.05rem 0.32rem;
 }
 
 button.tag-input-pick {
     cursor: pointer;
-    transition: opacity 0.15s ease, box-shadow 0.15s ease;
+    max-width: 100%;
+    transition:
+        transform 0.12s ease,
+        opacity 0.15s ease,
+        filter 0.15s ease,
+        box-shadow 0.15s ease;
 }
 
-button.tag-input-pick:not(.tag-input-pick--selected):hover {
-    opacity: 0.88;
+button.tag-input-pick:hover {
+    transform: translateY(-1px);
+    filter: brightness(0.97);
+}
+
+button.tag-input-pick:focus-visible {
+    outline: 2px solid var(--kx-brand, #007679);
+    outline-offset: 2px;
 }
 
 button.tag-input-pick[hidden] {
     display: none;
 }
 
-button.tag-input-pick--selected {
-    box-shadow:
-        inset 0 0 0 1px var(--label-background-color, var(--tone-teal-bg)),
-        0 0 0 1px var(--kx-surface, #fff),
-        0 0 0 2px var(--label-background-color, var(--kx-brand));
+/* Already in composer — keep style for filter edge-cases, but prefer hidden via JS */
+button.tag-input-pick--selected,
+button.tag-input-pick--already-selected {
+    opacity: 0.45;
+    filter: grayscale(0.15);
+    transform: none;
+    box-shadow: none;
 }
 
-button.tag-input-pick--selected::before {
-    display: none;
+button.tag-input-pick--selected:hover,
+button.tag-input-pick--already-selected:hover {
+    opacity: 0.6;
+    transform: none;
 }
 
 .entity-detail-tags-form .tag-input-widget,
-.material-detail-tags-form .tag-input-widget {
+.material-detail-tags-form .tag-input-widget,
+.group-picker-widget {
     max-width: 32rem;
     gap: 0.4rem;
 }
 
 .entity-detail-tags-form .tag-input-existing,
-.material-detail-tags-form .tag-input-existing {
+.material-detail-tags-form .tag-input-existing,
+.group-picker-widget .tag-input-existing {
     max-width: 32rem;
 }
 
 .entity-detail-tags-form .tag-input-existing__list,
-.material-detail-tags-form .tag-input-existing__list {
-    max-height: 3.75rem;
+.material-detail-tags-form .tag-input-existing__list,
+.group-picker-widget .tag-input-existing__list {
+    max-height: 4.25rem;
+}
+
+.group-picker-section + .group-picker-section {
+    margin-top: 0.45rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--kx-border, #e4e7ec);
 }
 
 @media (max-width: 767.98px) {

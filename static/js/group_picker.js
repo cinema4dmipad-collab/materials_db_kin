@@ -32,6 +32,7 @@
         var composer = widget.querySelector('.tag-input-composer');
         var existingBlock = widget.querySelector('.tag-input-existing');
         var existingLabel = widget.querySelector('.tag-input-existing__label');
+        var existingHint = widget.querySelector('.tag-input-existing__hint');
         var emptyMessage = widget.querySelector('.tag-input-existing__empty');
         if (!typingInput || !chipsContainer || !composer) {
             return;
@@ -49,7 +50,7 @@
                 chip.dataset.groupId = checkbox.value;
 
                 var label = document.createElement('span');
-                label.className = 'tag-input-chip__label';
+                label.className = 'entity-tag__text';
                 label.textContent = groupName;
 
                 var removeButton = document.createElement('button');
@@ -92,30 +93,40 @@
             var visibleCount = 0;
             var isFiltering = query.length > 0;
             var ids = selectedIds(widget);
+            var hasSections = Boolean(widget.querySelector('.group-picker-section'));
 
             if (existingBlock) {
                 existingBlock.classList.toggle('tag-input-existing--filtered', isFiltering);
             }
-            if (existingLabel && !widget.querySelector('.group-picker-section')) {
+            if (existingLabel && !hasSections) {
                 existingLabel.textContent = isFiltering ? 'Подходящие группы' : 'Доступные группы';
+            }
+            if (existingHint && !hasSections) {
+                existingHint.textContent = isFiltering ? 'Enter — выбрать первую' : 'нажмите, чтобы добавить';
             }
 
             widget.querySelectorAll('.group-picker-pick').forEach(function (button) {
                 var groupId = button.dataset.groupId || '';
-                var visible;
-                if (!isFiltering) {
-                    visible = true;
-                } else {
-                    visible = groupMatchesQuery(button, query) && ids.indexOf(groupId) === -1;
-                }
+                var selected = ids.indexOf(groupId) !== -1;
+                var matches = !isFiltering || groupMatchesQuery(button, query);
+                // Selected groups live in the composer; hide them from the picker.
+                var visible = matches && !selected;
                 button.hidden = !visible;
+                button.classList.toggle('tag-input-pick--selected', selected);
                 if (visible) {
                     visibleCount += 1;
                 }
             });
 
+            if (hasSections) {
+                widget.querySelectorAll('.group-picker-section').forEach(function (section) {
+                    var anyVisible = section.querySelector('.group-picker-pick:not([hidden])');
+                    section.hidden = !anyVisible;
+                });
+            }
+
             if (emptyMessage) {
-                emptyMessage.hidden = !isFiltering || visibleCount > 0;
+                emptyMessage.hidden = visibleCount > 0;
             }
         }
 
@@ -123,12 +134,12 @@
             return widget.querySelector('.group-picker-pick:not([hidden])');
         }
 
-        function toggleGroup(groupId) {
+        function addGroup(groupId) {
             var checkbox = findCheckbox(widget, groupId);
-            if (!checkbox) {
+            if (!checkbox || checkbox.checked) {
                 return false;
             }
-            checkbox.checked = !checkbox.checked;
+            checkbox.checked = true;
             checkbox.dispatchEvent(new Event('change', { bubbles: true }));
             renderChips();
             return true;
@@ -143,7 +154,7 @@
                 event.preventDefault();
             });
             button.addEventListener('click', function () {
-                toggleGroup(button.dataset.groupId || '');
+                addGroup(button.dataset.groupId || '');
                 typingInput.value = '';
                 typingInput.focus();
             });
@@ -174,7 +185,7 @@
             event.preventDefault();
             var firstPick = firstVisiblePick();
             if (firstPick) {
-                toggleGroup(firstPick.dataset.groupId || '');
+                addGroup(firstPick.dataset.groupId || '');
                 typingInput.value = '';
                 filterExistingGroups();
             }

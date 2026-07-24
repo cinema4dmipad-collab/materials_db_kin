@@ -15,7 +15,7 @@ from apps.core.tag_utils import assign_tags
 from apps.materials.admin import CompositeLayerInline, MaterialAdmin, MaterialForm
 from apps.materials.forms import CompositeLayerFormSet, MaterialForm as PublicMaterialForm
 from apps.materials.models import Material, MaterialProperty
-from apps.references.models import Property, PropertyGroup
+from apps.references.models import Availability, Manufacturer, Property, PropertyGroup, Technology
 from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 from apps.workspaces.services import ensure_legacy_workspace
@@ -897,6 +897,89 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         data.update(self._layer_formset_management_data(total='0'))
         data.update(overrides)
         return data
+
+    def test_dictionary_fields_are_separate_from_base_bound_fields(self):
+        form = PublicMaterialForm(workspace=self.legacy_workspace)
+        base_names = {field.name for field in form.base_bound_fields}
+        dictionary_names = [field.name for field in form.dictionary_bound_fields]
+        self.assertEqual(dictionary_names, ['manufacturer', 'availability', 'technology'])
+        self.assertTrue({'manufacturer', 'availability', 'technology'}.isdisjoint(base_names))
+
+    def test_create_form_hides_empty_dictionary_rows(self):
+        response = self.client.get(reverse('materials:create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Справочные свойства')
+        self.assertContains(response, 'material-dictionary-fields')
+        self.assertContains(response, 'data-dictionary-row="manufacturer"')
+        self.assertContains(response, 'material-dictionary-row mb-3 d-none')
+        self.assertContains(response, 'material_dictionary_fields.js')
+        self.assertContains(response, 'data-choice-picker')
+        form = response.context['form']
+        self.assertEqual(
+            form.fields['manufacturer'].widget.attrs.get('data-choice-picker'),
+            'true',
+        )
+        self.assertEqual(
+            form.fields['availability'].widget.attrs.get('data-choice-picker'),
+            'true',
+        )
+        self.assertEqual(
+            form.fields['technology'].widget.attrs.get('data-choice-picker'),
+            'true',
+        )
+
+    def test_create_view_saves_dictionary_fields(self):
+        manufacturer = Manufacturer.objects.create(name='Hexcel Test', code='hexcel_test')
+        availability = Availability.objects.create(name='In stock test', code='in_stock_test')
+        technology = Technology.objects.create(name='Prepreg test', code='prepreg_test')
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                manufacturer=str(manufacturer.pk),
+                availability=str(availability.pk),
+                technology=str(technology.pk),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        self.assertEqual(material.manufacturer_id, manufacturer.pk)
+        self.assertEqual(material.availability_id, availability.pk)
+        self.assertEqual(material.technology_id, technology.pk)
+
+    def test_edit_form_shows_filled_dictionary_row(self):
+        manufacturer = Manufacturer.objects.create(name='Solvay Shown', code='solvay_shown')
+        material = self.create_material(
+            code='MAT-DICT-EDIT',
+            name='Dict edit material',
+            manufacturer=manufacturer,
+        )
+        response = self.client.get(reverse('materials:edit', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-dictionary-row="manufacturer"')
+        self.assertContains(response, 'data-dictionary-active="1"')
+        self.assertContains(response, 'Solvay Shown')
+
+    def test_detail_hides_empty_dictionary_fields(self):
+        manufacturer = Manufacturer.objects.create(name='Only Maker', code='only_maker')
+        with_maker = self.create_material(
+            code='MAT-DICT-SHOW',
+            name='Has manufacturer',
+            manufacturer=manufacturer,
+        )
+        without = self.create_material(code='MAT-DICT-HIDE', name='No dictionaries')
+
+        shown = self.client.get(reverse('materials:detail', kwargs={'pk': with_maker.pk}))
+        self.assertEqual(shown.status_code, 200)
+        self.assertContains(shown, 'Производитель')
+        self.assertContains(shown, 'Only Maker')
+        self.assertNotContains(shown, 'Доступность')
+        self.assertNotContains(shown, 'Технология')
+
+        hidden = self.client.get(reverse('materials:detail', kwargs={'pk': without.pk}))
+        self.assertEqual(hidden.status_code, 200)
+        self.assertNotContains(hidden, 'Производитель')
+        self.assertNotContains(hidden, 'Доступность')
+        self.assertNotContains(hidden, 'Технология')
 
     def test_public_material_form_includes_structure_fields_not_props_id(self):
         from apps.materials.picker_data import materials_for_picker_queryset

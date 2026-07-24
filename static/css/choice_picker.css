@@ -147,3 +147,8 @@
 .material-properties-table .choice-picker {
     max-width: 18rem;
 }
+
+#material-dictionary-fields .choice-picker {
+    width: 100%;
+    max-width: none;
+}
