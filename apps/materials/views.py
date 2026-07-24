@@ -661,10 +661,12 @@ class MaterialExportView(AppViewMixin, View):
     """Download selected materials as a convenient XLSX table."""
 
     def _wants_json(self, request) -> bool:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return True
+        # Native form download opens a new tab; prefer flash+redirect there.
+        # JSON only when the client explicitly asks (tests / tooling).
         accept = (request.headers.get('Accept') or '').lower()
-        return 'application/json' in accept
+        if 'application/json' in accept and 'text/html' not in accept:
+            return True
+        return request.GET.get('format') == 'json'
 
     def _error_response(self, request, message: str, *, status: int = 400):
         if self._wants_json(request):
