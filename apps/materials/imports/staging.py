@@ -172,6 +172,7 @@ def build_staging_draft(
             'availability': '',
             'technology': '',
         }
+        name_column_label = ''
         struct_vals: list[DraftStructureValue] = []
         props: list[DraftProperty] = []
         warnings: list[str] = []
@@ -187,6 +188,7 @@ def build_staging_draft(
                 fields['code'] = _as_text(raw)
             elif target == TARGET_NAME:
                 fields['name'] = _as_text(raw)
+                name_column_label = col.display or name_column_label
             elif target == TARGET_DESCRIPTION:
                 text = _as_text(raw)
                 if text:
@@ -336,9 +338,34 @@ def build_staging_draft(
             name = code
             warnings.append('Название взято из кода')
 
-        # Без названия и кода строку не пропускаем тихо: пусть валидация покажет ошибку.
+        # Пустое название/код при наличии прочих колонок: не блокируем весь импорт —
+        # строку пропускаем (типично пустая «Марка» при сопоставлении Марка→Название).
         if not name and not code:
-            warnings.append('Нет названия и кода')
+            col_hint = f'«{name_column_label}»' if name_column_label else '«Название»'
+            warnings.append(
+                f'Пропущено: пустое значение в колонке {col_hint}. '
+                'Материал не будет создан — заполните ячейку, сопоставьте другую колонку '
+                'или оставьте пропуск.'
+            )
+            drafts.append(
+                DraftMaterial(
+                    source_row=excel_row,
+                    name='',
+                    code='',
+                    description=fields['description'],
+                    tags=tags,
+                    action='skip',
+                    existing_pk=None,
+                    struct_type_id=str(structure_type_id or ''),
+                    manufacturer=fields['manufacturer'],
+                    availability=fields['availability'],
+                    technology=fields['technology'],
+                    warnings=warnings,
+                    structure_values=struct_vals,
+                    properties=props,
+                )
+            )
+            continue
 
         action, existing_pk, code, extra_warnings = _resolve_identity(
             workspace=workspace,

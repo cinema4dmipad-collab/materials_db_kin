@@ -868,6 +868,7 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'между колонками')
         self.assertContains(response, 'Выгрузить в Excel')
         self.assertContains(response, 'одного типа структуры')
+        self.assertContains(response, 'пропускаются')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):

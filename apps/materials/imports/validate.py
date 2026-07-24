@@ -115,11 +115,12 @@ def validate_drafts(
         if draft.action == 'skip':
             continue
         if not draft.name and draft.action == 'create':
-            report.add_error(
-                'Для нового материала укажите название '
-                '(сопоставьте колонку с полем «Название» или заполните ячейку в файле).',
-                row=draft.source_row,
-                column='name',
+            # Staging normally marks such rows as skip; keep a soft fallback for
+            # hand-edited drafts / iterate so one empty name does not hard-block apply.
+            draft.action = 'skip'
+            draft.warnings.append(
+                'Пропущено: нет названия — материал не будет создан '
+                '(сопоставьте колонку с полем «Название» или заполните ячейку).'
             )
             continue
         if draft.name and len(draft.name) > _MATERIAL_NAME_MAX:
