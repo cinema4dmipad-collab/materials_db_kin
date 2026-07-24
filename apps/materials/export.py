@@ -370,6 +370,7 @@ def materials_xlsx_response(
     response['Content-Disposition'] = (
         f'attachment; filename="{safe_name}"; filename*=UTF-8\'\'{safe_name}'
     )
+    response['Content-Length'] = str(len(payload))
     response['X-Content-Type-Options'] = 'nosniff'
     response['Cache-Control'] = 'no-store'
     return response
