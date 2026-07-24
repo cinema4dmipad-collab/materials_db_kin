@@ -859,33 +859,49 @@ class MaterialImportHybridTests(TestCase):
         self.assertFalse(report.ok)
         self.assertTrue(any('неоднозначно' in err.message for err in report.errors))
 
-    def test_rows_without_name_become_validation_errors(self):
-        """Без названия нельзя тихо пропустить строку — нужна ошибка валидации."""
+    def test_rows_without_name_are_skipped_not_blocking(self):
+        """Пустое название (напр. пустая «Марка») — пропуск строки, остальные пишутся."""
         from apps.materials.imports.wide import WideColumn, WideTable
 
         table = WideTable(
             sheet_name='CSV',
             header_row=1,
-            columns=[WideColumn(index=0, label='Плотность пов')],
-            rows=[{0: 260}],
-            preview_rows=[{0: 260}],
+            columns=[
+                WideColumn(index=0, label='Марка'),
+                WideColumn(index=1, label='Плотность пов'),
+            ],
+            rows=[
+                {0: '', 1: 260},
+                {0: 'E-стекло', 1: 300},
+            ],
+            preview_rows=[{0: '', 1: 260}, {0: 'E-стекло', 1: 300}],
         )
         drafts = build_staging_draft(
             table,
-            {'0': {'target': f'structure:{self.density_field.name}', 'parse': 'auto'}},
+            {
+                '0': {'target': 'material.name', 'parse': 'auto'},
+                '1': {'target': f'structure:{self.density_field.name}', 'parse': 'auto'},
+            },
             workspace=self.workspace,
             match_policy=MATCH_BY_NAME,
             structure_type_id=str(self.structure_type.pk),
         )
-        self.assertTrue(drafts)
-        self.assertNotEqual(drafts[0].action, 'skip')
-        self.assertFalse(drafts[0].name)
-        report = MaterialImporter(workspace=self.workspace, dry_run=True).import_drafts(
+        self.assertEqual(len(drafts), 2)
+        self.assertEqual(drafts[0].action, 'skip')
+        self.assertTrue(any('Пропущено' in w for w in drafts[0].warnings))
+        self.assertIn('Марка', drafts[0].warnings[0])
+        self.assertEqual(drafts[1].action, 'create')
+        self.assertEqual(drafts[1].name, 'E-стекло')
+
+        report = MaterialImporter(workspace=self.workspace).import_drafts(
             drafts,
             structure_type=self.structure_type,
         )
-        self.assertFalse(report.ok)
-        self.assertTrue(any('название' in err.message.lower() for err in report.errors))
+        self.assertTrue(report.ok, report.errors)
+        self.assertEqual(Material.objects.filter(home_workspace=self.workspace).count(), 1)
+        self.assertTrue(
+            Material.objects.filter(home_workspace=self.workspace, name='E-стекло').exists()
+        )
 
     def test_hybrid_import_keeps_mapped_empty_structure_field_as_null(self):
         from apps.core.property_number_value import VALUE_KIND_SCALAR
