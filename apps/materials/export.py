@@ -367,9 +367,8 @@ def materials_xlsx_response(
     if not safe_name.lower().endswith('.xlsx'):
         safe_name = f'{safe_name}.xlsx'
     response = HttpResponse(payload, content_type=_XLSX_CONTENT_TYPE)
-    response['Content-Disposition'] = (
-        f'attachment; filename="{safe_name}"; filename*=UTF-8\'\'{safe_name}'
-    )
+    # Keep Content-Disposition simple: some proxies/Chrome builds mishandle filename*.
+    response['Content-Disposition'] = f'attachment; filename="{safe_name}"'
     response['Content-Length'] = str(len(payload))
     response['X-Content-Type-Options'] = 'nosniff'
     response['Cache-Control'] = 'no-store'

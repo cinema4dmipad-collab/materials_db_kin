@@ -1,12 +1,14 @@
 /**
- * Export selected materials via fetch (blob download).
- * Avoids form.submit() navigating to HTML error/redirect pages that get saved as broken "xlsx".
+ * Export selected materials via a native form POST (target=_blank).
+ *
+ * Blob/fetch downloads are unreliable in Chrome (failed items named like
+ * "<uuid>.xlsx", "Ошибка" / "Проверьте подключение к интернету"). The browser
+ * handles Content-Disposition: attachment from a real navigation instead —
+ * same pattern as scan/attachment downloads.
  */
 (function () {
     'use strict';
 
-    var XLSX_MIME =
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var exporting = false;
 
     function selectedItems(root) {
@@ -102,75 +104,33 @@
         return { ok: true };
     }
 
-    function parseFilename(contentDisposition, fallback) {
-        if (!contentDisposition) {
-            return fallback;
-        }
-        var utfMatch = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
-        if (utfMatch && utfMatch[1]) {
-            try {
-                return decodeURIComponent(utfMatch[1].trim().replace(/"/g, ''));
-            } catch (err) {
-                /* ignore */
-            }
-        }
-        var match = /filename="?([^";]+)"?/i.exec(contentDisposition);
-        if (match && match[1]) {
-            return match[1].trim();
-        }
-        return fallback;
-    }
-
-    function looksLikeZipXlsx(buffer) {
-        if (!buffer || buffer.byteLength < 4) {
-            return false;
-        }
-        var bytes = new Uint8Array(buffer, 0, 4);
-        // XLSX is a ZIP: PK\x03\x04
-        return bytes[0] === 0x50 && bytes[1] === 0x4b;
-    }
-
     function csrfFromCookie() {
         var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
         return match ? decodeURIComponent(match[1]) : '';
     }
 
-    function triggerBlobDownload(blob, filename) {
-        var url = window.URL.createObjectURL(blob);
-        var link = document.createElement('a');
-        link.href = url;
-        link.download = filename || 'materials.xlsx';
-        link.rel = 'noopener';
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        // Do NOT revoke quickly: Chrome still streams the blob into the Downloads
-        // folder. Revoking after ~1s causes "Ошибка" / "Проверьте подключение…"
-        // especially for larger exports behind nginx.
-        window.setTimeout(function () {
-            if (link.parentNode) {
-                link.parentNode.removeChild(link);
-            }
-            window.URL.revokeObjectURL(url);
-        }, 120000);
+    function setBusy(button, busy) {
+        exporting = busy;
+        if (!button) {
+            return;
+        }
+        button.disabled = busy;
+        button.classList.toggle('disabled', busy);
+        if (busy) {
+            button.setAttribute('aria-busy', 'true');
+        } else {
+            button.removeAttribute('aria-busy');
+        }
     }
 
-    function downloadViaHiddenForm(url, ids, csrfToken, scope) {
-        var iframeName = 'materials-export-frame';
-        var iframe = document.querySelector('iframe[name="' + iframeName + '"]');
-        if (!iframe) {
-            iframe = document.createElement('iframe');
-            iframe.name = iframeName;
-            iframe.setAttribute('title', 'export');
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-        }
-
+    function startNativeDownload(url, ids, csrfToken, scope) {
         var form = document.createElement('form');
         form.method = 'post';
         form.action = url;
-        form.target = iframeName;
+        // Real navigation download — Chrome applies Content-Disposition reliably.
+        form.target = '_blank';
         form.style.display = 'none';
+        form.setAttribute('accept-charset', 'utf-8');
 
         var csrf = document.createElement('input');
         csrf.type = 'hidden';
@@ -203,125 +163,6 @@
         }, 0);
     }
 
-    function setBusy(button, busy) {
-        exporting = busy;
-        if (!button) {
-            return;
-        }
-        button.disabled = busy;
-        button.classList.toggle('disabled', busy);
-        if (busy) {
-            button.setAttribute('aria-busy', 'true');
-        } else {
-            button.removeAttribute('aria-busy');
-        }
-    }
-
-    async function exportViaFetch(button, ids, scope) {
-        var url = button.getAttribute('data-export-url');
-        var csrf =
-            button.getAttribute('data-csrf') || csrfFromCookie() || '';
-        if (!url) {
-            showErrorModal('Не задан адрес выгрузки.');
-            return;
-        }
-
-        var body = new FormData();
-        ids.forEach(function (id) {
-            body.append('ids', id);
-        });
-        if (scope) {
-            body.append('scope', scope);
-        }
-
-        setBusy(button, true);
-        try {
-            var response = await fetch(url, {
-                method: 'POST',
-                body: body,
-                credentials: 'same-origin',
-                headers: {
-                    'X-CSRFToken': csrf,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json',
-                },
-            });
-
-            var contentType = (response.headers.get('Content-Type') || '').toLowerCase();
-
-            if (!response.ok) {
-                var errorMessage = 'Не удалось выгрузить файл (код ' + response.status + ').';
-                if (contentType.indexOf('application/json') !== -1) {
-                    try {
-                        var payload = await response.json();
-                        if (payload && payload.error) {
-                            errorMessage = payload.error;
-                        }
-                    } catch (err) {
-                        /* ignore */
-                    }
-                } else if (response.status === 403) {
-                    errorMessage =
-                        'Сессия устарела или нет доступа. Обновите страницу и повторите выгрузку.';
-                }
-                showErrorModal(errorMessage);
-                return;
-            }
-
-            if (contentType.indexOf('application/json') !== -1) {
-                try {
-                    var jsonPayload = await response.json();
-                    showErrorModal(
-                        (jsonPayload && jsonPayload.error) ||
-                            'Сервер вернул ошибку вместо файла Excel.'
-                    );
-                } catch (err) {
-                    showErrorModal('Сервер вернул ошибку вместо файла Excel.');
-                }
-                return;
-            }
-
-            if (
-                contentType.indexOf('text/html') !== -1 ||
-                contentType.indexOf('text/plain') !== -1
-            ) {
-                showErrorModal(
-                    'Сервер вернул страницу вместо файла Excel. Обновите страницу и попробуйте снова.'
-                );
-                return;
-            }
-
-            var buffer = await response.arrayBuffer();
-            if (!looksLikeZipXlsx(buffer)) {
-                showErrorModal(
-                    'Получен повреждённый ответ вместо Excel. Обновите страницу и попробуйте снова.'
-                );
-                return;
-            }
-
-            var filename = parseFilename(
-                response.headers.get('Content-Disposition'),
-                'materials.xlsx'
-            );
-            if (!/\.xlsx$/i.test(filename)) {
-                filename += '.xlsx';
-            }
-            var blob = new Blob([buffer], { type: XLSX_MIME });
-            triggerBlobDownload(blob, filename);
-        } catch (err) {
-            // Network/proxy hiccup: last-resort native download (may still work).
-            try {
-                downloadViaHiddenForm(url, ids, csrf, scope);
-            } catch (fallbackErr) {
-                showErrorModal(
-                    'Сеть или браузер прервали выгрузку. Проверьте соединение и попробуйте снова.'
-                );
-            }
-        } finally {
-            setBusy(button, false);
-        }
-    }
-
     function onExportClick(event) {
         event.preventDefault();
         if (exporting) {
@@ -344,14 +185,31 @@
             showStructureModal(check.message);
             return;
         }
+        var url = button.getAttribute('data-export-url');
+        if (!url) {
+            showErrorModal('Не задан адрес выгрузки.');
+            return;
+        }
+        var csrf = button.getAttribute('data-csrf') || csrfFromCookie() || '';
         var scope = button.getAttribute('data-export-scope') || '';
-        exportViaFetch(
-            button,
-            items.map(function (el) {
-                return el.value;
-            }),
-            scope
-        );
+        setBusy(button, true);
+        try {
+            startNativeDownload(
+                url,
+                items.map(function (el) {
+                    return el.value;
+                }),
+                csrf,
+                scope
+            );
+        } catch (err) {
+            showErrorModal('Не удалось начать выгрузку. Обновите страницу и повторите.');
+        } finally {
+            // Keep button free after the browser has taken the navigation.
+            window.setTimeout(function () {
+                setBusy(button, false);
+            }, 1500);
+        }
     }
 
     document.addEventListener('DOMContentLoaded', function () {

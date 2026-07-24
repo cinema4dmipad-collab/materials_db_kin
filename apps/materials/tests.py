@@ -628,17 +628,12 @@ class MaterialStructureLinkTests(TransactionTestCase):
         get_response = self.client.get(reverse('materials:export'))
         self.assertEqual(get_response.status_code, 302)
 
-        empty_post = self.client.post(
-            reverse('materials:export'),
-            {},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(empty_post.status_code, 400)
+        empty_post = self.client.post(reverse('materials:export'), {})
+        self.assertEqual(empty_post.status_code, 302)
 
         mixed_post = self.client.post(
             reverse('materials:export'),
             {'ids': [str(with_props.pk), str(mixed.pk)], 'scope': 'workspace'},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
             HTTP_ACCEPT='application/json',
         )
         self.assertEqual(mixed_post.status_code, 400)
@@ -647,14 +642,20 @@ class MaterialStructureLinkTests(TransactionTestCase):
         no_struct_post = self.client.post(
             reverse('materials:export'),
             {'ids': [str(plain.pk)], 'scope': 'workspace'},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            HTTP_ACCEPT='application/json',
         )
         self.assertEqual(no_struct_post.status_code, 400)
+
+        empty_json = self.client.post(
+            reverse('materials:export'),
+            {},
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(empty_json.status_code, 400)
 
         response = self.client.post(
             reverse('materials:export'),
             {'ids': [str(with_props.pk), str(other_same_type.pk)], 'scope': 'workspace'},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn(
