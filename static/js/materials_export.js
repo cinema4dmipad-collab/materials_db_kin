@@ -130,20 +130,77 @@
         return bytes[0] === 0x50 && bytes[1] === 0x4b;
     }
 
+    function csrfFromCookie() {
+        var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
     function triggerBlobDownload(blob, filename) {
         var url = window.URL.createObjectURL(blob);
         var link = document.createElement('a');
         link.href = url;
         link.download = filename || 'materials.xlsx';
+        link.rel = 'noopener';
         link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
+        // Do NOT revoke quickly: Chrome still streams the blob into the Downloads
+        // folder. Revoking after ~1s causes "Ошибка" / "Проверьте подключение…"
+        // especially for larger exports behind nginx.
         window.setTimeout(function () {
-            window.URL.revokeObjectURL(url);
             if (link.parentNode) {
                 link.parentNode.removeChild(link);
             }
-        }, 1000);
+            window.URL.revokeObjectURL(url);
+        }, 120000);
+    }
+
+    function downloadViaHiddenForm(url, ids, csrfToken, scope) {
+        var iframeName = 'materials-export-frame';
+        var iframe = document.querySelector('iframe[name="' + iframeName + '"]');
+        if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.name = iframeName;
+            iframe.setAttribute('title', 'export');
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+        }
+
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = url;
+        form.target = iframeName;
+        form.style.display = 'none';
+
+        var csrf = document.createElement('input');
+        csrf.type = 'hidden';
+        csrf.name = 'csrfmiddlewaretoken';
+        csrf.value = csrfToken || csrfFromCookie() || '';
+        form.appendChild(csrf);
+
+        if (scope) {
+            var scopeInput = document.createElement('input');
+            scopeInput.type = 'hidden';
+            scopeInput.name = 'scope';
+            scopeInput.value = scope;
+            form.appendChild(scopeInput);
+        }
+
+        ids.forEach(function (id) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'ids';
+            input.value = id;
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+        window.setTimeout(function () {
+            if (form.parentNode) {
+                form.parentNode.removeChild(form);
+            }
+        }, 0);
     }
 
     function setBusy(button, busy) {
@@ -162,7 +219,8 @@
 
     async function exportViaFetch(button, ids, scope) {
         var url = button.getAttribute('data-export-url');
-        var csrf = button.getAttribute('data-csrf') || '';
+        var csrf =
+            button.getAttribute('data-csrf') || csrfFromCookie() || '';
         if (!url) {
             showErrorModal('Не задан адрес выгрузки.');
             return;
@@ -202,6 +260,9 @@
                     } catch (err) {
                         /* ignore */
                     }
+                } else if (response.status === 403) {
+                    errorMessage =
+                        'Сессия устарела или нет доступа. Обновите страницу и повторите выгрузку.';
                 }
                 showErrorModal(errorMessage);
                 return;
@@ -248,9 +309,14 @@
             var blob = new Blob([buffer], { type: XLSX_MIME });
             triggerBlobDownload(blob, filename);
         } catch (err) {
-            showErrorModal(
-                'Сеть или браузер прервали выгрузку. Проверьте соединение и попробуйте снова.'
-            );
+            // Network/proxy hiccup: last-resort native download (may still work).
+            try {
+                downloadViaHiddenForm(url, ids, csrf, scope);
+            } catch (fallbackErr) {
+                showErrorModal(
+                    'Сеть или браузер прервали выгрузку. Проверьте соединение и попробуйте снова.'
+                );
+            }
         } finally {
             setBusy(button, false);
         }
