@@ -40,6 +40,8 @@ from apps.workspaces.visibility import VisibilityMode
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _VISIBILITY_FIELD_NAMES = frozenset({'visibility_mode', 'published_workspaces'})
+_DICTIONARY_FIELD_NAMES = ('manufacturer', 'availability', 'technology')
+_DICTIONARY_FIELD_NAMES_SET = frozenset(_DICTIONARY_FIELD_NAMES)
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
 STRUCTURE_SERVICE_FIELDS = {'id', 'created_at', 'updated_at', 'created_by'}
 
@@ -501,9 +503,15 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'description': forms.Textarea(attrs={**_BOOTSTRAP_INPUT, 'rows': 3}),
-            'manufacturer': forms.Select(attrs=_BOOTSTRAP_SELECT),
-            'availability': forms.Select(attrs=_BOOTSTRAP_SELECT),
-            'technology': forms.Select(attrs=_BOOTSTRAP_SELECT),
+            'manufacturer': forms.Select(
+                attrs={**_BOOTSTRAP_SELECT, 'data-choice-picker': 'true'},
+            ),
+            'availability': forms.Select(
+                attrs={**_BOOTSTRAP_SELECT, 'data-choice-picker': 'true'},
+            ),
+            'technology': forms.Select(
+                attrs={**_BOOTSTRAP_SELECT, 'data-choice-picker': 'true'},
+            ),
             'struct_type': forms.Select(attrs=structure_type_select_widget_attrs()),
         }
 
@@ -682,6 +690,21 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         return [self['visibility_mode']]
 
     @property
+    def dictionary_bound_fields(self):
+        """Производитель / доступность / технология — отдельный блок формы."""
+        return [self[name] for name in _DICTIONARY_FIELD_NAMES if name in self.fields]
+
+    @property
+    def has_active_dictionary_fields(self):
+        for bound_field in self.dictionary_bound_fields:
+            if bound_field.errors:
+                return True
+            value = bound_field.value()
+            if value not in (None, ''):
+                return True
+        return False
+
+    @property
     def base_bound_fields(self):
         structure_field_names = {
             self.structure_form_field_name(field)
@@ -692,7 +715,9 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             structure_field_names.update(
                 structure_decimal_field_names(structure_field.pk).values()
             )
-        excluded_names = structure_field_names | _VISIBILITY_FIELD_NAMES
+        excluded_names = (
+            structure_field_names | _VISIBILITY_FIELD_NAMES | _DICTIONARY_FIELD_NAMES_SET
+        )
         return [
             bound_field
             for bound_field in self.visible_fields()

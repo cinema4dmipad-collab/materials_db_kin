@@ -47,12 +47,18 @@
         <dl class="row mb-0">
             <dt class="col-sm-3">Описание</dt>
             <dd class="col-sm-9">{{ material.description_display|default:"—" }}</dd>
+            {% if material.manufacturer_id %}
             <dt class="col-sm-3">Производитель</dt>
-            <dd class="col-sm-9">{{ material.manufacturer|default:"—" }}</dd>
+            <dd class="col-sm-9">{{ material.manufacturer }}</dd>
+            {% endif %}
+            {% if material.availability_id %}
             <dt class="col-sm-3">Доступность</dt>
-            <dd class="col-sm-9">{{ material.availability|default:"—" }}</dd>
+            <dd class="col-sm-9">{{ material.availability }}</dd>
+            {% endif %}
+            {% if material.technology_id %}
             <dt class="col-sm-3">Технология</dt>
-            <dd class="col-sm-9">{{ material.technology|default:"—" }}</dd>
+            <dd class="col-sm-9">{{ material.technology }}</dd>
+            {% endif %}
             <dt class="col-sm-3">Создал</dt>
             <dd class="col-sm-9">{{ material|creator_display }}</dd>
             <dt class="col-sm-3">Создан</dt>

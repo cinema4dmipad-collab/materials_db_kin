@@ -16,6 +16,9 @@ def build_material_form_validation_summary(form, properties_formset=None, layers
     field_sections.update({
         'visibility_mode': 'Видимость',
         'published_workspaces': 'Видимость',
+        'manufacturer': 'Справочные свойства',
+        'availability': 'Справочные свойства',
+        'technology': 'Справочные свойства',
     })
     summary = collect_form_errors(
         form,

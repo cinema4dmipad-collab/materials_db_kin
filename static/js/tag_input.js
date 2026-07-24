@@ -393,28 +393,33 @@
             var query = typingInput.value.trim();
             var isFiltering = query.length > 0;
             var list = widget.querySelector('.tag-input-existing__list');
+            var hint = widget.querySelector('.tag-input-existing__hint');
             var matched = [];
 
             if (existingBlock) {
                 existingBlock.classList.toggle('tag-input-existing--filtered', isFiltering);
             }
             if (existingLabel) {
-                existingLabel.textContent = isFiltering ? 'Похожие теги' : 'Существующие теги';
+                existingLabel.textContent = isFiltering ? 'Похожие теги' : 'Доступные теги';
+            }
+            if (hint) {
+                hint.textContent = isFiltering ? 'Enter — выбрать первый' : 'нажмите, чтобы добавить';
             }
 
             widget.querySelectorAll('.tag-input-pick').forEach(function (button, index) {
                 var tagName = button.dataset.tagName || '';
                 var selected = tagIndex(tags, tagName) !== -1;
                 var score = isFiltering ? scoreTagMatch(button, query) : 1;
-                button.classList.remove('tag-input-pick--already-selected');
+                button.classList.remove('tag-input-pick--selected', 'tag-input-pick--already-selected');
                 button.removeAttribute('data-tag-match-score');
-                if (score <= 0) {
+                button.removeAttribute('aria-selected');
+                if (score <= 0 || selected) {
+                    // Already chosen tags live in the composer; hide them here.
                     button.hidden = true;
                     return;
                 }
                 matched.push({
                     button: button,
-                    selected: selected,
                     score: score,
                     index: index,
                 });
@@ -422,9 +427,6 @@
 
             if (isFiltering) {
                 matched.sort(function (left, right) {
-                    if (left.selected !== right.selected) {
-                        return left.selected ? 1 : -1;
-                    }
                     if (right.score !== left.score) {
                         return right.score - left.score;
                     }
@@ -432,28 +434,19 @@
                 });
             }
 
-            var hasUnselectedMatch = matched.some(function (item) { return !item.selected; });
-            var visibleCount = 0;
             matched.forEach(function (item) {
-                var hideSelected = isFiltering && hasUnselectedMatch && item.selected;
-                item.button.hidden = hideSelected;
-                if (hideSelected) {
-                    return;
-                }
+                item.button.hidden = false;
+                item.button.setAttribute('aria-selected', 'false');
                 if (isFiltering) {
                     item.button.dataset.tagMatchScore = String(item.score);
-                    if (item.selected) {
-                        item.button.classList.add('tag-input-pick--already-selected');
-                    }
                     if (list) {
                         list.appendChild(item.button);
                     }
                 }
-                visibleCount += 1;
             });
 
             if (emptyMessage) {
-                emptyMessage.hidden = !isFiltering || visibleCount > 0;
+                emptyMessage.hidden = matched.length > 0;
             }
         }
 
@@ -523,14 +516,13 @@
             });
             button.addEventListener('click', function () {
                 var tagName = button.dataset.tagName || '';
-                if (tagIndex(tags, tagName) === -1) {
-                    removeScopedConflict(tagName);
-                    addTag(tagName);
-                    typingInput.value = '';
-                    filterExistingTags();
-                } else {
-                    removeTag(tagName);
+                if (tagIndex(tags, tagName) !== -1) {
+                    return;
                 }
+                removeScopedConflict(tagName);
+                addTag(tagName);
+                typingInput.value = '';
+                filterExistingTags();
                 typingInput.focus();
             });
         });

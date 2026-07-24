@@ -1252,6 +1252,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             'structure_types',
             StructureType.objects.filter(is_active=True, is_created=True).order_by('name'),
         )
+        context['reference_structure_types'] = structure_types_for_picker(
+            context['structure_types']
+        )
         context['selected_structure_type'] = getattr(self, 'selected_structure_type', None)
         context['iterate_draft'] = getattr(self, 'iterate_draft', None)
         context['iterate_index'] = getattr(self, 'iterate_index', None)

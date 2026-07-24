@@ -19,8 +19,11 @@
     </div>
     {% if widget.tag_suggestions %}
     <div class="tag-input-existing">
-        <div class="tag-input-existing__label">Существующие теги</div>
-        <div class="tag-input-existing__list">
+        <div class="tag-input-existing__head">
+            <span class="tag-input-existing__label">Доступные теги</span>
+            <span class="tag-input-existing__hint">нажмите, чтобы добавить</span>
+        </div>
+        <div class="tag-input-existing__list" role="listbox" aria-label="Доступные теги">
             {% for tag in widget.tag_suggestions %}
             <button type="button"
                     class="entity-tag tag-input-pick{% if tag.name|is_scoped_tag %} entity-tag--scoped{% endif %}{% if not tag.color %} tone-tag{% endif %}"
@@ -28,12 +31,13 @@
                     data-tag-slug="{{ tag.slug }}"
                     {% if tag.color %}data-tag-color="{{ tag.color }}"{% endif %}
                     {% if tag.description %}data-tag-description="{{ tag.description }}"{% endif %}
-                    title="{% if tag.description %}{{ tag.description }}{% else %}Добавить или убрать тег «{{ tag.name }}»{% endif %}">
+                    title="{% if tag.description %}{{ tag.description }}{% else %}Добавить тег «{{ tag.name }}»{% endif %}"
+                    role="option">
                 {{ tag.name|scoped_tag_label }}
             </button>
             {% endfor %}
         </div>
-        <p class="tag-input-existing__empty text-muted small mb-0" hidden>Совпадений не найдено — Enter создаст новый тег</p>
+        <p class="tag-input-existing__empty" hidden>Совпадений нет — Enter создаст новый тег</p>
     </div>
     {% endif %}
 </div>

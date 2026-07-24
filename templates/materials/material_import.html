@@ -4,7 +4,8 @@
 {% block title %}Импорт материалов — База композитов{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-map4" rel="stylesheet">
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-struct2" rel="stylesheet">
+<link href="{% static 'css/reference_properties_picker.css' %}?v={{ app_version }}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -118,6 +119,35 @@
                 <div class="form-text">«По названию» — разным Т-23/Т-13 не мешает общая марка Е-стекло</div>
             </div>
             <div class="col-md-6">
+                <label class="form-label" for="import-structure-type">
+                    Тип структуры <span class="text-danger">*</span>
+                </label>
+                {% if structure_types %}
+                <select name="structure_type_id"
+                        id="import-structure-type"
+                        class="form-select structure-type-picker-select{% if show_structure_type_error %} is-invalid{% endif %}"
+                        data-structure-type-picker="true"
+                        data-allow-empty="false"
+                        required>
+                    <option value="">— выберите тип —</option>
+                    {% for st in structure_types %}
+                    <option value="{{ st.pk }}"{% if config.structure_type_id == st.pk|stringformat:"s" %} selected{% endif %}>{{ st.name }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <div class="alert alert-warning py-2 small mb-0">
+                    Нет активных типов структуры с созданной таблицей.
+                    <a href="{% url 'structures:select_type' %}">Открыть типы структур</a>
+                    или <a href="{% url 'structures:type_create' %}">создайте новый</a>.
+                </div>
+                {% endif %}
+                {% if show_structure_type_error %}
+                <div class="invalid-feedback d-block">Выберите тип структуры — без него нельзя продолжить.</div>
+                {% else %}
+                <div class="form-text">Обязательно: к этому типу будут писаться поля структуры из файла.</div>
+                {% endif %}
+            </div>
+            <div class="col-md-6">
                 <div class="form-check mt-4">
                     <input type="checkbox" class="form-check-input" name="create_missing_dictionaries"
                            value="1" id="import-create-missing-dictionaries"
@@ -131,24 +161,6 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <label class="form-label" for="import-structure-type">
-                    Тип структуры <span class="text-danger">*</span>
-                </label>
-                <select name="structure_type_id" id="import-structure-type"
-                        class="form-select{% if show_structure_type_error %} is-invalid{% endif %}"
-                        required>
-                    <option value="">— выберите тип —</option>
-                    {% for st in structure_types %}
-                    <option value="{{ st.pk }}"{% if config.structure_type_id == st.pk|stringformat:"s" %} selected{% endif %}>{{ st.name }}</option>
-                    {% endfor %}
-                </select>
-                {% if show_structure_type_error %}
-                <div class="invalid-feedback d-block">Выберите тип структуры — без него нельзя продолжить.</div>
-                {% else %}
-                <div class="form-text">Обязательно: к этому типу будут писаться поля структуры из файла.</div>
-                {% endif %}
-            </div>
             {% if layout_hint %}
             <div class="col-12">
                 <div class="alert alert-info py-2 small mb-0">{{ layout_hint }}</div>
@@ -158,6 +170,9 @@
                 <button type="submit" class="btn btn-primary">Показать колонки</button>
             </div>
         </form>
+        {% if structure_types %}
+        {% include 'includes/reference_structure_types_modal.html' %}
+        {% endif %}
         {% endif %}
 
         {% if has_staged_file and step == 'mapping' and wide_table %}
@@ -168,15 +183,15 @@
             · строк: {{ wide_table.rows|length }}
             · <a href="{% url 'materials:import' %}?step=configure">лист / уникальность</a>
         </p>
-        <div class="alert alert-secondary py-2 small">
-            Тип структуры:
+        <div class="alert alert-secondary py-2 small d-flex flex-wrap align-items-center gap-2">
+            <span>Тип структуры:</span>
             {% if selected_structure_type %}
-            <strong>{{ selected_structure_type.name }}</strong>.
+            {% include 'includes/type_badge.html' with label=selected_structure_type.name tone=selected_structure_type.display_color %}
+            <span class="text-muted">· колонка <strong>Наименование</strong> → <strong>Название</strong>; параметры — в <strong>поля структуры</strong>.</span>
             {% else %}
-            не выбран —
-            <a href="{% url 'materials:import' %}?step=configure">вернитесь к настройке</a>.
+            <span>не выбран —
+            <a href="{% url 'materials:import' %}?step=configure">вернитесь к настройке</a>.</span>
             {% endif %}
-            Колонка <strong>Наименование</strong> → <strong>Название</strong>; параметры ткани — в <strong>поля структуры</strong>.
         </div>
 
         <div class="alert alert-danger py-2 small{% if not missing_required_targets %} d-none{% endif %}"
@@ -900,6 +915,10 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/import_busy.js' %}?v={{ app_version }}-map3"></script>
+{% if step == 'configure' %}
+<script src="{% static 'js/reference_structure_types_picker.js' %}?v={{ app_version }}"></script>
+<script src="{% static 'js/structure_type_picker_field.js' %}?v={{ app_version }}"></script>
+{% endif %}
 {% if step == 'mapping' %}
 <script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map5"></script>
 {% endif %}
