@@ -6,7 +6,7 @@ from pathlib import Path
 from django.core.exceptions import ValidationError
 from django.db import DataError, transaction
 
-from apps.core.tag_utils import assign_tags, merge_import_tag_names
+from apps.materials.imports.review_status import apply_import_tags
 from apps.core.property_number_value import VALUE_KIND_SCALAR
 from apps.materials.imports.material_link import resolve_material_ref
 from apps.materials.imports.readers import read_import_file
@@ -219,10 +219,12 @@ class MaterialImporter:
         self._mark_import_source(material)
         report.affected_material_ids.append(str(material.pk))
 
-        if item.tag_names:
-            existing_names = list(material.tags.values_list('name', flat=True))
-            merged = merge_import_tag_names(existing_names, item.tag_names)
-            assign_tags(material, merged, workspace=self.workspace)
+        if apply_import_tags(
+            material,
+            workspace=self.workspace,
+            import_names=item.tag_names,
+            created=created,
+        ):
             report.tags_merged += 1
 
         for prop in item.properties:
@@ -355,10 +357,12 @@ class MaterialImporter:
         self._mark_import_source(material)
         report.affected_material_ids.append(str(material.pk))
 
-        if item.tag_names:
-            existing_names = list(material.tags.values_list('name', flat=True))
-            merged = merge_import_tag_names(existing_names, item.tag_names)
-            assign_tags(material, merged, workspace=self.workspace)
+        if apply_import_tags(
+            material,
+            workspace=self.workspace,
+            import_names=item.tag_names,
+            created=created,
+        ):
             report.tags_merged += 1
 
         if item.structure_sql:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from apps.core.number_utils import normalize_decimal_input
@@ -13,17 +14,30 @@ from apps.core.property_number_value import (
 PARSE_AUTO = 'auto'
 PARSE_TEXT = 'text'
 PARSE_NUMBER = 'number'
+PARSE_BOOLEAN = 'boolean'
+PARSE_DATE = 'date'
 PARSE_MODES = (
     (PARSE_AUTO, 'Авто (число / диапазон / ± / текст)'),
     (PARSE_TEXT, 'Всегда текст'),
     (PARSE_NUMBER, 'Строго число (иначе сомнение)'),
+    (PARSE_BOOLEAN, 'Да / Нет'),
+    (PARSE_DATE, 'Дата'),
 )
 # Короткие подписи для компактного UI маппинга
 PARSE_MODES_SHORT = (
     (PARSE_AUTO, 'Авто'),
     (PARSE_TEXT, 'Текст'),
     (PARSE_NUMBER, 'Число'),
+    (PARSE_BOOLEAN, 'Да/Нет'),
+    (PARSE_DATE, 'Дата'),
 )
+
+_TRUE_TOKENS = frozenset({
+    '1', 'true', 'yes', 'y', 'да', 'истина', 'on', 'вкл', '+',
+})
+_FALSE_TOKENS = frozenset({
+    '0', 'false', 'no', 'n', 'нет', 'ложь', 'off', 'выкл', '-',
+})
 
 CONFIDENCE_OK = 'ok'
 CONFIDENCE_UNCERTAIN = 'uncertain'
@@ -101,8 +115,30 @@ def parse_property_cell(raw, *, mode: str = PARSE_AUTO) -> dict | None:
     или None если пусто.
     """
     mode = mode or PARSE_AUTO
+    if mode == PARSE_BOOLEAN:
+        if raw is None:
+            return None
+        if isinstance(raw, str) and not raw.replace('\u00a0', ' ').strip():
+            return None
+        return _parse_boolean_cell(raw)
+
+    if mode == PARSE_DATE:
+        if is_blank_cell(raw):
+            return None
+        return _parse_date_cell(raw)
+
     if is_blank_cell(raw):
         return None
+
+    if isinstance(raw, bool):
+        # Excel иногда отдаёт bool; в авто/тексте/числе — как да/нет-текст.
+        return _result(
+            VALUE_KIND_SCALAR,
+            'true' if raw else 'false',
+            None,
+            CONFIDENCE_OK,
+            'логическое',
+        )
 
     if isinstance(raw, (int, float, Decimal)) and not isinstance(raw, bool):
         try:
@@ -110,6 +146,23 @@ def parse_property_cell(raw, *, mode: str = PARSE_AUTO) -> dict | None:
         except (InvalidOperation, ValueError):
             text = str(raw)
         return _result(VALUE_KIND_SCALAR, text, None, CONFIDENCE_OK, 'число')
+
+    if isinstance(raw, datetime):
+        return _result(
+            VALUE_KIND_SCALAR,
+            raw.date().isoformat(),
+            None,
+            CONFIDENCE_OK,
+            'дата из Excel',
+        )
+    if isinstance(raw, date):
+        return _result(
+            VALUE_KIND_SCALAR,
+            raw.isoformat(),
+            None,
+            CONFIDENCE_OK,
+            'дата из Excel',
+        )
 
     text = str(raw).replace('\u00a0', ' ').strip()
     if not text:
@@ -187,6 +240,87 @@ def parse_property_cell(raw, *, mode: str = PARSE_AUTO) -> dict | None:
     confidence = CONFIDENCE_UNCERTAIN if multiline or _looks_messy(single_line) else CONFIDENCE_OK
     note = 'сложное значение — проверьте' if confidence == CONFIDENCE_UNCERTAIN else 'текст'
     return _result(VALUE_KIND_SCALAR, text, None, confidence, note)
+
+
+def _parse_boolean_cell(raw) -> dict:
+    if isinstance(raw, bool):
+        return _result(
+            VALUE_KIND_SCALAR,
+            'true' if raw else 'false',
+            None,
+            CONFIDENCE_OK,
+            'логическое',
+        )
+    if isinstance(raw, (int, float, Decimal)) and not isinstance(raw, bool):
+        try:
+            number = Decimal(str(raw))
+        except (InvalidOperation, ValueError):
+            number = None
+        if number == 1:
+            return _result(VALUE_KIND_SCALAR, 'true', None, CONFIDENCE_OK, 'логическое (1)')
+        if number == 0:
+            return _result(VALUE_KIND_SCALAR, 'false', None, CONFIDENCE_OK, 'логическое (0)')
+    text = str(raw).replace('\u00a0', ' ').strip().casefold()
+    text = ' '.join(text.split())
+    if text in _TRUE_TOKENS:
+        return _result(VALUE_KIND_SCALAR, 'true', None, CONFIDENCE_OK, 'логическое')
+    if text in _FALSE_TOKENS:
+        return _result(VALUE_KIND_SCALAR, 'false', None, CONFIDENCE_OK, 'логическое')
+    return _result(
+        VALUE_KIND_SCALAR,
+        str(raw).replace('\u00a0', ' ').strip(),
+        None,
+        CONFIDENCE_UNCERTAIN,
+        'ожидалось да/нет — проверьте',
+    )
+
+
+def _parse_date_cell(raw) -> dict:
+    if isinstance(raw, datetime):
+        return _result(
+            VALUE_KIND_SCALAR,
+            raw.date().isoformat(),
+            None,
+            CONFIDENCE_OK,
+            'дата из Excel',
+        )
+    if isinstance(raw, date):
+        return _result(
+            VALUE_KIND_SCALAR,
+            raw.isoformat(),
+            None,
+            CONFIDENCE_OK,
+            'дата из Excel',
+        )
+    text = str(raw).replace('\u00a0', ' ').strip()
+    single_line = ' '.join(text.split())
+    for fmt in (
+        '%Y-%m-%d',
+        '%d.%m.%Y',
+        '%d/%m/%Y',
+        '%d-%m-%Y',
+        '%Y.%m.%d',
+        '%d.%m.%y',
+        '%d/%m/%y',
+    ):
+        try:
+            parsed = datetime.strptime(single_line, fmt).date()
+            return _result(
+                VALUE_KIND_SCALAR,
+                parsed.isoformat(),
+                None,
+                CONFIDENCE_OK,
+                'дата',
+            )
+        except ValueError:
+            continue
+    return _result(
+        VALUE_KIND_SCALAR,
+        text,
+        None,
+        CONFIDENCE_UNCERTAIN,
+        'ожидалась дата — проверьте',
+    )
 
 
 def _extract_leading_number(single_line: str) -> tuple[str, str, str] | None:

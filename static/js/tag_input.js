@@ -3,6 +3,7 @@
 
     var SCOPED_SEPARATOR = '::';
     var SCOPED_TAG_DEFAULT_COLOR = '#007679';
+    var NEW_TAG_DEFAULT_COLOR = '#336699';
 
     function escapeHtml(value) {
         return (value || '')
@@ -101,9 +102,12 @@
         return map;
     }
 
-    function applyTagVisual(element, tagName, suggestionMap) {
+    function applyTagVisual(element, tagName, suggestionMap, overrideColor) {
         var meta = suggestionMap[(tagName || '').toLowerCase()] || null;
-        var color = (meta && meta.color) || element.dataset.tagColor || '';
+        var color = (overrideColor || '').trim()
+            || (meta && meta.color)
+            || element.dataset.tagColor
+            || '';
         var description = (meta && meta.description) || element.dataset.tagDescription || '';
         if (!color && isScopedTagName(tagName)) {
             // Совпадает с coalesce_tags_for_display / списком материалов
@@ -147,6 +151,8 @@
         var existingBlock = widget.querySelector('.tag-input-existing');
         var existingLabel = widget.querySelector('.tag-input-existing__label');
         var emptyMessage = widget.querySelector('.tag-input-existing__empty');
+        var colorsHidden = widget.querySelector('.tag-input-colors-value');
+        var allowColors = widget.getAttribute('data-allow-tag-colors') === '1';
         if (!hiddenInput || !typingInput || !chipsContainer || !composer) {
             return;
         }
@@ -154,15 +160,67 @@
         var suggestionMap = buildSuggestionMap(widget);
         var tags = parseTags(hiddenInput.value);
         var renderedTagKeys = null;
+        var tagColors = Object.create(null);
+
+        function parseColorsValue(raw) {
+            if (!raw) {
+                return Object.create(null);
+            }
+            try {
+                var parsed = JSON.parse(raw);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    return Object.create(null);
+                }
+                var map = Object.create(null);
+                Object.keys(parsed).forEach(function (key) {
+                    var color = String(parsed[key] || '').trim().toUpperCase();
+                    if (/^#[0-9A-F]{6}$/.test(color)) {
+                        map[String(key)] = color;
+                    }
+                });
+                return map;
+            } catch (error) {
+                return Object.create(null);
+            }
+        }
+
+        if (allowColors && colorsHidden) {
+            tagColors = parseColorsValue(colorsHidden.value);
+        }
 
         function tagKey(tagName) {
             return String(tagName || '').trim().toLowerCase();
+        }
+
+        function colorForTag(tagName) {
+            var key = tagKey(tagName);
+            if (tagColors[tagName]) {
+                return tagColors[tagName];
+            }
+            var found = Object.keys(tagColors).find(function (name) {
+                return tagKey(name) === key;
+            });
+            if (found) {
+                return tagColors[found];
+            }
+            var meta = suggestionMap[key];
+            return (meta && meta.color) || '';
         }
 
         function syncHidden() {
             hiddenInput.value = tags.join(', ');
             hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
             hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+            if (allowColors && colorsHidden) {
+                var payload = {};
+                tags.forEach(function (name) {
+                    var color = colorForTag(name);
+                    if (color && /^#[0-9A-Fa-f]{6}$/.test(color)) {
+                        payload[name] = color.toUpperCase();
+                    }
+                });
+                colorsHidden.value = JSON.stringify(payload);
+            }
         }
 
         function removeScopedConflict(tagName) {
@@ -172,7 +230,10 @@
             }
             for (var i = tags.length - 1; i >= 0; i -= 1) {
                 if (tagScopeKey(tags[i]) === scopeKey && tags[i].toLowerCase() !== tagName.toLowerCase()) {
-                    tags.splice(i, 1);
+                    var removed = tags.splice(i, 1)[0];
+                    if (removed) {
+                        delete tagColors[removed];
+                    }
                 }
             }
         }
@@ -220,9 +281,28 @@
             var chip = document.createElement('span');
             chip.className = 'tag-input-chip entity-tag' + (isScopedTagName(tagName) ? ' entity-tag--scoped' : '');
             chip.dataset.tagName = tagName;
-            applyTagVisual(chip, tagName, suggestionMap);
+            applyTagVisual(chip, tagName, suggestionMap, colorForTag(tagName));
             // Same GlLabel markup as picker/badges — text parts are direct children.
             chip.innerHTML = renderScopedTagLabel(tagName);
+
+            if (allowColors) {
+                var colorBtn = document.createElement('input');
+                colorBtn.type = 'color';
+                colorBtn.className = 'tag-input-chip__color';
+                colorBtn.value = (colorForTag(tagName) || NEW_TAG_DEFAULT_COLOR).toUpperCase();
+                colorBtn.title = 'Цвет тега «' + tagName + '»';
+                colorBtn.setAttribute('aria-label', 'Цвет тега «' + tagName + '»');
+                colorBtn.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                });
+                colorBtn.addEventListener('input', function () {
+                    var next = colorBtn.value.toUpperCase();
+                    tagColors[tagName] = next;
+                    applyTagVisual(chip, tagName, suggestionMap, next);
+                    syncHidden();
+                });
+                chip.appendChild(colorBtn);
+            }
 
             var removeButton = document.createElement('button');
             removeButton.type = 'button';
@@ -470,12 +550,27 @@
             return visible[0];
         }
 
-        function addTag(tagName) {
+        function addTag(tagName, options) {
+            options = options || {};
             var normalized = (tagName || '').trim();
             if (!normalized || tagIndex(tags, normalized) !== -1) {
                 return false;
             }
             removeScopedConflict(normalized);
+            if (allowColors) {
+                var chosen = (options.color || '').trim().toUpperCase();
+                if (!chosen) {
+                    chosen = colorForTag(normalized);
+                }
+                if (!chosen) {
+                    chosen = isScopedTagName(normalized)
+                        ? SCOPED_TAG_DEFAULT_COLOR
+                        : NEW_TAG_DEFAULT_COLOR;
+                }
+                if (chosen && /^#[0-9A-F]{6}$/.test(chosen)) {
+                    tagColors[normalized] = chosen;
+                }
+            }
             tags.push(normalized);
             syncHidden();
             renderChips();
@@ -487,7 +582,15 @@
             if (index === -1) {
                 return false;
             }
-            tags.splice(index, 1);
+            var removed = tags.splice(index, 1)[0];
+            if (removed) {
+                delete tagColors[removed];
+                Object.keys(tagColors).forEach(function (key) {
+                    if (tagKey(key) === tagKey(removed)) {
+                        delete tagColors[key];
+                    }
+                });
+            }
             syncHidden();
             renderChips();
             return true;
@@ -504,7 +607,10 @@
             return added;
         }
 
-        composer.addEventListener('click', function () {
+        composer.addEventListener('click', function (event) {
+            if (event.target && event.target.closest('.tag-input-chip__color')) {
+                return;
+            }
             typingInput.focus();
         });
 
@@ -520,7 +626,9 @@
                     return;
                 }
                 removeScopedConflict(tagName);
-                addTag(tagName);
+                addTag(tagName, {
+                    color: button.dataset.tagColor || colorForTag(tagName),
+                });
                 typingInput.value = '';
                 filterExistingTags();
                 typingInput.focus();
@@ -558,7 +666,9 @@
             if (firstPick && typingInput.value.trim()) {
                 var pickName = firstPick.dataset.tagName || '';
                 removeScopedConflict(pickName);
-                addTag(pickName);
+                addTag(pickName, {
+                    color: firstPick.dataset.tagColor || colorForTag(pickName),
+                });
                 typingInput.value = '';
                 filterExistingTags();
                 return;

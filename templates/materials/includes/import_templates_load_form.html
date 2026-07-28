@@ -1,0 +1,7 @@
+{# Оболочка POST для применения шаблона. Держать ВНЕ #import-map-form. #}
+{% if import_templates %}
+<form method="post" id="import-load-template-form" class="d-none" hidden aria-hidden="true">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="load_template">
+</form>
+{% endif %}

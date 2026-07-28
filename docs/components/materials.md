@@ -83,7 +83,9 @@ Shared service: `apps/materials/imports/` (`MaterialImporter`).
 4. **Staging / review**: unrecognized numeric cells (dual warp/weft, messy text, dates-as-numbers) block apply until fixed or ignored; then write immediately. Rows without a material name are **skipped** (warning), not hard-blocked.  
 5. Apply → SQL structure row (`struct_props_id`) + optional `MaterialProperty`; new dictionary rows are created **inside** the same DB transaction as materials
 
-Mapping profiles: model `MaterialImportProfile` (per workspace, includes `structure_type_id`).  
+Mapping templates: model `MaterialImportProfile` (per workspace; stores column mapping + `structure_type_id`). Apply on configure («Лист и структура»); save on mapping («Сопоставление колонок»).
+
+Import QA: new materials get `статус::утвержден`; review board `/materials/import/review/` has columns Утвержден / Проверено (`apps/materials/imports/review_status.py`).
 Permission: `material.create`.
 
 **CLI:**

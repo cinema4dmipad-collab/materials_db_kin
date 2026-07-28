@@ -43,13 +43,21 @@
             title: 'Пропуск строки',
             meta: 'Переходим к следующей…',
         },
+        load_template: {
+            title: 'Загрузка шаблона',
+            meta: 'Применяем сохранённый маппинг и тип структуры…',
+        },
         load_profile: {
-            title: 'Загрузка профиля',
-            meta: 'Применяем сохранённый маппинг…',
+            title: 'Загрузка шаблона',
+            meta: 'Применяем сохранённый маппинг и тип структуры…',
+        },
+        save_template: {
+            title: 'Сохранение шаблона',
+            meta: 'Сохраняем маппинг и тип структуры…',
         },
         save_profile: {
-            title: 'Сохранение профиля',
-            meta: 'Сохраняем маппинг…',
+            title: 'Сохранение шаблона',
+            meta: 'Сохраняем маппинг и тип структуры…',
         },
         undo_last_import: {
             title: 'Откат импорта',
@@ -172,6 +180,33 @@
             trimReviewIncludes(form);
             preserveSubmitter(form, submitter);
             showBusy(resolveAction(form, submitter));
+        });
+    });
+
+    // На шаге «Запись» Enter в полях/фильтрах не должен жать «Записать».
+    ['import-unrecognized-form', 'import-review-form'].forEach(function (formId) {
+        var reviewForm = document.getElementById(formId);
+        if (!reviewForm) {
+            return;
+        }
+        reviewForm.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' || event.defaultPrevented) {
+                return;
+            }
+            var target = event.target;
+            if (!target) {
+                return;
+            }
+            if (target.type === 'submit') {
+                return;
+            }
+            if (target.tagName === 'BUTTON' && target.type === 'submit') {
+                return;
+            }
+            if (target.tagName === 'TEXTAREA') {
+                return;
+            }
+            event.preventDefault();
         });
     });
 

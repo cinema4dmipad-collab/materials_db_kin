@@ -9,22 +9,6 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
             <h1 class="h4 mb-0">Материалы</h1>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-                {% if materials %}
-                <button type="button"
-                        class="btn btn-outline-secondary btn-sm"
-                        data-list-bulk-toggle
-                        aria-pressed="false">
-                    Выбрать
-                </button>
-                <button type="button"
-                        class="btn btn-outline-secondary btn-sm"
-                        data-materials-export
-                        data-export-url="{% url 'materials:export' %}"
-                        data-export-scope="{{ material_scope }}"
-                        data-csrf="{{ csrf_token }}">
-                    Выгрузить в Excel
-                </button>
-                {% endif %}
                 {% if material_scope == 'workspace' %}
                 <a href="{% url 'materials:create' %}" class="btn btn-primary btn-sm">Создать</a>
                 {% endif %}
@@ -55,6 +39,23 @@
         {% endif %}
         {% include 'includes/list_filter_bar.html' %}
         {% if materials %}
+        <div class="list-bulk-select-bar px-3 py-2 border-bottom d-flex flex-wrap align-items-center gap-2">
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm"
+                    data-list-bulk-toggle
+                    aria-pressed="false">
+                Выбрать
+            </button>
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm"
+                    data-materials-export
+                    data-export-url="{% url 'materials:export' %}"
+                    data-export-scope="{{ material_scope }}"
+                    data-csrf="{{ csrf_token }}">
+                Выгрузить в Excel
+            </button>
+            <span class="small text-muted">Отметьте строки в таблице для удаления или выгрузки</span>
+        </div>
         <form method="post"
               action="{% url 'materials:bulk_delete' %}"
               data-list-bulk-form

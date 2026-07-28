@@ -872,6 +872,7 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Выгрузить в Excel')
         self.assertContains(response, 'одного типа структуры')
         self.assertContains(response, 'пропускаются')
+        self.assertContains(response, 'двухуровневая шапка')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):

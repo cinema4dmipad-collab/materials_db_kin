@@ -115,6 +115,20 @@ def _build_dashboard_attention(*, request, workspace):
             }
         )
 
+    from apps.materials.imports.review_status import count_pending_import_review
+
+    pending_review = count_pending_import_review(workspace)
+    if pending_review:
+        items.append(
+            {
+                'kind': 'import_review',
+                'label': 'Импорт к разбору',
+                'count': pending_review,
+                'url': reverse('materials:import_review'),
+                'detail': 'Материалы с тегом статус::утвержден',
+            }
+        )
+
     batch = get_last_import_debug_batch(request.session)
     if batch and batch.get('workspace_slug') == workspace.slug:
         batch_materials = batch.get('materials') or []

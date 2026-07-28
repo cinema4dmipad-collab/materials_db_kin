@@ -16,17 +16,26 @@ from apps.materials.imports.debug_undo import (
     store_last_import_debug_batch,
     undo_last_import_debug_batch,
 )
+from apps.materials.models import Material, MaterialImportProfile, MaterialProperty
 from apps.materials.imports.mapping import (
     TARGET_CODE,
     TARGET_NAME,
+    TARGET_PROPERTY_PREFIX,
     TARGET_SKIP,
     TARGET_STRUCTURE_PREFIX,
+    TARGET_TAGS,
+    apply_profile_to_columns,
+    build_field_mapping_rows,
     find_duplicate_mapping_targets,
+    import_templates_for_workspace,
     mapping_catalog_groups,
     mapping_choices,
     missing_required_targets,
+    primary_import_targets,
+    profile_payload_from_mapping,
     required_import_targets,
     suggest_target,
+    unused_columns_from_mapping,
 )
 from apps.materials.imports.structure_values import merge_structure_sql_payloads
 from apps.materials.imports.iterate import (
@@ -39,6 +48,7 @@ from apps.materials.imports.readers import read_csv, read_import_file
 from apps.materials.imports.service import MaterialImporter
 from apps.materials.imports.staging import (
     MATCH_ALWAYS_CREATE,
+    MATCH_BY_CODE,
     MATCH_BY_NAME,
     DraftMaterial,
     DraftProperty,
@@ -47,20 +57,29 @@ from apps.materials.imports.staging import (
     RECOGNITION_MANUAL,
     RECOGNITION_OK,
     RECOGNITION_UNRECOGNIZED,
+    apply_duplicate_name_policy,
     apply_review_post,
     apply_unrecognized_ignore_all,
     apply_unrecognized_manual_fixes,
+    build_review_fix_grid,
     build_staging_draft,
     draft_to_import_rows,
     drafts_from_session,
     drafts_to_session,
     has_unresolved_unrecognized,
     iter_unrecognized_fields,
+    merge_default_tags_into_drafts,
+    name_collisions_for_drafts,
 )
 from apps.materials.imports.upload import get_import_config, set_import_config
 from apps.materials.imports.value_parse import needs_manual_recognition, parse_property_cell
-from apps.materials.imports.wide import WideColumn, WideTable, detect_header_layout, load_wide_table
-from apps.materials.models import Material, MaterialProperty
+from apps.materials.imports.wide import (
+    WideColumn,
+    WideTable,
+    build_import_layout_schema,
+    detect_header_layout,
+    load_wide_table,
+)
 from apps.references.models import Property, PropertyGroup
 from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
@@ -180,6 +199,32 @@ class MaterialImportServiceTests(TestCase):
         material = sourced.first()
         self.assertNotIn('Создано из файла импорта', material.description or '')
         self.assertNotIn('Создано из файла импорта', material.description_display)
+        self.assertIn(
+            'статус::утвержден',
+            set(material.tags.values_list('name', flat=True)),
+        )
+        status_tag = material.tags.get(name='статус::утвержден')
+        self.assertEqual((status_tag.color or '').upper(), '#E6A700')
+
+    def test_update_does_not_force_approved_status_tag(self):
+        from apps.materials.imports.review_status import (
+            IMPORT_STATUS_APPROVED,
+            IMPORT_STATUS_VERIFIED,
+            set_material_import_status,
+        )
+
+        MaterialImporter(workspace=self.workspace).import_file(self._sample_csv())
+        material = Material.objects.get(code='IMP-MAT-002', home_workspace=self.workspace)
+        set_material_import_status(material, workspace=self.workspace, column='verified')
+        self.assertIn(
+            IMPORT_STATUS_VERIFIED,
+            set(material.tags.values_list('name', flat=True)),
+        )
+        MaterialImporter(workspace=self.workspace).import_file(self._sample_csv())
+        material.refresh_from_db()
+        names = set(material.tags.values_list('name', flat=True))
+        self.assertIn(IMPORT_STATUS_VERIFIED, names)
+        self.assertNotIn(IMPORT_STATUS_APPROVED, names)
 
     def test_reimport_updates_import_source_filename(self):
         first = MaterialImporter(
@@ -266,6 +311,110 @@ class MaterialImportMappingUnitTests(TestCase):
             match_policy='code',
         )
         self.assertEqual([target for target, _ in missing], [TARGET_NAME])
+        missing_field = missing_required_targets(
+            [
+                {
+                    'is_field_row': True,
+                    'target': TARGET_NAME,
+                    'column': None,
+                    'column_index': None,
+                },
+                {
+                    'is_field_row': True,
+                    'target': TARGET_CODE,
+                    'column_index': 1,
+                },
+            ],
+            match_policy='code',
+        )
+        self.assertEqual([target for target, _ in missing_field], [TARGET_NAME])
+
+    def test_primary_import_targets_include_structure_not_properties(self):
+        structure_type, density_field = create_import_structure_type(
+            code='primary_targets_fabric',
+            table_name='structures_primary_targets_fabric',
+        )
+        self.addCleanup(SQLExecutor.drop_table, structure_type)
+        by_name = primary_import_targets([density_field], match_policy='name')
+        targets = [target for target, _ in by_name]
+        self.assertEqual(targets[0], TARGET_NAME)
+        self.assertIn(f'{TARGET_STRUCTURE_PREFIX}{density_field.name}', targets)
+        self.assertNotIn(TARGET_CODE, targets)
+        by_code = primary_import_targets([density_field], match_policy='code')
+        code_targets = [target for target, _ in by_code]
+        self.assertEqual(code_targets[0], TARGET_CODE)
+        self.assertIn(TARGET_NAME, code_targets)
+
+    def test_suggest_target_does_not_auto_map_marka_or_properties(self):
+        from apps.materials.imports.wide import WideColumn
+
+        marka = WideColumn(index=1, label='Марка', group='')
+        self.assertEqual(suggest_target(marka, [self.density], []), TARGET_SKIP)
+        prop_col = WideColumn(index=2, label='Плотность пов', group='')
+        self.assertEqual(
+            suggest_target(prop_col, [self.density], []),
+            TARGET_SKIP,
+        )
+        self.assertNotEqual(
+            suggest_target(prop_col, [self.density], []),
+            f'{TARGET_PROPERTY_PREFIX}{self.density.pk}',
+        )
+
+    def test_build_field_mapping_rows_and_unused(self):
+        from apps.materials.imports.wide import WideColumn
+
+        structure_type, density_field = create_import_structure_type(
+            code='field_rows_fabric',
+            table_name='structures_field_rows_fabric',
+        )
+        self.addCleanup(SQLExecutor.drop_table, structure_type)
+        columns = [
+            WideColumn(index=0, label='Наименование', group=''),
+            WideColumn(index=1, label='Марка', group=''),
+            WideColumn(index=2, label='Плотность пов', group=''),
+        ]
+        mapping = {
+            '0': {'target': TARGET_NAME, 'parse': 'auto'},
+            '1': {'target': TARGET_SKIP, 'parse': 'auto'},
+            '2': {
+                'target': f'{TARGET_STRUCTURE_PREFIX}{density_field.name}',
+                'parse': 'auto',
+            },
+        }
+        rows = build_field_mapping_rows(
+            columns=columns,
+            mapping=mapping,
+            structure_fields=[density_field],
+            match_policy='name',
+            sample_row={0: 'Т-23', 1: 'E-glass', 2: '300'},
+        )
+        targets = [row['target'] for row in rows]
+        self.assertEqual(targets[0], TARGET_NAME)
+        self.assertIn(f'{TARGET_STRUCTURE_PREFIX}{density_field.name}', targets)
+        self.assertNotIn(TARGET_TAGS, targets)
+        name_row = next(row for row in rows if row['target'] == TARGET_NAME)
+        self.assertEqual(name_row['column_index'], 0)
+        self.assertEqual(name_row['sample'], 'Т-23')
+        self.assertTrue(name_row['is_primary'])
+        self.assertFalse(name_row['is_material'])
+        self.assertFalse(name_row['is_property'])
+        unused = unused_columns_from_mapping(columns, mapping, sample_row={1: 'E-glass'})
+        self.assertEqual([col['index'] for col in unused], [1])
+        self.assertEqual(unused[0]['sample'], 'E-glass')
+
+        mapping_with_tags = dict(mapping)
+        mapping_with_tags['1'] = {'target': TARGET_TAGS, 'parse': 'auto'}
+        rows_tags = build_field_mapping_rows(
+            columns=columns,
+            mapping=mapping_with_tags,
+            structure_fields=[density_field],
+            match_policy='name',
+            sample_row={0: 'Т-23', 1: 'E-glass', 2: '300'},
+        )
+        tags_row = next(row for row in rows_tags if row['target'] == TARGET_TAGS)
+        self.assertTrue(tags_row['is_material'])
+        self.assertFalse(tags_row['is_property'])
+        self.assertTrue(tags_row['is_addon'])
 
     def test_find_duplicate_mapping_targets(self):
         target = f'{TARGET_STRUCTURE_PREFIX}breaking_load'
@@ -334,6 +483,33 @@ class MaterialImportMappingUnitTests(TestCase):
         col = WideColumn(index=3, label='Плотность пов', group='')
         suggested = suggest_target(col, [], [density_field], claimed_targets=claimed)
         self.assertEqual(suggested, TARGET_SKIP)
+
+    def test_parse_boolean_and_date_modes(self):
+        from datetime import date
+
+        from apps.materials.imports.value_parse import PARSE_BOOLEAN, PARSE_DATE
+
+        yes = parse_property_cell('да', mode=PARSE_BOOLEAN)
+        self.assertEqual(yes['value'], 'true')
+        self.assertEqual(yes['confidence'], 'ok')
+        no = parse_property_cell('Нет', mode=PARSE_BOOLEAN)
+        self.assertEqual(no['value'], 'false')
+        self.assertEqual(parse_property_cell(True, mode=PARSE_BOOLEAN)['value'], 'true')
+        self.assertEqual(parse_property_cell(0, mode=PARSE_BOOLEAN)['value'], 'false')
+        bad = parse_property_cell('иногда', mode=PARSE_BOOLEAN)
+        self.assertEqual(bad['confidence'], 'uncertain')
+
+        iso = parse_property_cell('2024-03-15', mode=PARSE_DATE)
+        self.assertEqual(iso['value'], '2024-03-15')
+        self.assertEqual(iso['confidence'], 'ok')
+        dotted = parse_property_cell('15.03.2024', mode=PARSE_DATE)
+        self.assertEqual(dotted['value'], '2024-03-15')
+        self.assertEqual(
+            parse_property_cell(date(2024, 7, 1), mode=PARSE_DATE)['value'],
+            '2024-07-01',
+        )
+        bad_date = parse_property_cell('неделя', mode=PARSE_DATE)
+        self.assertEqual(bad_date['confidence'], 'uncertain')
 
     def test_parse_tolerance_and_range(self):
         tol = parse_property_cell('0,27±0,03')
@@ -1136,12 +1312,314 @@ class MaterialImportUITests(TestCase):
     def test_import_page_renders(self):
         response = self.client.get(reverse('materials:import'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Загрузить и продолжить')
+        self.assertContains(response, 'Вперёд')
+        self.assertContains(response, 'import-wizard-nav')
+
+    def test_wizard_nav_back_and_forward_on_configure_and_mapping(self):
+        mapping = self._upload_and_configure_wide_sample()
+        self.assertEqual(mapping.context['step'], 'mapping')
+        self.assertContains(mapping, 'import-wizard-nav')
+        self.assertContains(mapping, '← Назад')
+        self.assertContains(mapping, 'Вперёд')
+        self.assertEqual(
+            mapping.context['wizard_back_url'],
+            reverse('materials:import') + '?step=configure',
+        )
+
+        configure = self.client.get(mapping.context['wizard_back_url'])
+        self.assertEqual(configure.status_code, 200)
+        self.assertEqual(configure.context['step'], 'configure')
+        self.assertContains(configure, '← Назад')
+        self.assertEqual(
+            configure.context['wizard_back_url'],
+            reverse('materials:import') + '?step=upload',
+        )
+
+        back_upload = self.client.get(configure.context['wizard_back_url'])
+        self.assertEqual(back_upload.status_code, 200)
+        self.assertEqual(back_upload.context['step'], 'upload')
+        self.assertTrue(back_upload.context['has_staged_file'])
+        self.assertContains(back_upload, 'вернитесь к настройке листа')
+
+    def test_import_templates_save_and_load_with_structure_type(self):
+        mapping_page = self._upload_and_configure_wide_sample()
+        self.assertEqual(mapping_page.context['step'], 'mapping')
+
+        preview = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'match_policy': MATCH_BY_NAME,
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.context['step'], 'review')
+
+        # Возвращаемся на mapping и сохраняем шаблон из текущего map_* (не из «старой» сессии).
+        self.client.get(reverse('materials:import'), {'step': 'mapping'})
+        save = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'save_template',
+                'template_name': 'Шаблон ткани',
+                'match_policy': MATCH_BY_NAME,
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(save.status_code, 200)
+        profile = MaterialImportProfile.objects.get(
+            workspace=self.workspace,
+            name='Шаблон ткани',
+        )
+        self.assertEqual(profile.structure_type_id, str(self.structure_type.pk))
+        self.assertTrue(any(
+            (col.get('target') or '') == 'material.name'
+            for col in profile.config.get('columns') or []
+        ))
+        self.assertTrue(any(
+            (col.get('target') or '') == 'material.tags'
+            for col in profile.config.get('columns') or []
+        ))
+
+        # Второй шаблон с другим маппингом «Марка» → skip (через POST UI).
+        save_b = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'save_template',
+                'template_name': 'Шаблон без марки',
+                'match_policy': MATCH_BY_NAME,
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'skip',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(save_b.status_code, 200)
+        profile_b = MaterialImportProfile.objects.get(
+            workspace=self.workspace,
+            name='Шаблон без марки',
+        )
+        self.assertTrue(any(
+            (col.get('label') or '') == 'Марка' and (col.get('target') or '') == 'skip'
+            for col in profile_b.config.get('columns') or []
+        ))
+
+        templates = import_templates_for_workspace(self.workspace)
+        self.assertEqual(len(templates), 2)
+        self.assertIn(self.structure_type.name, templates[0]['option_label'])
+
+        with self.wide_sample.open('rb') as handle:
+            uploaded = SimpleUploadedFile(
+                'materials_wide_sample2.csv',
+                handle.read(),
+                content_type='text/csv',
+            )
+        self.assertEqual(
+            self.client.post(
+                reverse('materials:import'),
+                {'action': 'upload', 'file': uploaded},
+            ).status_code,
+            302,
+        )
+        configure = self.client.get(reverse('materials:import'), {'step': 'configure'})
+        self.assertNotContains(configure, 'Шаблоны маппинга')
+        self.assertNotContains(configure, 'Применить шаблон')
+
+        # Сначала выбираем структуру и переходим к сопоставлению.
+        self.assertEqual(
+            self.client.post(
+                reverse('materials:import'),
+                {
+                    'action': 'configure',
+                    'sheet': 'CSV',
+                    'header_row': '1',
+                    'group_row': '',
+                    'match_policy': MATCH_BY_NAME,
+                    'structure_type_id': str(self.structure_type.pk),
+                },
+            ).status_code,
+            200,
+        )
+        mapping_before = self.client.get(reverse('materials:import'), {'step': 'mapping'})
+        self.assertEqual(mapping_before.status_code, 200)
+        self.assertContains(mapping_before, 'Шаблоны маппинга')
+        self.assertContains(mapping_before, 'Шаблон ткани')
+        self.assertContains(mapping_before, 'Применить шаблон')
+        self.assertContains(mapping_before, 'Сохранить шаблон')
+        self.assertContains(mapping_before, 'id="import-templates-panel"')
+        self.assertContains(mapping_before, 'id="import-template-name"')
+        self.assertContains(mapping_before, 'id="import-template-id"')
+
+        applied = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'load_template',
+                'template_id': str(profile.pk),
+            },
+        )
+        self.assertEqual(applied.status_code, 200)
+        self.assertEqual(applied.context['step'], 'mapping')
+        self.assertEqual(
+            str(applied.context['config'].get('structure_type_id')),
+            str(self.structure_type.pk),
+        )
+        self.assertEqual(
+            str(applied.context['selected_template_id']),
+            str(profile.pk),
+        )
+        tags_a = next(
+            (
+                row
+                for row in applied.context['mapping_rows']
+                if (row['column'].label or '') == 'Марка'
+            ),
+            None,
+        )
+        self.assertIsNotNone(tags_a)
+        self.assertEqual(tags_a['target'], 'material.tags')
+        self.assertContains(applied, 'Сохранить шаблон')
+        self.assertContains(applied, 'Применить шаблон')
+        self.assertContains(applied, 'id="import-templates-panel"')
+        self.assertEqual(applied.context['missing_required_targets'], [])
+
+        # Выбор шаблона — на шаге сопоставления, не на «Лист и структура».
+        configure_after = self.client.get(reverse('materials:import'), {'step': 'configure'})
+        self.assertNotContains(configure_after, 'Применить шаблон')
+        mapping_after = self.client.get(reverse('materials:import'), {'step': 'mapping'})
+        map_html = mapping_after.content.decode('utf-8')
+        self.assertIn(
+            f'value="{profile.pk}" selected',
+            map_html.replace("'", '"'),
+        )
+
+        applied_b = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'load_template',
+                'template_id': str(profile_b.pk),
+            },
+        )
+        self.assertEqual(applied_b.status_code, 200)
+        self.assertEqual(applied_b.context['step'], 'mapping')
+        self.assertEqual(
+            str(applied_b.context['selected_template_id']),
+            str(profile_b.pk),
+        )
+        self.assertContains(applied_b, 'Применить шаблон')
+        tags_b = next(
+            (
+                row
+                for row in applied_b.context['mapping_rows']
+                if (row['column'].label or '') == 'Марка'
+            ),
+            None,
+        )
+        self.assertIsNotNone(tags_b)
+        self.assertEqual(tags_b['target'], 'skip')
+        # field UI: у «Теги» не должно остаться колонки «Марка» от первого шаблона
+        tags_field = next(
+            (
+                row
+                for row in applied_b.context['field_mapping_rows']
+                if row['target'] == 'material.tags'
+            ),
+            None,
+        )
+        if tags_field is not None:
+            self.assertFalse(tags_field.get('column'))
 
     def test_sidebar_shows_import_link(self):
         response = self.client.get(reverse('materials:list'))
         self.assertContains(response, reverse('materials:import'))
         self.assertNotContains(response, 'btn btn-outline-primary btn-sm">Импорт')
+
+    def test_import_review_board_moves_between_columns(self):
+        from apps.materials.imports.review_status import (
+            IMPORT_STATUS_APPROVED,
+            IMPORT_STATUS_VERIFIED,
+            apply_import_tags,
+        )
+
+        material = Material.objects.create(
+            code='REV-1',
+            name='Review candidate',
+            home_workspace=self.workspace,
+            struct_type=self.structure_type,
+        )
+        apply_import_tags(
+            material,
+            workspace=self.workspace,
+            import_names=[],
+            created=True,
+        )
+        self.assertIn(
+            IMPORT_STATUS_APPROVED,
+            set(material.tags.values_list('name', flat=True)),
+        )
+
+        page = self.client.get(reverse('materials:import_review'))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'Утвержден')
+        self.assertContains(page, 'Проверено')
+        self.assertNotContains(page, 'На проверке')
+        self.assertContains(page, 'Review candidate')
+
+        to_verified = self.client.post(
+            reverse('materials:import_review'),
+            {
+                'action': 'set_status',
+                'status': 'verified',
+                'material_id': str(material.pk),
+            },
+        )
+        self.assertEqual(to_verified.status_code, 302)
+        material.refresh_from_db()
+        names = set(material.tags.values_list('name', flat=True))
+        self.assertIn(IMPORT_STATUS_VERIFIED, names)
+        self.assertNotIn(IMPORT_STATUS_APPROVED, names)
+
+        board = self.client.get(reverse('materials:import_review'))
+        self.assertContains(board, 'Проверено')
+        self.assertContains(board, 'Review candidate')
+
+        back = self.client.post(
+            reverse('materials:import_review'),
+            {
+                'action': 'set_status',
+                'status': 'approved',
+                'material_id': str(material.pk),
+            },
+        )
+        self.assertEqual(back.status_code, 302)
+        material.refresh_from_db()
+        names = set(material.tags.values_list('name', flat=True))
+        self.assertIn(IMPORT_STATUS_APPROVED, names)
+        self.assertNotIn(IMPORT_STATUS_VERIFIED, names)
 
     def _upload_and_configure_wide_sample(self):
         with self.wide_sample.open('rb') as handle:
@@ -1171,21 +1649,222 @@ class MaterialImportUITests(TestCase):
         self.assertEqual(configure.status_code, 200)
         return configure
 
+    def test_configure_hides_header_rows_for_simple_layout(self):
+        with self.wide_sample.open('rb') as handle:
+            uploaded = SimpleUploadedFile(
+                'materials_wide_sample.csv',
+                handle.read(),
+                content_type='text/csv',
+            )
+        self.assertEqual(
+            self.client.post(
+                reverse('materials:import'),
+                {'action': 'upload', 'file': uploaded},
+            ).status_code,
+            302,
+        )
+        response = self.client.get(reverse('materials:import'), {'step': 'configure'})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['show_header_layout_fields'])
+        self.assertContains(response, 'name="header_row"')
+        self.assertContains(response, 'type="hidden"')
+        self.assertNotContains(response, 'id="import-header-row"')
+        self.assertNotContains(response, 'id="import-group-row"')
+        self.assertContains(response, 'Заголовки в строке 1')
+        self.assertContains(response, 'import-layout-schema')
+        self.assertContains(response, 'import-schema')
+        self.assertContains(response, 'import-schema__arrow')
+        self.assertContains(response, 'Файл')
+        self.assertContains(response, 'База данных')
+        self.assertContains(response, 'Статистика по листу')
+        self.assertContains(response, 'Использовать справочники')
+        schema = response.context['layout_schema']
+        self.assertEqual(schema['header_row'], 1)
+        self.assertFalse(schema['has_groups'])
+        self.assertEqual(schema['rows'][0]['role'], 'header')
+
+    def test_build_import_layout_schema_marks_group_and_header(self):
+        from openpyxl import Workbook
+        from tempfile import NamedTemporaryFile
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet['A1'] = 'Ткань'
+        sheet['B1'] = 'Ткань'
+        sheet['C1'] = 'Волокно'
+        sheet['A2'] = 'Наименование'
+        sheet['B2'] = 'Марка'
+        sheet['C2'] = 'Диаметр'
+        sheet['A3'] = 'Т-23'
+        sheet['B3'] = 'E-glass'
+        sheet['C3'] = '9'
+        tmp = NamedTemporaryFile(suffix='.xlsx', delete=False)
+        tmp.close()
+        path = Path(tmp.name)
+        try:
+            workbook.save(path)
+            schema = build_import_layout_schema(
+                path, header_row=2, group_row=1, max_cols=3, max_data_rows=1,
+            )
+            self.assertTrue(schema['has_groups'])
+            self.assertEqual(schema['rows'][0]['role'], 'group')
+            self.assertEqual(schema['rows'][1]['role'], 'header')
+            self.assertEqual(schema['rows'][2]['role'], 'data')
+            self.assertIn('Наименование', schema['rows'][1]['cells'])
+            schema_wide = build_import_layout_schema(path, header_row=2, group_row=1)
+            self.assertGreaterEqual(schema_wide['cols_shown'], 3)
+            self.assertGreaterEqual(schema_wide['data_rows_shown'], 1)
+            self.assertGreaterEqual(len(schema_wide['rows']), 3)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_refresh_layout_keeps_user_header_rows(self):
+        from openpyxl import Workbook
+        from tempfile import NamedTemporaryFile
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = 'Лист1'
+        sheet['A1'] = 'Группа'
+        sheet['A2'] = 'Наименование'
+        sheet['B2'] = 'Марка'
+        sheet['A3'] = 'Мат-1'
+        sheet['B3'] = 'X'
+        sheet['A4'] = 'Мат-2'
+        sheet['B4'] = 'Y'
+        sheet['A5'] = 'Мат-3'
+        sheet['B5'] = 'Z'
+        tmp = NamedTemporaryFile(suffix='.xlsx', delete=False)
+        tmp.close()
+        path = Path(tmp.name)
+        try:
+            workbook.save(path)
+            with path.open('rb') as handle:
+                uploaded = SimpleUploadedFile(
+                    'layout_refresh.xlsx',
+                    handle.read(),
+                    content_type=(
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    ),
+                )
+            self.assertEqual(
+                self.client.post(
+                    reverse('materials:import'),
+                    {'action': 'upload', 'file': uploaded},
+                ).status_code,
+                302,
+            )
+            refresh = self.client.post(
+                reverse('materials:import'),
+                {
+                    'action': 'configure',
+                    'refresh_layout': '1',
+                    'sheet': 'Лист1',
+                    'header_row': '2',
+                    'group_row': '1',
+                },
+            )
+            self.assertEqual(refresh.status_code, 200)
+            self.assertEqual(refresh.context['layout_form_header_row'], 2)
+            self.assertEqual(refresh.context['layout_form_group_row'], 1)
+            schema = refresh.context['layout_schema']
+            self.assertEqual(schema['header_row'], 2)
+            self.assertEqual(schema['group_row'], 1)
+            self.assertEqual(schema['rows'][0]['role'], 'group')
+            self.assertEqual(schema['rows'][1]['role'], 'header')
+            data_roles = [row['role'] for row in schema['rows'] if row['role'] == 'data']
+            self.assertGreaterEqual(len(data_roles), 3)
+            self.assertContains(refresh, 'id="import-header-row"')
+            self.assertContains(refresh, 'value="2"')
+            self.assertContains(refresh, 'value="1"')
+        finally:
+            path.unlink(missing_ok=True)
+
     def test_mapping_constructor_renders(self):
         response = self._upload_and_configure_wide_sample()
         self.assertContains(response, 'import-map-constructor')
         self.assertContains(response, 'import-map-catalog')
-        self.assertContains(response, 'Поля для подстановки')
+        self.assertContains(response, 'Поля для записи')
         self.assertContains(response, 'Колонки файла')
-        self.assertContains(response, 'Куда писать')
+        self.assertContains(response, 'Колонка файла')
+        self.assertContains(response, 'Тип поля')
         self.assertContains(response, 'import-map-expr-slot')
         self.assertContains(response, 'import-map-panel')
         self.assertContains(response, 'data-drop-slot')
         self.assertContains(response, 'draggable="true"')
+        self.assertContains(response, 'data-field-target="material.name"')
+        self.assertContains(response, 'Из структуры')
+        self.assertContains(response, 'Дополнительные свойства')
+        self.assertContains(response, 'Справочники')
+        self.assertContains(response, 'Поле материала')
+        self.assertContains(response, 'Теги для всех материалов')
+        self.assertContains(response, 'name="import_default_tags"')
+        self.assertContains(response, 'import-map-section-material')
+        self.assertContains(response, 'import-map-section')
+        self.assertContains(response, 'data-map-section-toggle')
+        self.assertContains(response, 'import-map-add-property')
+        self.assertContains(response, 'import-map-section__add')
+        self.assertContains(response, 'import-map-add-field')
+        self.assertContains(response, 'reference-properties-modal')
+        self.assertContains(response, 'reference_properties_picker.js')
+        self.assertContains(response, 'Выбор свойств')
         self.assertContains(response, 'import_mapping_constructor.js')
         self.assertContains(response, 'name="map_0"')
         self.assertContains(response, 'name="parse_0"')
-        self.assertContains(response, 'data-target="material.name"')
+        self.assertNotContains(response, 'id="import-match-policy"')
+        self.assertNotContains(response, 'name="match_policy"')
+        self.assertNotContains(response, 'Проверка дубликатов')
+        self.assertContains(response, 'import-file-columns')
+        self.assertContains(response, '★ обязательно')
+        self.assertContains(response, '>Да/Нет<')
+        self.assertContains(response, '>Дата<')
+        self.assertNotContains(response, 'import-map-column-select')
+        self.assertNotContains(response, 'Неиспользованные колонки')
+        self.assertNotContains(response, 'Поля для подстановки')
+        self.assertNotContains(response, 'import-map-addon-modal')
+        self.assertNotContains(response, 'Название ★ обязательно')
+
+    def test_configure_does_not_show_match_policy(self):
+        with self.wide_sample.open('rb') as handle:
+            uploaded = SimpleUploadedFile(
+                'materials_wide_sample.csv',
+                handle.read(),
+                content_type='text/csv',
+            )
+        self.assertEqual(
+            self.client.post(
+                reverse('materials:import'),
+                {'action': 'upload', 'file': uploaded},
+            ).status_code,
+            302,
+        )
+        response = self.client.get(reverse('materials:import'), {'step': 'configure'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="import-match-policy"')
+        self.assertContains(response, 'Лист и структура')
+
+    def test_mapping_forces_always_create_policy(self):
+        self._upload_and_configure_wide_sample()
+        response = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'match_policy': MATCH_BY_CODE,
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.code',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        config = get_import_config(self.client.session)
+        self.assertEqual(config.get('match_policy'), MATCH_ALWAYS_CREATE)
 
     def test_mapping_without_name_blocked(self):
         self._upload_and_configure_wide_sample()
@@ -1257,8 +1936,11 @@ class MaterialImportUITests(TestCase):
         )
         self.assertEqual(preview.status_code, 200)
         self.assertContains(preview, 'Черновик')
-        self.assertContains(preview, 'Применить пакетно')
+        self.assertContains(preview, 'Записать')
+        self.assertContains(preview, 'import-wizard-nav')
+        self.assertContains(preview, 'value="review_apply"')
         self.assertNotContains(preview, 'Построчно (точнее)')
+        self.assertEqual(preview.context['wizard_forward_label'], 'Записать')
         self.assertFalse(Material.objects.filter(name='Стеклоткань демо').exists())
 
         apply_response = self.client.post(
@@ -1276,6 +1958,287 @@ class MaterialImportUITests(TestCase):
         row = get_row(self.structure_type, material.struct_props_id)
         self.assertEqual(str(row[self.density_field.name]).rstrip('0').rstrip('.'), '260')
         self.assertTrue(material.tags.filter(name='марка::Е-стекло').exists())
+
+    def test_default_tags_applied_to_imported_materials(self):
+        self._upload_and_configure_wide_sample()
+        mapping = self.client.get(reverse('materials:import'), {'step': 'mapping'})
+        self.assertEqual(mapping.status_code, 200)
+        self.assertContains(mapping, 'Теги для всех материалов')
+
+        preview = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'import_default_tags': 'партия::тест, demo',
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        config = get_import_config(self.client.session)
+        self.assertEqual(config.get('default_tags'), 'партия::тест, demo')
+        drafts = drafts_from_session(config.get('draft'))
+        self.assertTrue(drafts)
+        self.assertIn('партия::тест', drafts[0].tags)
+        self.assertIn('demo', drafts[0].tags)
+        self.assertIn('марка::', drafts[0].tags)
+
+        apply_response = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'review_apply',
+                'review_marker': '1',
+                'include_struct_0_0': '1',
+            },
+        )
+        self.assertEqual(apply_response.status_code, 302)
+        material = Material.objects.get(name='Стеклоткань демо', home_workspace=self.workspace)
+        names = set(material.tags.values_list('name', flat=True))
+        self.assertIn('партия::тест', names)
+        self.assertIn('demo', names)
+        self.assertTrue(any(n.startswith('марка::') for n in names))
+
+    def test_default_tag_colors_saved_and_applied(self):
+        self._upload_and_configure_wide_sample()
+        mapping = self.client.get(reverse('materials:import'), {'step': 'mapping'})
+        self.assertEqual(mapping.status_code, 200)
+        self.assertContains(mapping, 'name="import_default_tags_colors"')
+        self.assertContains(mapping, 'data-allow-tag-colors="1"')
+        self.assertContains(mapping, 'import-default-tags-panel')
+        # Блок тегов идёт после конструктора маппинга.
+        body = mapping.content.decode('utf-8')
+        self.assertLess(
+            body.index('import-map-constructor'),
+            body.index('import-default-tags-panel'),
+        )
+
+        preview = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'import_default_tags': 'партия::цвет, demo-color',
+                'import_default_tags_colors': (
+                    '{"партия::цвет":"#AABBCC","demo-color":"#112233"}'
+                ),
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        config = get_import_config(self.client.session)
+        self.assertEqual(
+            config.get('default_tag_colors'),
+            {'партия::цвет': '#AABBCC', 'demo-color': '#112233'},
+        )
+
+        apply_response = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'review_apply',
+                'review_marker': '1',
+                'include_struct_0_0': '1',
+            },
+        )
+        self.assertEqual(apply_response.status_code, 302)
+        from apps.core.models import Tag
+
+        scoped = Tag.objects.get(workspace=self.workspace, name='партия::цвет')
+        plain = Tag.objects.get(workspace=self.workspace, name='demo-color')
+        self.assertEqual((scoped.color or '').upper(), '#AABBCC')
+        self.assertEqual((plain.color or '').upper(), '#112233')
+
+    def test_review_resolve_manual_persists_partial_fixes(self):
+        """Успешные правки остаются после ошибки в другом поле (не откатываются)."""
+        self._upload_and_configure_wide_sample()
+        session = self.client.session
+        draft = DraftMaterial(
+            source_row=2,
+            name='Ткань Fix',
+            code='fix-1',
+            description='',
+            tags='',
+            action='create',
+            struct_type_id=str(self.structure_type.pk),
+            structure_values=[
+                DraftStructureValue(
+                    field_name=self.density_field.name,
+                    field_label='Плотность',
+                    column_label='Плотность',
+                    raw='плохо',
+                    value_kind='scalar',
+                    value='',
+                    value_b='',
+                    confidence='uncertain',
+                    note='не распознано',
+                    include=True,
+                    recognition=RECOGNITION_UNRECOGNIZED,
+                ),
+            ],
+            properties=[
+                DraftProperty(
+                    property_name=self.density.name,
+                    property_id=str(self.density.pk),
+                    property_label='Плотность пов',
+                    column_label='Плотн пов',
+                    raw='ерунда',
+                    value_kind='scalar',
+                    value='',
+                    value_b='',
+                    confidence='uncertain',
+                    note='не распознано',
+                    include=True,
+                    recognition=RECOGNITION_UNRECOGNIZED,
+                ),
+            ],
+        )
+        set_import_config(session, draft=drafts_to_session([draft]))
+        session.save()
+
+        response = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'review_resolve_manual',
+                'fix_struct_0_0': '260',
+                'fix_prop_0_0': 'аааа дичь',
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['step'], 'review')
+        self.assertEqual(response.context['unrecognized_count'], 1)
+
+        saved = drafts_from_session(get_import_config(self.client.session).get('draft'))
+        self.assertEqual(saved[0].structure_values[0].recognition, RECOGNITION_MANUAL)
+        self.assertEqual(saved[0].structure_values[0].value, '260')
+        self.assertEqual(saved[0].properties[0].recognition, RECOGNITION_UNRECOGNIZED)
+
+        # Исправленная ячейка больше не в списке нераспознанных.
+        names = {item['input_name'] for item in response.context['unrecognized_fields']}
+        self.assertNotIn('fix_struct_0_0', names)
+        self.assertIn('fix_prop_0_0', names)
+
+    def test_review_warns_on_name_collision_and_skip(self):
+        Material.objects.create(
+            home_workspace=self.workspace,
+            code='EXIST-1',
+            name='Стеклоткань демо',
+        )
+        self._upload_and_configure_wide_sample()
+        preview = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, 'Совпадения по названию')
+        self.assertContains(preview, 'name="duplicate_name_policy"')
+        self.assertContains(preview, 'import-collision-panel')
+        self.assertContains(preview, 'import-unrecognized-panel')
+        self.assertGreater(preview.context['name_collision_count'], 0)
+
+        before = Material.objects.filter(home_workspace=self.workspace).count()
+        apply_response = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'review_apply',
+                'review_marker': '1',
+                'duplicate_name_policy': 'skip',
+                'include_struct_0_0': '1',
+            },
+        )
+        self.assertEqual(apply_response.status_code, 302)
+        # Дубликат «Стеклоткань демо» пропущен; «Углеткань демо» создана.
+        self.assertEqual(
+            Material.objects.filter(home_workspace=self.workspace).count(),
+            before + 1,
+        )
+        self.assertEqual(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='Стеклоткань демо',
+            ).count(),
+            1,
+        )
+        self.assertTrue(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='Углеткань демо',
+            ).exists()
+        )
+
+    def test_review_prefix_creates_new_material_on_name_collision(self):
+        Material.objects.create(
+            home_workspace=self.workspace,
+            code='EXIST-1',
+            name='Стеклоткань демо',
+        )
+        self._upload_and_configure_wide_sample()
+        self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        apply_response = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'review_apply',
+                'review_marker': '1',
+                'duplicate_name_policy': 'prefix',
+                'duplicate_name_prefix': 'импорт-',
+                'include_struct_0_0': '1',
+            },
+        )
+        self.assertEqual(apply_response.status_code, 302)
+        self.assertTrue(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='импорт-Стеклоткань демо',
+            ).exists()
+        )
+        self.assertEqual(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='Стеклоткань демо',
+            ).count(),
+            1,
+        )
 
     def test_review_validation_errors_block_apply(self):
         """При ошибках валидации запись запрещена; остаётся путь к сопоставлению."""
@@ -1334,8 +2297,10 @@ class MaterialImportUITests(TestCase):
         self._upload_and_configure_wide_sample()
         mapping_page = self.client.get(reverse('materials:import') + '?step=mapping')
         self.assertEqual(mapping_page.status_code, 200)
-        self.assertContains(mapping_page, 'Собрать черновик (пакетно)')
-        self.assertContains(mapping_page, 'Идти построчно')
+        self.assertContains(mapping_page, 'Вперёд')
+        self.assertContains(mapping_page, 'Построчно')
+        self.assertContains(mapping_page, '← Назад')
+        self.assertContains(mapping_page, 'import-wizard-nav')
 
         start = self.client.post(
             reverse('materials:import'),
@@ -1359,7 +2324,8 @@ class MaterialImportUITests(TestCase):
 
         iterate_page = self.client.get(reverse('materials:import') + '?step=iterate')
         self.assertEqual(iterate_page.status_code, 200)
-        self.assertContains(iterate_page, 'Записать эту строку')
+        self.assertContains(iterate_page, 'Вперёд → записать')
+        self.assertContains(iterate_page, '← Назад')
         self.assertContains(iterate_page, 'Стеклоткань демо')
 
         apply_one = self.client.post(
@@ -1450,6 +2416,96 @@ class MaterialImportReviewPostTests(TestCase):
         self.assertTrue(updated[0].structure_values[0].include)
         self.assertTrue(updated[0].properties[0].include)
         self.assertEqual(updated[0].action, 'create')
+
+
+class MaterialImportNameCollisionTests(TestCase):
+    def setUp(self):
+        connection.ensure_connection()
+        self.workspace = ensure_legacy_workspace()
+
+    def test_name_collisions_skip_and_prefix(self):
+        Material.objects.create(
+            home_workspace=self.workspace,
+            code='EXIST',
+            name='Alpha',
+        )
+        drafts = [
+            DraftMaterial(
+                source_row=2, name='Alpha', code='a1', description='', tags='', action='create',
+            ),
+            DraftMaterial(
+                source_row=3, name='Beta', code='b1', description='', tags='', action='create',
+            ),
+        ]
+        collisions = name_collisions_for_drafts(self.workspace, drafts)
+        self.assertEqual(len(collisions), 1)
+        self.assertEqual(collisions[0]['name'], 'Alpha')
+
+        skipped = apply_duplicate_name_policy(
+            [
+                DraftMaterial(
+                    source_row=2, name='Alpha', code='a1', description='', tags='', action='create',
+                ),
+                DraftMaterial(
+                    source_row=3, name='Beta', code='b1', description='', tags='', action='create',
+                ),
+            ],
+            collisions,
+            mode='skip',
+        )
+        self.assertEqual(skipped[0].action, 'skip')
+        self.assertEqual(skipped[1].action, 'create')
+
+        prefixed = apply_duplicate_name_policy(
+            [
+                DraftMaterial(
+                    source_row=2, name='Alpha', code='a1', description='', tags='', action='create',
+                ),
+                DraftMaterial(
+                    source_row=3, name='Beta', code='b1', description='', tags='', action='create',
+                ),
+            ],
+            collisions,
+            mode='prefix',
+            prefix='imp-',
+        )
+        self.assertEqual(prefixed[0].action, 'create')
+        self.assertEqual(prefixed[0].name, 'imp-Alpha')
+        self.assertIsNone(prefixed[0].existing_pk)
+        self.assertEqual(prefixed[1].name, 'Beta')
+
+        with self.assertRaises(ValueError):
+            apply_duplicate_name_policy(
+                drafts,
+                collisions,
+                mode='prefix',
+                prefix='',
+            )
+
+    def test_merge_default_tags_into_drafts(self):
+        drafts = [
+            DraftMaterial(
+                source_row=2,
+                name='A',
+                code='a',
+                description='',
+                tags='марка::EC9',
+                action='create',
+            ),
+            DraftMaterial(
+                source_row=3,
+                name='B',
+                code='b',
+                description='',
+                tags='',
+                action='skip',
+            ),
+        ]
+        merge_default_tags_into_drafts(drafts, 'партия::1, demo')
+        self.assertIn('партия::1', drafts[0].tags)
+        self.assertIn('demo', drafts[0].tags)
+        self.assertIn('марка::EC9', drafts[0].tags)
+        self.assertEqual(drafts[1].tags, '')
 
     def test_apply_review_post_honours_include_checkboxes(self):
         draft = DraftMaterial(
@@ -1836,6 +2892,108 @@ class MaterialImportUnrecognizedFieldTests(TestCase):
             post={'fix_struct_0_0': '900'},
         )
         self.assertEqual(items_after_post[0]['fix_value'], '900')
+
+    def test_build_review_fix_grid_marks_unrecognized_cells(self):
+        draft = DraftMaterial(
+            source_row=18,
+            name='Ткань A',
+            code='fab-a',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Плотность',
+                    column_label='Плотность пов',
+                    raw='300',
+                    value_kind='scalar',
+                    value='300',
+                    value_b='',
+                    confidence='ok',
+                    note='',
+                    include=True,
+                    recognition=RECOGNITION_OK,
+                ),
+                DraftStructureValue(
+                    field_name='breaking_load',
+                    field_label='Разрывная нагрузка',
+                    column_label='Разрывная основа',
+                    raw='900/2200 Н/50мм',
+                    value_kind='scalar',
+                    value='',
+                    value_b='',
+                    confidence='uncertain',
+                    note='не распознано',
+                    include=True,
+                    recognition=RECOGNITION_UNRECOGNIZED,
+                ),
+            ],
+            properties=[
+                DraftProperty(
+                    property_name='note',
+                    property_id='prop-1',
+                    property_label='Заметка',
+                    column_label='Примечание',
+                    raw='ok',
+                    value_kind='scalar',
+                    value='ok',
+                    value_b='',
+                    confidence='ok',
+                    note='',
+                    include=True,
+                    recognition=RECOGNITION_OK,
+                ),
+            ],
+        )
+        ok_only = DraftMaterial(
+            source_row=19,
+            name='Ткань B',
+            code='fab-b',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Плотность',
+                    column_label='Плотность пов',
+                    raw='200',
+                    value_kind='scalar',
+                    value='200',
+                    value_b='',
+                    confidence='ok',
+                    note='',
+                    include=True,
+                    recognition=RECOGNITION_OK,
+                ),
+            ],
+        )
+        grid = build_review_fix_grid([draft, ok_only])
+        self.assertEqual(grid['unrecognized_count'], 1)
+        self.assertEqual(len(grid['rows']), 2)
+        self.assertEqual(grid['rows'][0]['source_row'], 18)
+        self.assertEqual(grid['rows'][1]['source_row'], 19)
+        keys = [col['key'] for col in grid['columns']]
+        self.assertEqual(
+            keys,
+            ['material:code', 'struct:areal_density', 'struct:breaking_load', 'prop:prop-1'],
+        )
+        self.assertEqual(
+            [col['letter'] for col in grid['columns']],
+            ['B', 'C', 'D', 'E'],
+        )
+        bad = grid['rows'][0]['cells']['struct:breaking_load']
+        self.assertTrue(bad['is_unrecognized'])
+        self.assertEqual(bad['display'], '900/2200 Н/50мм')
+        self.assertEqual(bad['input_name'], 'fix_struct_0_1')
+        good = grid['rows'][0]['cells']['struct:areal_density']
+        self.assertFalse(good['is_unrecognized'])
+        self.assertEqual(good['display'], '300')
+        self.assertEqual(grid['rows'][0]['cells']['material:code']['display'], 'fab-a')
+        self.assertEqual(grid['rows'][1]['cells']['struct:areal_density']['display'], '200')
+        self.assertEqual(len(grid['rows'][0]['cell_list']), 4)
+        self.assertEqual(grid['rows'][0]['cell_list'][2]['letter'], 'D')
 
 
 class MaterialImportDebugUndoTests(TestCase):

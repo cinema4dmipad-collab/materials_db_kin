@@ -152,9 +152,9 @@ def _boolean_sql(structure_field: StructureField, parsed: dict) -> dict | None:
     text = str(parsed.get('value') or '').strip().casefold()
     if not text:
         return None
-    if text in {'1', 'true', 'yes', 'да', 'y'}:
+    if text in {'1', 'true', 'yes', 'да', 'y', 'истина', 'on', 'вкл', '+'}:
         return {structure_field.name: True}
-    if text in {'0', 'false', 'no', 'нет', 'n'}:
+    if text in {'0', 'false', 'no', 'нет', 'n', 'ложь', 'off', 'выкл', '-'}:
         return {structure_field.name: False}
     return None
 

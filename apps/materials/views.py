@@ -9,7 +9,7 @@ from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.core.paginator import InvalidPage
 from django.http import FileResponse, Http404, HttpResponseRedirect, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, UpdateView, View
@@ -69,33 +69,46 @@ from apps.materials.imports.mapping import (
     TARGET_NAME,
     TARGET_PROPERTY_PREFIX,
     TARGET_SKIP,
+    addon_catalog_groups,
     apply_profile_to_columns,
+    build_field_mapping_rows,
+    import_templates_for_workspace,
     mapping_choices,
     mapping_catalog_groups,
     mapping_for_session,
     find_duplicate_mapping_targets,
     missing_required_targets,
     normalize_mapping_entry,
+    primary_import_targets,
     profile_payload_from_mapping,
     required_import_targets,
     target_allows_multiple_columns,
     suggest_parse_mode,
     suggest_target,
+    unused_columns_from_mapping,
 )
 from apps.materials.imports.service import MaterialImporter
 from apps.materials.imports.staging import (
+    MATCH_ALWAYS_CREATE,
     MATCH_POLICIES,
     MATCH_BY_NAME,
+    DUPLICATE_NAME_PREFIX,
+    DUPLICATE_NAME_SKIP,
+    apply_duplicate_name_policy,
     apply_review_post,
     apply_unrecognized_ignore_all,
     apply_unrecognized_manual_fixes,
+    build_review_fix_grid,
     build_staging_draft,
     drafts_from_session,
     drafts_to_session,
     has_unresolved_unrecognized,
     iter_unrecognized_fields,
+    merge_default_tags_into_drafts,
+    name_collisions_for_drafts,
 )
 from apps.materials.imports.upload import (
+    SESSION_ACTIVE_TEMPLATE_ID,
     clear_import_session,
     get_import_config,
     get_import_session_name,
@@ -105,7 +118,12 @@ from apps.materials.imports.upload import (
     store_import_session,
 )
 from apps.materials.imports.value_parse import PARSE_MODES_SHORT
-from apps.materials.imports.wide import detect_header_layout, list_sheet_names, load_wide_table
+from apps.materials.imports.wide import (
+    build_import_layout_schema,
+    detect_header_layout,
+    list_sheet_names,
+    load_wide_table,
+)
 from apps.references.models import Property
 from apps.core.property_form_display import enrich_property_form_display
 from apps.core.number_utils import format_decimal_display
@@ -1158,6 +1176,82 @@ def _import_debug_context(request):
     }
 
 
+class MaterialImportReviewView(AppViewMixin, PermissionRequiredMixin, View):
+    """Канбан: утвержден (inbox) ↔ проверено."""
+
+    permission_codename = WorkspacePerm.MATERIAL_EDIT
+    template_name = 'materials/material_import_review.html'
+
+    def get(self, request, *args, **kwargs):
+        from apps.core.tag_utils import coalesce_tags_for_display
+        from apps.materials.imports.review_status import (
+            IMPORT_STATUS_APPROVED,
+            IMPORT_STATUS_VERIFIED,
+            materials_approved_import_review,
+            materials_verified_import_review,
+        )
+
+        workspace = request.active_workspace
+        approved = list(materials_approved_import_review(workspace, limit=200))
+        verified = list(materials_verified_import_review(workspace, limit=80))
+        for material in approved + verified:
+            material.display_tags = coalesce_tags_for_display(list(material.tags.all()))
+        return render(
+            request,
+            self.template_name,
+            {
+                'approved_materials': approved,
+                'verified_materials': verified,
+                'approved_count': len(approved),
+                'verified_count': len(verified),
+                'status_approved': IMPORT_STATUS_APPROVED,
+                'status_verified': IMPORT_STATUS_VERIFIED,
+            },
+        )
+
+    def post(self, request, *args, **kwargs):
+        from apps.materials.imports.review_status import (
+            IMPORT_STATUS_BY_COLUMN,
+            set_material_import_status,
+        )
+        from apps.workspaces.services import materials_owned_by
+
+        workspace = request.active_workspace
+        action = (request.POST.get('action') or '').strip()
+        material_id = (request.POST.get('material_id') or '').strip()
+        column = (request.POST.get('status') or '').strip()
+        if action == 'set_status':
+            pass
+        elif action == 'mark_verified':
+            column = 'verified'
+        elif action in {'mark_unverified', 'mark_approved'}:
+            column = 'approved'
+        else:
+            column = ''
+
+        if column not in IMPORT_STATUS_BY_COLUMN or not material_id:
+            messages.error(request, 'Некорректное действие проверки импорта.')
+            return redirect('materials:import_review')
+        material = get_object_or_404(
+            materials_owned_by(workspace),
+            pk=material_id,
+        )
+        if not material.is_editable_in(workspace):
+            raise PermissionDenied
+        tag_name = set_material_import_status(
+            material, workspace=workspace, column=column,
+        )
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'ok': True,
+                'material_id': str(material.pk),
+                'status': column,
+                'tag': tag_name,
+            })
+        messages.success(request, f'«{material.name}» — {tag_name}.')
+        return redirect('materials:import_review')
+
+
 class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
     """Мастер: файл → лист → маппинг → staging/review → применение."""
 
@@ -1186,7 +1280,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['step'] = getattr(self, 'wizard_step', 'upload')
         wizard_step_defs = (
             ('upload', 'Загрузка'),
-            ('configure', 'Лист и уникальность'),
+            ('configure', 'Лист и структура'),
             ('mapping', 'Сопоставление колонок'),
             ('review', 'Запись'),
         )
@@ -1203,10 +1297,31 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['wizard_step_total'] = len(wizard_step_defs)
         context['wizard_step_label'] = step_label
         context['wizard_step_percent'] = int(round(100 * step_num / len(wizard_step_defs)))
+        import_url = reverse('materials:import')
+        wizard_back = {
+            'configure': f'{import_url}?step=upload',
+            'mapping': f'{import_url}?step=configure',
+            'review': f'{import_url}?step=mapping',
+            'iterate': f'{import_url}?step=review',
+        }
+        context['wizard_back_url'] = wizard_back.get(context['step'])
+        context['wizard_back_label'] = 'Назад'
+        context['wizard_forward_label'] = (
+            'Записать' if context['step'] == 'review' else 'Вперёд'
+        )
         context['sheet_names'] = getattr(self, 'sheet_names', [])
         context['config'] = config
         context['wide_table'] = getattr(self, 'wide_table', None)
         context['mapping_rows'] = getattr(self, 'mapping_rows', [])
+        context['field_mapping_rows'] = getattr(self, 'field_mapping_rows', [])
+        context['unused_columns'] = getattr(self, 'unused_columns', [])
+        context['file_columns'] = getattr(self, 'file_columns', [])
+        context['addon_catalog_groups'] = getattr(self, 'addon_catalog_groups', [])
+        context['reference_properties'] = getattr(
+            self,
+            'reference_properties',
+            reference_properties_for_picker(),
+        )
         context['target_choices'] = getattr(self, 'target_choices', mapping_choices())
         context['mapping_catalog_groups'] = getattr(self, 'mapping_catalog_groups', [])
         context['required_import_targets'] = getattr(self, 'required_import_targets', [])
@@ -1217,10 +1332,28 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         }
         context['parse_modes'] = PARSE_MODES_SHORT
         context['match_policies'] = MATCH_POLICIES
+        context['required_targets_by_policy'] = {
+            value: [target for target, _label in required_import_targets(value)]
+            for value, _label in MATCH_POLICIES
+        }
         context['draft_rows'] = getattr(self, 'draft_rows', [])
         context['profiles'] = MaterialImportProfile.objects.filter(
             workspace=self.request.active_workspace,
         ).order_by('name')
+        context['import_templates'] = import_templates_for_workspace(
+            self.request.active_workspace,
+        )
+        context['selected_template_id'] = str(
+            config.get('active_template_id') or ''
+        )
+        context['import_default_tags'] = config.get('default_tags') or ''
+        context['import_default_tag_colors'] = config.get('default_tag_colors') or {}
+        if context.get('step') == 'mapping':
+            context['import_default_tags_widget'] = self._import_default_tags_widget_html(
+                self.request,
+                context['import_default_tags'],
+                colors=context['import_default_tag_colors'],
+            )
         draft_rows = context['draft_rows']
         context['uncertain_count'] = sum(
             1 for d in draft_rows if getattr(d, 'has_uncertain', False)
@@ -1228,8 +1361,15 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['draft_create_count'] = sum(1 for d in draft_rows if d.action == 'create')
         context['draft_update_count'] = sum(1 for d in draft_rows if d.action == 'update')
         context['draft_skip_count'] = sum(1 for d in draft_rows if d.action == 'skip')
+        name_collisions = name_collisions_for_drafts(
+            self.request.active_workspace,
+            draft_rows,
+        )
+        context['name_collisions'] = name_collisions
+        context['name_collision_count'] = len(name_collisions)
         post = self.request.POST if self.request.method == 'POST' else None
         context['unrecognized_fields'] = iter_unrecognized_fields(draft_rows, post=post)
+        context['review_fix_grid'] = build_review_fix_grid(draft_rows, post=post)
         context['has_unrecognized'] = bool(context['unrecognized_fields'])
         context['unrecognized_count'] = len(context['unrecognized_fields'])
         has_validation_errors = bool(
@@ -1247,6 +1387,18 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         )
         context['layout_hint'] = getattr(self, 'layout_hint', '')
         context['detected_layout'] = getattr(self, 'detected_layout', None)
+        context['show_header_layout_fields'] = getattr(self, 'show_header_layout_fields', True)
+        context['layout_schema'] = getattr(self, 'layout_schema', None)
+        context['layout_form_header_row'] = getattr(
+            self,
+            'layout_form_header_row',
+            (context.get('config') or {}).get('header_row') or 1,
+        )
+        context['layout_form_group_row'] = getattr(
+            self,
+            'layout_form_group_row',
+            (context.get('config') or {}).get('group_row') or 0,
+        )
         context['structure_types'] = getattr(
             self,
             'structure_types',
@@ -1330,6 +1482,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             return super().get(request, *args, **kwargs)
         config = get_import_config(request.session)
         step = request.GET.get('step')
+        if step == 'upload':
+            self.wizard_step = 'upload'
+            return self.render_to_response(self.get_context_data(form=self.get_form_class()()))
         if step == 'configure' or not config.get('mapping'):
             return self._render_configure(request, path)
         if step == 'mapping':
@@ -1375,8 +1530,10 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             'iterate_skip': self._handle_iterate_skip,
             'iterate_finish': self._handle_iterate_finish,
             'iterate_back_review': self._handle_iterate_back_review,
-            'save_profile': self._handle_save_profile,
-            'load_profile': self._handle_load_profile,
+            'save_profile': self._handle_save_template,
+            'load_profile': self._handle_load_template,
+            'save_template': self._handle_save_template,
+            'load_template': self._handle_load_template,
             'undo_last_import': self._handle_undo_last_import,
         }
         handler = handlers.get(action)
@@ -1408,32 +1565,84 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             header_row=default_header,
             group_row=default_group,
             mapping={},
-            match_policy=MATCH_BY_NAME,
+            match_policy=MATCH_ALWAYS_CREATE,
             mode='mapped',
             clear_draft=True,
         )
-        messages.info(
-            request,
-            'Файл загружен. Для большой таблицы Excel обычно: строка заголовков = 2, строка групп = 1. '
-            'В сопоставлении должна быть колонка «Наименование» → поле «Название».',
-        )
+        if default_header > 1 or default_group > 0:
+            messages.info(
+                request,
+                'Файл загружен. Похоже на таблицу с группами колонок: '
+                f'строка заголовков = {default_header}, строка групп = {default_group or "нет"}. '
+                'В сопоставлении должна быть колонка «Наименование» → поле «Название».',
+            )
+        else:
+            messages.info(
+                request,
+                'Файл загружен. Заголовки в первой строке — номера строк парсера скрыты. '
+                'В сопоставлении должна быть колонка «Наименование» → поле «Название».',
+            )
         return redirect('materials:import')
+
+    def _resolve_configure_layout(self, path, *, sheet: str, post) -> tuple[int, int]:
+        """Номера строк шапки: при простой раскладке (1 / без групп) не даём сбить вручную."""
+        detected_header, detected_group = detect_header_layout(path, sheet_name=sheet or None)
+        if detected_header <= 1 and detected_group <= 0:
+            return 1, 0
+        try:
+            header_row = int(post.get('header_row') or detected_header or 1)
+            group_raw = (post.get('group_row') or '').strip()
+            if group_raw == '':
+                group_row = int(detected_group or 0)
+            else:
+                group_row = int(group_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError('Номера строк должны быть числами.') from exc
+        if header_row < 1:
+            raise ValueError('Номер строки заголовка должен быть ≥ 1.')
+        return header_row, max(0, group_row)
 
     def _handle_configure(self, request):
         path = get_import_session_path(request.session)
         if path is None:
             messages.error(request, 'Сначала загрузите файл.')
             return redirect('materials:import')
-        try:
-            header_row = int(request.POST.get('header_row') or 1)
-            group_raw = (request.POST.get('group_row') or '').strip()
-            group_row = int(group_raw) if group_raw else 0
-        except ValueError:
-            messages.error(request, 'Номера строк должны быть числами.')
-            return self._render_configure(request, path)
-        match_policy = (request.POST.get('match_policy') or MATCH_BY_NAME).strip()
-        create_missing_dictionaries = request.POST.get('create_missing_dictionaries') == '1'
         sheet = (request.POST.get('sheet') or '').strip()
+        if request.POST.get('refresh_layout') == '1':
+            prev = get_import_config(request.session)
+            sheet_changed = sheet != (prev.get('sheet') or '')
+            try:
+                if sheet_changed:
+                    # Новый лист — заново автоопределяем шапку, а не тянем номера со старого.
+                    detected_header, detected_group = detect_header_layout(
+                        path, sheet_name=sheet or None,
+                    )
+                    if detected_header <= 1 and detected_group <= 0:
+                        header_row, group_row = 1, 0
+                    else:
+                        header_row, group_row = int(detected_header), int(detected_group or 0)
+                else:
+                    header_row, group_row = self._resolve_configure_layout(
+                        path, sheet=sheet, post=request.POST,
+                    )
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return self._render_configure(request, path)
+            set_import_config(
+                request.session,
+                sheet=sheet,
+                header_row=header_row,
+                group_row=group_row,
+            )
+            return self._render_configure(request, path)
+        try:
+            header_row, group_row = self._resolve_configure_layout(
+                path, sheet=sheet, post=request.POST,
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return self._render_configure(request, path)
+        create_missing_dictionaries = request.POST.get('create_missing_dictionaries') == '1'
         structure_type_id = (request.POST.get('structure_type_id') or '').strip()
         if not structure_type_id:
             messages.error(request, 'Выберите тип структуры для импорта.')
@@ -1448,7 +1657,6 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             sheet=sheet,
             header_row=header_row,
             group_row=group_row,
-            match_policy=match_policy,
             create_missing_dictionaries=create_missing_dictionaries,
             structure_type_id=structure_type_id,
             mapping={},
@@ -1456,8 +1664,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         )
         return self._render_mapping(request, path)
 
-    def _save_mapping_from_post(self, request, path):
-        """Сохраняет маппинг из POST. Возвращает path-response при ошибке, иначе None."""
+    def _mapping_from_post(self, request) -> dict:
+        """Читает map_*/parse_* из POST (текущий UI конструктора)."""
         mapping = {}
         for key, value in request.POST.items():
             if not key.startswith('map_'):
@@ -1471,11 +1679,61 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 'target': value or TARGET_SKIP,
                 'parse': parse_mode,
             }
-        # Уникальность и справочники задаются на шаге «Лист и уникальность» —
-        # здесь их значения в сессии не трогаем.
+        return mapping
+
+    def _default_tags_from_post(self, request) -> str:
+        raw = request.POST.get('import_default_tags')
+        if raw is None:
+            return (get_import_config(request.session).get('default_tags') or '').strip()
+        return (raw or '').strip()
+
+    def _default_tag_colors_from_post(self, request) -> dict:
+        from apps.core.tag_utils import parse_tag_colors_payload
+
+        raw = request.POST.get('import_default_tags_colors')
+        if raw is None:
+            return dict(get_import_config(request.session).get('default_tag_colors') or {})
+        return parse_tag_colors_payload(raw)
+
+    def _import_default_tags_widget_html(
+        self,
+        request,
+        value: str = '',
+        *,
+        colors: dict | None = None,
+    ) -> str:
+        from django.utils.safestring import mark_safe
+
+        from apps.core.models import Tag
+        from apps.core.tag_utils import active_tags_queryset
+        from apps.core.widgets import TagNamesWidget
+
+        workspace = request.active_workspace
+        suggestions = list(
+            active_tags_queryset(Tag.objects.filter(workspace=workspace))
+            .order_by('name')
+            .values('name', 'slug', 'color', 'description', 'workspace_id')
+        )
+        colors_payload = colors if colors is not None else {}
+        import json
+
+        widget = TagNamesWidget(
+            attrs={'id': 'import-default-tags-typing'},
+            tag_suggestions=suggestions,
+            allow_colors=True,
+            colors_value=json.dumps(colors_payload, ensure_ascii=False) if colors_payload else '',
+        )
+        return mark_safe(widget.render('import_default_tags', value or '', attrs=widget.attrs))
+
+    def _save_mapping_from_post(self, request, path):
+        """Сохраняет маппинг из POST. Возвращает path-response при ошибке, иначе None."""
+        mapping = self._mapping_from_post(request)
         set_import_config(
             request.session,
             mapping=mapping,
+            match_policy=MATCH_ALWAYS_CREATE,
+            default_tags=self._default_tags_from_post(request),
+            default_tag_colors=self._default_tag_colors_from_post(request),
         )
         targets = [normalize_mapping_entry(v)[0] for v in mapping.values()]
         if TARGET_NAME not in targets:
@@ -1613,14 +1871,15 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         if early is not None:
             return early
         drafts, errors = apply_unrecognized_manual_fixes(drafts, request.POST)
+        # Сохраняем и частичный успех: иначе после ошибки в одном поле
+        # исправленные ячейки снова выглядят «нераспознанными».
+        set_import_config(request.session, draft=drafts_to_session(drafts))
         if errors:
             for error in errors[:8]:
                 messages.error(request, error)
             if len(errors) > 8:
                 messages.error(request, f'… и ещё {len(errors) - 8} полей без корректного значения.')
-            self.draft_rows = drafts
             return self._render_review(request, path)
-        set_import_config(request.session, draft=drafts_to_session(drafts))
         return self._apply_import_drafts(request, path, drafts, structure_type)
 
     def _handle_review_apply(self, request):
@@ -1636,6 +1895,25 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             return self._render_review(request, path)
         return self._apply_import_drafts(request, path, drafts, structure_type)
 
+    def _apply_duplicate_name_choice(self, request, drafts):
+        """Применяет выбор оператора по совпадениям названий. Возвращает (drafts, error_message)."""
+        collisions = name_collisions_for_drafts(request.active_workspace, drafts)
+        if not collisions:
+            return drafts, None
+        mode = (request.POST.get('duplicate_name_policy') or DUPLICATE_NAME_SKIP).strip()
+        prefix = (request.POST.get('duplicate_name_prefix') or '').strip()
+        try:
+            drafts = apply_duplicate_name_policy(
+                drafts,
+                collisions,
+                mode=mode,
+                prefix=prefix,
+            )
+        except ValueError as exc:
+            return drafts, str(exc)
+        set_import_config(request.session, draft=drafts_to_session(drafts))
+        return drafts, None
+
     def _apply_import_drafts(
         self,
         request,
@@ -1645,6 +1923,16 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         *,
         ignored_unrecognized: bool = False,
     ):
+        drafts, dup_error = self._apply_duplicate_name_choice(request, drafts)
+        if dup_error:
+            messages.error(request, dup_error)
+            self.draft_rows = drafts
+            return self._render_review(request, path)
+        # На всякий случай: перезапись запрещена.
+        for draft in drafts:
+            if draft.action == 'update':
+                draft.action = 'create'
+            draft.existing_pk = None
         report = self._material_importer(
             request,
             dry_run=False,
@@ -1664,6 +1952,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 workspace=request.active_workspace,
                 material_ids=report.affected_material_ids,
             )
+        from apps.core.tag_utils import apply_workspace_tag_colors
+
+        apply_workspace_tag_colors(
+            request.active_workspace,
+            get_import_config(request.session).get('default_tag_colors') or {},
+        )
         clear_import_session(request.session, delete_file=True)
         ignored_note = (
             ' Нераспознанные поля проигнорированы и остались пустыми.'
@@ -1673,8 +1967,19 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         messages.success(
             request,
             'Импорт выполнен: '
-            f'материалов создано {report.materials_created}, обновлено {report.materials_updated}; '
-            f'свойств создано {report.properties_created}, обновлено {report.properties_updated}.'
+            f'материалов создано {report.materials_created}'
+            + (
+                f', обновлено {report.materials_updated}'
+                if report.materials_updated
+                else ''
+            )
+            + f'; свойств создано {report.properties_created}'
+            + (
+                f', обновлено {report.properties_updated}'
+                if report.properties_updated
+                else ''
+            )
+            + '.'
             + ignored_note
             + (
                 f' Отладка: можно удалить {len(report.affected_material_ids)} материал(ов) одной кнопкой.'
@@ -1695,6 +2000,11 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             messages.error(request, 'Нет черновика — сначала выполните проверку маппинга.')
             return redirect('materials:import')
         drafts = apply_review_post(drafts, request.POST)
+        drafts, dup_error = self._apply_duplicate_name_choice(request, drafts)
+        if dup_error:
+            messages.error(request, dup_error)
+            self.draft_rows = drafts
+            return self._render_review(request, path)
         set_import_config(request.session, draft=drafts_to_session(drafts))
         structure_type = self._resolve_structure_type(config)
         if structure_type is None:
@@ -1746,10 +2056,10 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             return redirect('materials:import')
 
         draft = apply_iterate_row_post(drafts[index], request.POST)
-        if draft.existing_pk:
-            draft.action = 'update'
-        else:
-            draft.action = 'create'
+        # Перезапись запрещена: всегда создаём. Совпадения по названию уже
+        # обработаны при входе в построчный режим (пропуск / префикс).
+        draft.existing_pk = None
+        draft.action = 'create'
         drafts[index] = draft
         set_import_config(request.session, draft=drafts_to_session(drafts))
 
@@ -1857,6 +2167,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 workspace=request.active_workspace,
                 material_ids=material_ids,
             )
+        from apps.core.tag_utils import apply_workspace_tag_colors
+
+        apply_workspace_tag_colors(
+            request.active_workspace,
+            get_import_config(request.session).get('default_tag_colors') or {},
+        )
         clear_import_session(request.session, delete_file=True)
         messages.success(
             request,
@@ -1887,63 +2203,137 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         # Always land on list page 1 — POST next often keeps ?page=N which 404s after delete.
         return redirect('materials:list')
 
-    def _handle_save_profile(self, request):
+    def _handle_save_template(self, request):
         path = get_import_session_path(request.session)
         if path is None:
             return redirect('materials:import')
-        name = (request.POST.get('profile_name') or '').strip()
+        name = (
+            request.POST.get('template_name')
+            or request.POST.get('profile_name')
+            or ''
+        ).strip()
         if not name:
-            messages.error(request, 'Укажите название профиля.')
+            messages.error(request, 'Укажите название шаблона.')
             return self._render_mapping(request, path)
         config = get_import_config(request.session)
-        # enrich labels
+        structure_type_id = (config.get('structure_type_id') or '').strip()
+        if not structure_type_id:
+            messages.error(
+                request,
+                'Выберите тип структуры перед сохранением шаблона.',
+            )
+            return self._render_mapping(request, path)
+        if self._resolve_structure_type(config) is None:
+            messages.error(
+                request,
+                'Тип структуры из сессии недоступен. Выберите тип заново.',
+            )
+            return self._render_mapping(request, path)
+        # Берём маппинг из POST (текущий UI). Сессия — только запасной вариант
+        # для старых клиентов / тестов без map_*.
+        mapping = self._mapping_from_post(request)
+        if mapping:
+            set_import_config(
+                request.session,
+                mapping=mapping,
+                match_policy=MATCH_ALWAYS_CREATE,
+                default_tags=self._default_tags_from_post(request),
+                default_tag_colors=self._default_tag_colors_from_post(request),
+            )
+            config = get_import_config(request.session)
+        else:
+            mapping = dict(config.get('mapping') or {})
+            # Даже без map_* сохраняем теги из POST, если пришли.
+            if 'import_default_tags' in request.POST:
+                set_import_config(
+                    request.session,
+                    default_tags=self._default_tags_from_post(request),
+                    default_tag_colors=self._default_tag_colors_from_post(request),
+                )
+                config = get_import_config(request.session)
         table = self._load_table(path, config)
-        mapping = config.get('mapping') or {}
         for col in table.columns:
             key = str(col.index)
             if key in mapping and isinstance(mapping[key], dict):
                 mapping[key]['label'] = col.display
+            elif key not in mapping:
+                mapping[key] = {
+                    'target': TARGET_SKIP,
+                    'parse': 'auto',
+                    'label': col.display,
+                }
         payload = profile_payload_from_mapping(
             mapping,
             sheet=config.get('sheet'),
             header_row=config.get('header_row'),
             group_row=config.get('group_row'),
             match_policy=config.get('match_policy'),
-            structure_type_id=config.get('structure_type_id'),
+            structure_type_id=structure_type_id,
             create_missing_dictionaries=bool(config.get('create_missing_dictionaries')),
+            default_tags=config.get('default_tags') or '',
+            default_tag_colors=config.get('default_tag_colors') or {},
         )
-        MaterialImportProfile.objects.update_or_create(
+        profile, _created = MaterialImportProfile.objects.update_or_create(
             workspace=request.active_workspace,
             name=name,
             defaults={'config': payload},
         )
-        messages.success(request, f'Профиль «{name}» сохранён.')
+        request.session[SESSION_ACTIVE_TEMPLATE_ID] = str(profile.pk)
+        request.session.modified = True
+        messages.success(request, f'Шаблон «{name}» сохранён.')
         return self._render_mapping(request, path)
 
-    def _handle_load_profile(self, request):
+    def _handle_load_template(self, request):
         path = get_import_session_path(request.session)
         if path is None:
             return redirect('materials:import')
-        profile_id = request.POST.get('profile_id')
+        template_id = (
+            request.POST.get('template_id') or request.POST.get('profile_id') or ''
+        ).strip()
+        if not template_id:
+            messages.error(request, 'Выберите шаблон для применения.')
+            return self._render_mapping(request, path)
         profile = get_object_or_404(
             MaterialImportProfile,
-            pk=profile_id,
+            pk=template_id,
             workspace=request.active_workspace,
         )
         config = get_import_config(request.session)
         table = self._load_table(path, config)
         mapping = apply_profile_to_columns(table.columns, profile.config.get('columns') or [])
+        structure_type_id = (profile.config.get('structure_type_id') or '').strip()
+        resolved = self._resolve_structure_type({'structure_type_id': structure_type_id})
+        if structure_type_id and resolved is None:
+            messages.warning(
+                request,
+                'Тип структуры из шаблона недоступен — выберите тип вручную.',
+            )
+            structure_type_id = ''
         set_import_config(
             request.session,
             mapping=mapping,
             match_policy=profile.config.get('match_policy') or MATCH_BY_NAME,
             create_missing_dictionaries=bool(profile.config.get('create_missing_dictionaries')),
-            structure_type_id=profile.config.get('structure_type_id') or '',
+            structure_type_id=structure_type_id,
             header_row=int(profile.config.get('header_row') or config.get('header_row') or 1),
             group_row=int(profile.config.get('group_row') or 0),
+            default_tags=(profile.config.get('default_tags') or '').strip(),
+            default_tag_colors=dict(profile.config.get('default_tag_colors') or {}),
             clear_draft=True,
         )
-        messages.success(request, f'Загружен профиль «{profile.name}». Проверьте сопоставление.')
+        request.session[SESSION_ACTIVE_TEMPLATE_ID] = str(profile.pk)
+        request.session.modified = True
+        mapped_count = sum(
+            1
+            for entry in mapping.values()
+            if normalize_mapping_entry(entry)[0] != TARGET_SKIP
+        )
+        st_label = f' · структура «{resolved.name}»' if resolved else ''
+        messages.success(
+            request,
+            f'Применён шаблон «{profile.name}»{st_label} '
+            f'({mapped_count} колонок). Проверьте сопоставление.',
+        )
         return self._render_mapping(request, path)
 
     def _build_drafts(self, request, path):
@@ -1970,7 +2360,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             if entry is None:
                 target = suggest_target(
                     column,
-                    properties,
+                    [],
                     structure_fields,
                     claimed_targets=claimed_targets,
                 )
@@ -1990,8 +2380,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             table,
             mapping,
             workspace=request.active_workspace,
-            match_policy=config.get('match_policy') or MATCH_BY_NAME,
+            match_policy=MATCH_ALWAYS_CREATE,
             structure_type_id=str(structure_type.pk),
+        )
+        drafts = merge_default_tags_into_drafts(
+            drafts,
+            config.get('default_tags') or '',
         )
         clear_iterate_session(request.session)
         set_import_config(request.session, mapping=mapping, draft=drafts_to_session(drafts))
@@ -2027,22 +2421,51 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         sheet = config.get('sheet') or (self.sheet_names[0] if self.sheet_names else '')
         detected_header, detected_group = detect_header_layout(path, sheet_name=sheet)
         self.detected_layout = {'header_row': detected_header, 'group_row': detected_group}
-        # превью первых строк листа для выбора заголовков
+        self.show_header_layout_fields = detected_header > 1 or detected_group > 0
+        if not self.show_header_layout_fields:
+            # Простая шапка: фиксируем 1 / 0 в сессии, чтобы UI и apply не расходились.
+            if config.get('header_row') != 1 or int(config.get('group_row') or 0) != 0:
+                set_import_config(request.session, header_row=1, group_row=0)
+                config = get_import_config(request.session)
+        schema_header = max(1, int(config.get('header_row') or detected_header or 1))
+        schema_group = max(0, int(config.get('group_row') if config.get('group_row') is not None else (detected_group or 0)))
+        if not self.show_header_layout_fields:
+            schema_header, schema_group = 1, 0
+        # превью первых строк листа для выбора заголовков + схема для оператора
         try:
             preview_table = load_wide_table(
                 path,
                 sheet_name=sheet or None,
-                header_row=detected_header,
-                group_row=detected_group or None,
+                header_row=schema_header,
+                group_row=schema_group or None,
                 max_preview=3,
             )
-            self.layout_hint = (
-                f'Авто: заголовки={detected_header}, группы={detected_group or "нет"}; '
-                f'колонок={len(preview_table.columns)}. '
-                f'Должны быть «Наименование», «Марка»…'
+            self.layout_schema = build_import_layout_schema(
+                path,
+                sheet_name=sheet or None,
+                header_row=schema_header,
+                group_row=schema_group,
+                max_cols=14,
+                max_data_rows=8,
             )
+            self.layout_form_header_row = schema_header
+            self.layout_form_group_row = schema_group
+            if self.show_header_layout_fields:
+                self.layout_hint = (
+                    f'Авто: заголовки={detected_header}, группы={detected_group or "нет"}; '
+                    f'сейчас: заголовки={schema_header}, группы={schema_group or "нет"}; '
+                    f'колонок={len(preview_table.columns)}. '
+                    f'Должны быть «Наименование», «Марка»…'
+                )
+            else:
+                self.layout_hint = (
+                    f'Заголовки в строке 1, групп колонок нет · колонок={len(preview_table.columns)}'
+                )
         except (ValueError, FileNotFoundError):
             self.layout_hint = ''
+            self.layout_schema = None
+            self.layout_form_header_row = schema_header
+            self.layout_form_group_row = schema_group
         self.structure_types = self._importable_structure_types()
         self.selected_structure_type = self._resolve_structure_type(config)
         self.wizard_step = 'configure'
@@ -2056,7 +2479,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             self.show_structure_type_error = True
             return self._render_configure(request, path)
         properties = list(Property.objects.order_by('display_name', 'name'))
-        match_policy = config.get('match_policy') or MATCH_BY_NAME
+        match_policy = MATCH_BY_NAME
         self.target_choices = mapping_choices(
             properties,
             structure_fields,
@@ -2082,9 +2505,10 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             if key in stored:
                 target, parse = normalize_mapping_entry(stored[key])
             else:
+                # Автоподстановка только primary (название / код / структура).
                 target = suggest_target(
                     column,
-                    properties,
+                    [],
                     structure_fields,
                     claimed_targets=claimed_targets,
                 )
@@ -2096,13 +2520,15 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 )
             if not target_allows_multiple_columns(target):
                 claimed_targets.add(target)
-            sample_value = sample.get(column.index)
-            if sample_value is not None:
-                sample_text = str(sample_value).replace('\n', ' ').strip()
+            raw_sample = sample.get(column.index)
+            if raw_sample is None:
+                sample_text = '—'
+            else:
+                sample_text = str(raw_sample).replace('\n', ' ').strip()
                 if len(sample_text) > 80:
                     sample_text = sample_text[:77] + '…'
-            else:
-                sample_text = '—'
+                if not sample_text:
+                    sample_text = '—'
             mapping_rows.append({
                 'column': column,
                 'target': target,
@@ -2111,16 +2537,49 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 'is_required_target': target in required_keys,
                 'target_label': target_labels.get(target, target_labels.get(TARGET_SKIP, '— пропустить —')),
             })
+        if not stored:
+            stored = mapping_for_session(mapping_rows)
+            set_import_config(request.session, mapping=stored)
+
         self.mapping_rows = mapping_rows
+        self.file_columns = [
+            {
+                'index': column.index,
+                'label': column.display,
+                'sample': next(
+                    (row['sample'] for row in mapping_rows if row['column'].index == column.index),
+                    '—',
+                ),
+            }
+            for column in self.wide_table.columns
+        ]
+        self.field_mapping_rows = build_field_mapping_rows(
+            columns=list(self.wide_table.columns),
+            mapping=stored,
+            structure_fields=structure_fields,
+            match_policy=match_policy,
+            target_labels=target_labels,
+            sample_row=sample,
+        )
+        self.unused_columns = unused_columns_from_mapping(
+            list(self.wide_table.columns),
+            stored,
+            sample_row=sample,
+        )
+        used_targets = {row['target'] for row in self.field_mapping_rows}
+        # Свойства справочника — через ту же модалку «Выбор свойств», что в форме материала.
+        self.addon_catalog_groups = addon_catalog_groups(
+            properties=[],
+            exclude_targets=used_targets,
+        )
+        self.reference_properties = reference_properties_for_picker()
         self.missing_required_targets = missing_required_targets(
-            mapping_rows,
+            self.field_mapping_rows,
             match_policy=match_policy,
         )
         self.duplicate_mapping_targets = find_duplicate_mapping_targets(mapping_rows)
         self.sheet_names = list_sheet_names(path)
         self.wizard_step = 'mapping'
-        if not stored:
-            set_import_config(request.session, mapping=mapping_for_session(mapping_rows))
         return self.render_to_response(self.get_context_data(form=self.get_form_class()()))
 
     def _render_review(self, request, path):

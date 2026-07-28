@@ -410,6 +410,33 @@ a.list-filter-active-tag.entity-tag:not(.entity-tag--scoped):focus-visible .list
     transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+.tag-input-widget--colors .tag-input-composer {
+    align-items: center;
+}
+
+.tag-input-color-hint {
+    margin-top: 0.35rem;
+    color: var(--kx-text-muted, #667085);
+    font-size: 0.75rem;
+}
+
+.tag-input-chip__color {
+    flex: 0 0 auto;
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0 0.15rem 0 0.2rem;
+    padding: 0;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 0.2rem;
+    background: transparent;
+    cursor: pointer;
+    align-self: center;
+}
+
+.tag-input-chip.entity-tag--scoped .tag-input-chip__color {
+    border-color: rgba(0, 0, 0, 0.25);
+}
+
 .tag-input-chip.entity-tag--scoped .tag-input-chip__remove {
     margin-left: 0;
     color: #303030;
