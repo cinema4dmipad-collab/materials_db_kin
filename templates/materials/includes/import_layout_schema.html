@@ -1,0 +1,52 @@
+{% if layout_schema and layout_schema.rows %}
+<div class="import-layout-schema" aria-label="Схема шапки таблицы Excel">
+    <div class="import-layout-schema__head">
+        <div class="import-layout-schema__title">Превью разметки листа</div>
+        <div class="import-layout-schema__legend">
+            {% if layout_schema.has_groups %}
+            <span class="import-layout-schema__swatch import-layout-schema__swatch--group">Группы · стр. {{ layout_schema.group_row }}</span>
+            {% endif %}
+            <span class="import-layout-schema__swatch import-layout-schema__swatch--header">Заголовки · стр. {{ layout_schema.header_row }}</span>
+            <span class="import-layout-schema__swatch import-layout-schema__swatch--data">Данные</span>
+            {% if layout_schema.cols_total %}
+            <span class="import-layout-schema__meta">
+                {{ layout_schema.cols_shown }}{% if layout_schema.cols_total > layout_schema.cols_shown %}/{{ layout_schema.cols_total }}{% endif %} кол.
+                {% if layout_schema.data_rows_shown %} · {{ layout_schema.data_rows_shown }} стр. данных{% endif %}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="import-layout-schema__table-wrap">
+        <table class="import-layout-schema__table">
+            <thead>
+                <tr>
+                    <th scope="col" class="import-layout-schema__rownum">№</th>
+                    <th scope="col" class="import-layout-schema__role">Роль</th>
+                    {% for _ in layout_schema.rows.0.cells %}
+                    <th scope="col">{{ forloop.counter }}</th>
+                    {% endfor %}
+                    {% if layout_schema.cols_total > layout_schema.cols_shown %}
+                    <th scope="col" class="import-layout-schema__more">…</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in layout_schema.rows %}
+                <tr class="import-layout-schema__row import-layout-schema__row--{{ row.role }}">
+                    <th scope="row" class="import-layout-schema__rownum">{{ row.number }}</th>
+                    <td class="import-layout-schema__role">
+                        <span class="import-layout-schema__badge import-layout-schema__badge--{{ row.role }}">{{ row.role_label }}</span>
+                    </td>
+                    {% for cell in row.cells %}
+                    <td title="{{ cell }}">{% if cell %}{{ cell }}{% else %}<span class="text-muted">·</span>{% endif %}</td>
+                    {% endfor %}
+                    {% if layout_schema.cols_total > layout_schema.cols_shown %}
+                    <td class="import-layout-schema__more">…</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}

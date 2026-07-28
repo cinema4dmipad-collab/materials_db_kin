@@ -1,0 +1,108 @@
+{% if name_collision_count %}
+<div class="import-unrecognized-panel import-collision-panel mb-3" id="import-name-collisions" role="region" aria-labelledby="import-collision-title">
+    <div class="import-unrecognized-panel__title">
+        <span class="badge text-bg-warning border-0 me-2">Предупреждение</span>
+        <span id="import-collision-title">Совпадения по названию</span>
+        <span class="import-help__trigger" tabindex="0" aria-label="Подсказка по дубликатам">
+            <span class="import-help__mark" aria-hidden="true">?</span>
+            <span class="import-help__tip import-help__tip--start" role="tooltip">
+                В пространстве уже есть материалы с такими названиями.
+                Перезапись при импорте запрещена: пропустите эти строки
+                или задайте префикс и создайте их как новые.
+            </span>
+        </span>
+    </div>
+    <p class="import-unrecognized-panel__meta mb-2">
+        Совпадений: <strong>{{ name_collision_count }}</strong>
+        · перезапись запрещена
+        · выберите действие ниже перед записью
+    </p>
+
+    <div class="import-unrecognized-table-wrap mb-3">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0 import-unrecognized-table import-collision-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Строка</th>
+                        <th scope="col">Название в файле</th>
+                        <th scope="col">Уже есть в базе</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in name_collisions %}
+                    <tr>
+                        <td class="text-muted">{{ item.source_row }}</td>
+                        <td>«{{ item.name }}»</td>
+                        <td>
+                            <code>{{ item.existing_code }}</code>
+                            {% if item.existing_name and item.existing_name != item.name %}
+                            <span class="text-muted">· {{ item.existing_name }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="import-collision-actions">
+        <div class="import-collision-actions__title">Что сделать с этими строками</div>
+        <div class="import-collision-options">
+            <label class="import-collision-option">
+                <input type="radio"
+                       name="duplicate_name_policy"
+                       id="import-dup-skip"
+                       value="skip"
+                       {% if request.POST.duplicate_name_policy != 'prefix' %}checked{% endif %}>
+                <span class="import-collision-option__body">
+                    <span class="import-collision-option__label">Не записывать дубликаты</span>
+                    <span class="import-collision-option__hint">Строки с совпавшим названием будут пропущены</span>
+                </span>
+            </label>
+            <label class="import-collision-option">
+                <input type="radio"
+                       name="duplicate_name_policy"
+                       id="import-dup-prefix"
+                       value="prefix"
+                       {% if request.POST.duplicate_name_policy == 'prefix' %}checked{% endif %}>
+                <span class="import-collision-option__body">
+                    <span class="import-collision-option__label">Добавить префикс и создать как новые</span>
+                    <span class="import-collision-option__hint">Название изменится, существующие материалы не трогаем</span>
+                </span>
+            </label>
+        </div>
+        <div class="import-collision-prefix" id="import-collision-prefix-wrap">
+            <label class="form-label form-label-sm mb-1" for="import-dup-prefix-input">Префикс</label>
+            <input type="text"
+                   class="form-control form-control-sm"
+                   name="duplicate_name_prefix"
+                   id="import-dup-prefix-input"
+                   value="{{ request.POST.duplicate_name_prefix|default:'' }}"
+                   placeholder="напр. импорт-"
+                   maxlength="40"
+                   autocomplete="off">
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var skip = document.getElementById('import-dup-skip');
+    var prefix = document.getElementById('import-dup-prefix');
+    var wrap = document.getElementById('import-collision-prefix-wrap');
+    var input = document.getElementById('import-dup-prefix-input');
+    if (!skip || !prefix || !wrap) return;
+    function sync(focusInput) {
+        var on = prefix.checked;
+        wrap.classList.toggle('is-disabled', !on);
+        if (input) {
+            input.disabled = !on;
+            if (on && focusInput) input.focus();
+        }
+    }
+    skip.addEventListener('change', function () { sync(false); });
+    prefix.addEventListener('change', function () { sync(true); });
+    sync(false);
+})();
+</script>
+{% endif %}

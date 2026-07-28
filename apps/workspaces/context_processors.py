@@ -31,7 +31,10 @@ def workspace_navigation(request):
             'icon': 'bi-box-seam',
             'url': reverse('materials:list'),
             'visible': can(WorkspacePerm.MATERIAL_VIEW),
-            'is_active': lambda n, u: n == 'materials' and u != 'import' and u != 'import_example',
+            'is_active': lambda n, u: n == 'materials' and u != 'import' and u not in (
+                'import_example',
+                'import_review',
+            ),
         },
         {
             'label': 'Импорт',
@@ -39,6 +42,13 @@ def workspace_navigation(request):
             'url': reverse('materials:import'),
             'visible': can(WorkspacePerm.MATERIAL_CREATE),
             'is_active': lambda n, u: n == 'materials' and u in ('import', 'import_example'),
+        },
+        {
+            'label': 'Проверка импорта',
+            'icon': 'bi-clipboard-check',
+            'url': reverse('materials:import_review'),
+            'visible': can(WorkspacePerm.MATERIAL_EDIT),
+            'is_active': lambda n, u: n == 'materials' and u == 'import_review',
         },
         {
             'label': 'Свойства',

@@ -1,6 +1,8 @@
 {% load list_filter_tags %}
 {{ widget.tag_suggestions_json_script }}
-<div class="tag-input-widget" data-tag-suggestions-id="{{ widget.tag_suggestions_script_id }}">
+<div class="tag-input-widget{% if widget.allow_colors %} tag-input-widget--colors{% endif %}"
+     data-tag-suggestions-id="{{ widget.tag_suggestions_script_id }}"
+     {% if widget.allow_colors %}data-allow-tag-colors="1"{% endif %}>
     <div class="tag-input-widget__field-wrap">
         <div class="tag-input-composer">
             <div class="tag-input-chips" aria-live="polite"></div>
@@ -15,8 +17,19 @@
                    name="{{ widget.name }}"
                    class="tag-input-value"
                    {% if widget.value != None %} value="{{ widget.value|stringformat:'s' }}"{% endif %}>
+            {% if widget.allow_colors %}
+            <input type="hidden"
+                   name="{{ widget.name }}_colors"
+                   class="tag-input-colors-value"
+                   value="{{ widget.colors_value|escape }}">
+            {% endif %}
         </div>
     </div>
+    {% if widget.allow_colors %}
+    <p class="tag-input-color-hint mb-0">
+        Новому тегу задаётся цвет по умолчанию — изменить можно палитрой на чипе.
+    </p>
+    {% endif %}
     {% if widget.tag_suggestions %}
     <div class="tag-input-existing">
         <div class="tag-input-existing__head">

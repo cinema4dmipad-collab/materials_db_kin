@@ -269,7 +269,7 @@ class MaterialProperty(models.Model):
 
 
 class MaterialImportProfile(models.Model):
-    """Сохранённый профиль сопоставления колонок для повторного импорта."""
+    """Сохранённый шаблон сопоставления колонок и типа структуры для повторного импорта."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey(
@@ -278,15 +278,15 @@ class MaterialImportProfile(models.Model):
         related_name='material_import_profiles',
         verbose_name='Пространство',
     )
-    name = models.CharField(max_length=120, verbose_name='Название профиля')
-    config = models.JSONField(default=dict, blank=True, verbose_name='Конфигурация маппинга')
+    name = models.CharField(max_length=120, verbose_name='Название шаблона')
+    config = models.JSONField(default=dict, blank=True, verbose_name='Конфигурация шаблона')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['name']
-        verbose_name = 'профиль импорта материалов'
-        verbose_name_plural = 'профили импорта материалов'
+        verbose_name = 'шаблон импорта материалов'
+        verbose_name_plural = 'шаблоны импорта материалов'
         constraints = [
             models.UniqueConstraint(
                 fields=['workspace', 'name'],
@@ -296,3 +296,7 @@ class MaterialImportProfile(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def structure_type_id(self) -> str:
+        return str((self.config or {}).get('structure_type_id') or '').strip()

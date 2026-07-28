@@ -1,0 +1,23 @@
+{# Общие теги для всех материалов импорта. Внутри #import-map-form, под конструктором. #}
+<div class="import-default-tags-panel mt-3 mb-3" id="import-default-tags-panel">
+    <div class="import-default-tags-panel__title">
+        Теги для всех материалов
+        <span class="import-help__trigger" tabindex="0" aria-label="Подсказка по тегам импорта">
+            <span class="import-help__mark" aria-hidden="true">?</span>
+            <span class="import-help__tip import-help__tip--start" role="tooltip">
+                Эти теги добавятся ко всем создаваемым материалам.
+                Можно выбрать существующий или ввести новый (Enter) и задать цвет.
+                Теги из колонок файла (например «Марка») сохранятся отдельно.
+            </span>
+        </span>
+    </div>
+    <p class="import-default-tags-panel__hint mb-2">
+        Общие теги партии импорта — ко всем новым материалам из этого файла.
+        Цвет нового тега — по умолчанию, меняется на чипе.
+    </p>
+    {% if import_default_tags_widget %}
+    <div class="import-default-tags-panel__widget">
+        {{ import_default_tags_widget }}
+    </div>
+    {% endif %}
+</div>

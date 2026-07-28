@@ -44,6 +44,143 @@ def list_sheet_names(path: Path | str) -> list[str]:
         workbook.close()
 
 
+def _cell_preview(value, *, max_len: int = 18) -> str:
+    if value is None:
+        return ''
+    text = str(value).replace('\u00a0', ' ').strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + '…'
+
+
+def build_import_layout_schema(
+    path: Path | str,
+    *,
+    sheet_name: str | None = None,
+    header_row: int = 1,
+    group_row: int = 0,
+    max_cols: int = 12,
+    max_data_rows: int = 6,
+) -> dict:
+    """
+    Схема шапки Excel/CSV для шага настройки импорта.
+    Возвращает rows с role: group | header | data | other.
+    """
+    file_path = Path(path)
+    header_row = max(1, int(header_row or 1))
+    group_row = max(0, int(group_row or 0))
+    peek_rows = max(header_row + max_data_rows, group_row + max_data_rows, 8)
+    matrix = _peek_sheet_matrix(file_path, sheet_name=sheet_name, max_rows=peek_rows)
+    if not matrix:
+        return {
+            'header_row': header_row,
+            'group_row': group_row,
+            'has_groups': group_row > 0,
+            'cols_shown': 0,
+            'cols_total': 0,
+            'data_rows_shown': 0,
+            'rows': [],
+        }
+
+    width = max((len(row) for row in matrix), default=0)
+    cols_shown = min(max_cols, width) if width else 0
+    end_row = min(len(matrix), header_row + max_data_rows)
+    # Показываем с 1-й строки, чтобы были видны группы выше заголовка.
+    rows_out: list[dict] = []
+    for index in range(0, end_row):
+        number = index + 1
+        raw = matrix[index]
+        cells = [
+            _cell_preview(raw[c] if c < len(raw) else None, max_len=36)
+            for c in range(cols_shown)
+        ]
+        if group_row and number == group_row:
+            role, role_label = 'group', 'Группы колонок'
+        elif number == header_row:
+            role, role_label = 'header', 'Заголовки'
+        elif number > header_row:
+            role, role_label = 'data', 'Данные'
+        else:
+            role, role_label = 'other', 'Прочее'
+        rows_out.append(
+            {
+                'number': number,
+                'role': role,
+                'role_label': role_label,
+                'cells': cells,
+            }
+        )
+    return {
+        'header_row': header_row,
+        'group_row': group_row,
+        'has_groups': bool(group_row and group_row != header_row),
+        'cols_shown': cols_shown,
+        'cols_total': width,
+        'data_rows_shown': max(0, end_row - header_row),
+        'rows': rows_out,
+    }
+
+
+def _peek_sheet_matrix(
+    path: Path,
+    *,
+    sheet_name: str | None,
+    max_rows: int,
+) -> list[list]:
+    suffix = path.suffix.lower()
+    if suffix == '.csv':
+        with path.open('r', encoding='utf-8-sig', newline='') as handle:
+            reader = list(csv.reader(handle))
+        return [list(row) for row in reader[:max_rows]]
+    if suffix not in {'.xlsx', '.xlsm'}:
+        return []
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(path, read_only=False, data_only=True)
+    try:
+        if sheet_name and sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+        else:
+            sheet = workbook[workbook.sheetnames[0]]
+        matrix: list[list] = []
+        for index, row in enumerate(sheet.iter_rows(values_only=True)):
+            matrix.append(list(row))
+            if index + 1 >= max_rows:
+                break
+        # Не разворачиваем merged на весь лист — только заполняем в пределах превью.
+        _expand_merged_cells_limited(sheet, matrix)
+        return matrix
+    finally:
+        workbook.close()
+
+
+def _expand_merged_cells_limited(sheet, matrix: list[list]) -> None:
+    """Как _expand_merged_cells, но не раздувает matrix за пределы уже прочитанных строк."""
+    if not matrix:
+        return
+    max_rows = len(matrix)
+    ranges = getattr(getattr(sheet, 'merged_cells', None), 'ranges', None) or ()
+    for merged in ranges:
+        min_row, min_col, max_row, max_col = merged.min_row, merged.min_col, merged.max_row, merged.max_col
+        origin_r = min_row - 1
+        origin_c = min_col - 1
+        if origin_r < 0 or origin_r >= max_rows:
+            continue
+        origin_row = matrix[origin_r]
+        while len(origin_row) <= origin_c:
+            origin_row.append(None)
+        value = origin_row[origin_c]
+        for row_idx in range(origin_r, min(max_row, max_rows)):
+            row = matrix[row_idx]
+            for col_idx in range(min_col - 1, max_col):
+                while len(row) <= col_idx:
+                    row.append(None)
+                if row_idx == origin_r and col_idx == origin_c:
+                    continue
+                if row[col_idx] is None or str(row[col_idx]).strip() == '':
+                    row[col_idx] = value
+
+
 def detect_header_layout(
     path: Path | str,
     *,

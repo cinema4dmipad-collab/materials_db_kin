@@ -1,0 +1,51 @@
+<tr class="import-map-row{% if item.is_required_target %} is-required-row{% endif %}{% if not item.column %} is-unmapped{% endif %}"
+    data-import-map-row
+    data-field-target="{{ item.target }}"
+    data-field-label="{{ item.target_label|escape }}"
+    data-column-index="{% if item.column_index != None %}{{ item.column_index }}{% endif %}"
+    data-is-primary="{% if item.is_primary %}1{% else %}0{% endif %}"
+    data-is-required="{% if item.is_required_target %}1{% else %}0{% endif %}"
+    tabindex="0"
+    role="option"
+    aria-selected="false"
+    aria-label="Поле {{ item.target_label }}">
+    <td class="import-map-row__file">
+        <div class="import-map-row__head">
+            <div class="import-map-row__title">{{ item.target_label }}</div>
+            {% if item.is_required_target %}
+            <span class="import-required-badge">★ обязательно</span>
+            {% endif %}
+        </div>
+        <div class="import-map-row__sample import-map-row__sample-live"
+             title="{{ item.sample }}">{{ item.sample }}</div>
+    </td>
+    <td class="import-map-row__expr">
+        <span class="import-map-expr-slot{% if not item.column %} is-empty{% endif %}"
+              data-drop-slot
+              {% if item.column %}draggable="true"{% endif %}
+              title="{% if not item.column %}Перетащите колонку сюда или выберите строку и кликните колонку справа{% else %}Перетащите в другое поле или обратно в каталог{% endif %}">
+            <span class="import-map-expr-label">{% if item.column %}{{ item.column.display }}{% endif %}</span>
+        </span>
+        <input type="hidden"
+               class="import-map-column-value"
+               value="{% if item.column_index != None %}{{ item.column_index }}{% endif %}"
+               data-label="{% if item.column %}{{ item.column.display|escape }}{% endif %}"
+               data-sample="{{ item.sample|escape }}">
+    </td>
+    <td class="import-map-row__parse">
+        <select class="form-select form-select-sm import-map-parse"
+                aria-label="Тип поля для {{ item.target_label }}"
+                {% if not item.column %}disabled{% endif %}>
+            {% for value, label in parse_modes %}
+            <option value="{{ value }}"{% if item.parse == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td class="import-map-row__actions">
+        {% if item.is_addon %}
+        <button type="button"
+                class="btn btn-link btn-sm text-danger import-map-remove-field p-0"
+                title="Убрать поле">×</button>
+        {% endif %}
+    </td>
+</tr>

@@ -407,6 +407,55 @@ def repair_colorless_workspace_tag_links(instance, workspace=None) -> bool:
     return changed
 
 
+def parse_tag_colors_payload(raw) -> dict[str, str]:
+    """Разбирает JSON/dict цветов тегов вида {name: #RRGGBB}."""
+    import json
+
+    if raw is None or raw == '':
+        return {}
+    if isinstance(raw, dict):
+        data = raw
+    else:
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+    if not isinstance(data, dict):
+        return {}
+    result: dict[str, str] = {}
+    for name, color in data.items():
+        key = normalize_tag_name(str(name or ''))
+        value = str(color or '').strip().upper()
+        if not key or not HEX_COLOR_RE.fullmatch(value):
+            continue
+        result[key] = value
+    return result
+
+
+def apply_workspace_tag_colors(workspace, colors: dict[str, str] | None) -> int:
+    """
+    Проставляет цвета workspace-тегам по имени.
+    Глобальные теги (workspace=None) не меняет. Возвращает число обновлённых.
+    """
+    payload = parse_tag_colors_payload(colors or {})
+    if workspace is None or not payload:
+        return 0
+    updated = 0
+    for name, color in payload.items():
+        slug = tag_slug_from_name(name)
+        tag = _find_existing_tag(name, slug, workspace)
+        if tag is None or tag.workspace_id is None:
+            continue
+        if tag.workspace_id != getattr(workspace, 'pk', workspace):
+            continue
+        if (tag.color or '').strip().upper() == color:
+            continue
+        tag.color = color
+        tag.save(update_fields=['color'])
+        updated += 1
+    return updated
+
+
 def get_or_create_tags(names: list[str], workspace) -> list[Tag]:
     if workspace is None:
         raise ValueError('workspace is required for tag assignment')

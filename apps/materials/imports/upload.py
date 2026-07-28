@@ -20,6 +20,9 @@ SESSION_MATCH_POLICY = 'material_import_match_policy'
 SESSION_CREATE_MISSING_DICTIONARIES = 'material_import_create_missing_dictionaries'
 SESSION_DRAFT = 'material_import_draft'
 SESSION_STRUCTURE_TYPE_ID = 'material_import_structure_type_id'
+SESSION_ACTIVE_TEMPLATE_ID = 'material_import_active_template_id'
+SESSION_DEFAULT_TAGS = 'material_import_default_tags'
+SESSION_DEFAULT_TAG_COLORS = 'material_import_default_tag_colors'
 
 
 def save_uploaded_import_file(uploaded: UploadedFile) -> Path:
@@ -65,13 +68,16 @@ def get_import_config(session) -> dict:
     return {
         'sheet': session.get(SESSION_SHEET) or '',
         'header_row': int(session.get(SESSION_HEADER_ROW) or 1),
-        'group_row': session.get(SESSION_GROUP_ROW),
+        'group_row': int(session.get(SESSION_GROUP_ROW) or 0),
         'mapping': session.get(SESSION_MAPPING) or {},
         'mode': session.get(SESSION_MODE) or 'mapped',
         'match_policy': session.get(SESSION_MATCH_POLICY) or MATCH_BY_NAME,
         'create_missing_dictionaries': bool(session.get(SESSION_CREATE_MISSING_DICTIONARIES)),
         'draft': session.get(SESSION_DRAFT) or [],
         'structure_type_id': session.get(SESSION_STRUCTURE_TYPE_ID) or '',
+        'active_template_id': session.get(SESSION_ACTIVE_TEMPLATE_ID) or '',
+        'default_tags': session.get(SESSION_DEFAULT_TAGS) or '',
+        'default_tag_colors': dict(session.get(SESSION_DEFAULT_TAG_COLORS) or {}),
     }
 
 
@@ -87,6 +93,8 @@ def set_import_config(
     create_missing_dictionaries: bool | None = None,
     draft: list | None = None,
     structure_type_id: str | None = None,
+    default_tags: str | None = None,
+    default_tag_colors: dict | None = None,
     clear_draft: bool = False,
 ) -> None:
     if sheet is not None:
@@ -94,10 +102,7 @@ def set_import_config(
     if header_row is not None:
         session[SESSION_HEADER_ROW] = header_row
     if group_row is not None:
-        if group_row <= 0:
-            session.pop(SESSION_GROUP_ROW, None)
-        else:
-            session[SESSION_GROUP_ROW] = group_row
+        session[SESSION_GROUP_ROW] = max(0, int(group_row))
     if mapping is not None:
         session[SESSION_MAPPING] = mapping
     if mode is not None:
@@ -113,6 +118,16 @@ def set_import_config(
             session[SESSION_STRUCTURE_TYPE_ID] = structure_type_id
         else:
             session.pop(SESSION_STRUCTURE_TYPE_ID, None)
+    if default_tags is not None:
+        session[SESSION_DEFAULT_TAGS] = (default_tags or '').strip()
+    if default_tag_colors is not None:
+        cleaned = {}
+        for name, color in (default_tag_colors or {}).items():
+            key = str(name or '').strip()
+            value = str(color or '').strip().upper()
+            if key and value:
+                cleaned[key] = value
+        session[SESSION_DEFAULT_TAG_COLORS] = cleaned
     if clear_draft:
         session.pop(SESSION_DRAFT, None)
     session.modified = True
@@ -132,6 +147,9 @@ def clear_import_session(session, *, delete_file: bool = True) -> None:
     session.pop(SESSION_CREATE_MISSING_DICTIONARIES, None)
     session.pop(SESSION_DRAFT, None)
     session.pop(SESSION_STRUCTURE_TYPE_ID, None)
+    session.pop(SESSION_ACTIVE_TEMPLATE_ID, None)
+    session.pop(SESSION_DEFAULT_TAGS, None)
+    session.pop(SESSION_DEFAULT_TAG_COLORS, None)
     clear_iterate_session(session)
     session.modified = True
     if delete_file and raw:

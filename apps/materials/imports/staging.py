@@ -31,6 +31,8 @@ from apps.materials.imports.value_parse import (
     CONFIDENCE_OK,
     CONFIDENCE_UNCERTAIN,
     PARSE_AUTO,
+    PARSE_BOOLEAN,
+    PARSE_DATE,
     PARSE_TEXT,
     is_blank_cell,
     needs_manual_recognition,
@@ -46,9 +48,9 @@ MATCH_BY_NAME = 'name'
 MATCH_ALWAYS_CREATE = 'always_create'
 
 MATCH_POLICIES = (
-    (MATCH_BY_NAME, 'По названию (удобно для больших таблиц Excel)'),
-    (MATCH_BY_CODE, 'По коду материала'),
-    (MATCH_ALWAYS_CREATE, 'Всегда создавать новые записи'),
+    (MATCH_BY_NAME, 'По названию'),
+    (MATCH_BY_CODE, 'По коду'),
+    (MATCH_ALWAYS_CREATE, 'Не проверять — всегда создавать'),
 )
 
 RECOGNITION_OK = 'ok'
@@ -401,6 +403,32 @@ def build_staging_draft(
     return drafts
 
 
+def merge_default_tags_into_drafts(
+    drafts: list[DraftMaterial],
+    default_tags: str | None,
+) -> list[DraftMaterial]:
+    """
+    Добавляет общие теги импорта ко всем не-пропущенным строкам черновика.
+    Теги из файла (колонка) сохраняются; при конфликте scoped-тегов побеждает
+    значение из файла (оно уже в draft.tags), затем дополняем default.
+    """
+    from apps.core.tag_utils import (
+        dedupe_scoped_tag_names,
+        parse_tag_input,
+    )
+
+    extra = parse_tag_input(default_tags or '')
+    if not extra:
+        return drafts
+    for draft in drafts:
+        if draft.action == 'skip':
+            continue
+        # Сначала общие, потом из файла — файл перекрывает тот же scope.
+        merged = dedupe_scoped_tag_names(extra + parse_tag_input(draft.tags or ''))
+        draft.tags = '; '.join(merged)
+    return drafts
+
+
 def draft_to_import_rows(drafts: list[DraftMaterial]) -> list[dict]:
     rows: list[dict] = []
     for draft in drafts:
@@ -485,6 +513,9 @@ def apply_review_post(drafts: list[DraftMaterial], post) -> list[DraftMaterial]:
     Чекбоксы include_* живут в свёрнутом блоке деталей. Если их нет в POST
     (блок не раскрывали / JS отключил перед submit) — сохраняем флаги из сессии,
     иначе все поля стали бы include=False и импорт «молчал» или писал пустышки.
+
+    Перезапись существующих материалов запрещена: existing_pk сбрасывается,
+    action только create|skip.
     """
     if post.get('review_marker') != '1':
         return drafts
@@ -494,16 +525,104 @@ def apply_review_post(drafts: list[DraftMaterial], post) -> list[DraftMaterial]:
     for index, draft in enumerate(drafts):
         if post.get(f'skip_{index}') == '1':
             draft.action = 'skip'
-        elif draft.existing_pk:
-            draft.action = 'update'
         else:
             draft.action = 'create'
+            draft.existing_pk = None
         if not includes_posted:
             continue
         for p_index, prop in enumerate(draft.properties):
             prop.include = post.get(f'include_{index}_{p_index}') == '1'
         for s_index, struct_val in enumerate(draft.structure_values):
             struct_val.include = post.get(f'include_struct_{index}_{s_index}') == '1'
+    return drafts
+
+
+DUPLICATE_NAME_SKIP = 'skip'
+DUPLICATE_NAME_PREFIX = 'prefix'
+
+
+def name_collisions_for_drafts(workspace, drafts: list[DraftMaterial]) -> list[dict]:
+    """
+    Строки черновика, чьё название уже есть у материала пространства (без учёта регистра).
+    Пропущенные строки не учитываются.
+    """
+    candidates: list[tuple[int, DraftMaterial, str]] = []
+    for index, draft in enumerate(drafts):
+        if draft.action == 'skip':
+            continue
+        name = (draft.name or '').strip()
+        if not name:
+            continue
+        candidates.append((index, draft, name))
+    if not candidates:
+        return []
+
+    keys = {name.casefold() for _i, _d, name in candidates}
+    existing_by_key: dict[str, Material] = {}
+    qs = (
+        Material.objects.filter(home_workspace=workspace)
+        .only('pk', 'name', 'code')
+        .order_by('created_at')
+    )
+    for material in qs:
+        key = (material.name or '').casefold()
+        if key in keys and key not in existing_by_key:
+            existing_by_key[key] = material
+
+    collisions: list[dict] = []
+    for index, draft, name in candidates:
+        existing = existing_by_key.get(name.casefold())
+        if existing is None:
+            continue
+        collisions.append(
+            {
+                'draft_index': index,
+                'source_row': draft.source_row,
+                'name': name,
+                'existing_pk': str(existing.pk),
+                'existing_code': existing.code,
+                'existing_name': existing.name,
+            }
+        )
+    return collisions
+
+
+def apply_duplicate_name_policy(
+    drafts: list[DraftMaterial],
+    collisions: list[dict],
+    *,
+    mode: str,
+    prefix: str = '',
+) -> list[DraftMaterial]:
+    """
+    mode=skip — не записывать строки с совпавшим названием.
+    mode=prefix — добавить префикс к названию и создать как новые.
+    """
+    if not collisions:
+        return drafts
+    indexes = {int(item['draft_index']) for item in collisions}
+    mode = (mode or DUPLICATE_NAME_SKIP).strip() or DUPLICATE_NAME_SKIP
+    prefix = (prefix or '').strip()
+    if mode == DUPLICATE_NAME_PREFIX and not prefix:
+        raise ValueError('Укажите префикс для дубликатов по названию.')
+
+    used_codes = {draft.code for draft in drafts if draft.code}
+    for index, draft in enumerate(drafts):
+        if index not in indexes or draft.action == 'skip':
+            continue
+        if mode == DUPLICATE_NAME_SKIP:
+            draft.action = 'skip'
+            draft.existing_pk = None
+            draft.warnings.append(
+                'Пропущен: материал с таким названием уже есть в пространстве'
+            )
+            continue
+        # prefix → create as new
+        draft.name = f'{prefix}{draft.name}'
+        draft.code = _make_code(draft.name or draft.code or 'material', used_codes)
+        draft.existing_pk = None
+        draft.action = 'create'
+        draft.warnings.append(f'Создаётся с новым названием «{draft.name}»')
     return drafts
 
 
@@ -566,6 +685,246 @@ def _fix_value_from_post(post, input_name: str, raw: str) -> str:
     if post is not None and input_name in post:
         return (post.get(input_name) or '').strip()
     return raw or ''
+
+
+def _excel_col_letter(index: int) -> str:
+    """0 -> A, 25 -> Z, 26 -> AA."""
+    if index < 0:
+        return ''
+    result: list[str] = []
+    n = index + 1
+    while n:
+        n, rem = divmod(n - 1, 26)
+        result.append(chr(65 + rem))
+    return ''.join(reversed(result))
+
+
+def _cell_display_value(*, raw: str, value: str, value_b: str, value_kind: str, is_unrecognized: bool) -> str:
+    if is_unrecognized:
+        return (raw or '').strip()
+    text = (value or '').strip()
+    extra = (value_b or '').strip()
+    if not text:
+        return ''
+    kind = value_kind or ''
+    if extra and kind == 'range':
+        return f'{text}–{extra}'
+    if extra and kind == 'tolerance':
+        return f'{text}±{extra}'
+    return text
+
+
+_MATERIAL_GRID_FIELDS = (
+    ('material:code', 'Код', 'code'),
+    ('material:tags', 'Теги', 'tags'),
+    ('material:description', 'Описание', 'description'),
+    ('material:manufacturer', 'Производитель', 'manufacturer'),
+    ('material:availability', 'Доступность', 'availability'),
+    ('material:technology', 'Технология', 'technology'),
+)
+
+
+def _empty_grid_cell(*, label: str, kind: str, draft_index: int) -> dict:
+    return {
+        'display': '',
+        'raw': '',
+        'is_unrecognized': False,
+        'is_excluded': False,
+        'target_label': label,
+        'column_label': '',
+        'input_name': '',
+        'skip_name': '',
+        'fix_value': '',
+        'skip_checked': False,
+        'draft_index': draft_index,
+        'field_index': -1,
+        'kind': kind,
+    }
+
+
+def build_review_fix_grid(drafts: list[DraftMaterial], post=None) -> dict:
+    """
+    Таблица значений к записи на шаге правки нераспознанных.
+    Строки — все draft create/update; колонки — метаданные, структура и свойства.
+    Подсвеченные ячейки — нераспознанные (правятся вручную).
+    """
+    row_indices = [
+        index
+        for index, draft in enumerate(drafts)
+        if draft.action != 'skip'
+    ]
+    if not row_indices:
+        return {'columns': [], 'rows': [], 'unrecognized_count': 0}
+
+    columns: list[dict] = []
+    seen_keys: set[str] = set()
+
+    def _add_column(key: str, label: str, kind: str) -> None:
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        columns.append({
+            'key': key,
+            'label': label,
+            'kind': kind,
+            'letter': _excel_col_letter(len(columns) + 1),  # A = Название
+        })
+
+    active_drafts = [drafts[index] for index in row_indices]
+    for key, label, attr in _MATERIAL_GRID_FIELDS:
+        if any(str(getattr(draft, attr, '') or '').strip() for draft in active_drafts):
+            _add_column(key, label, 'material')
+
+    for draft in active_drafts:
+        for struct in draft.structure_values:
+            _add_column(
+                f'struct:{struct.field_name}',
+                struct.field_label or struct.field_name,
+                'struct',
+            )
+        for prop in draft.properties:
+            _add_column(
+                f'prop:{prop.property_id}',
+                prop.property_label or prop.property_name,
+                'prop',
+            )
+
+    rows: list[dict] = []
+    unrecognized_count = 0
+    for draft_index in row_indices:
+        draft = drafts[draft_index]
+        material_label = draft.name or draft.code or f'строка {draft.source_row}'
+        cells: dict[str, dict] = {}
+
+        for key, label, attr in _MATERIAL_GRID_FIELDS:
+            if key not in seen_keys:
+                continue
+            text = str(getattr(draft, attr, '') or '').strip()
+            cells[key] = {
+                'display': text,
+                'raw': text,
+                'is_unrecognized': False,
+                'is_excluded': False,
+                'target_label': label,
+                'column_label': '',
+                'input_name': '',
+                'skip_name': '',
+                'fix_value': '',
+                'skip_checked': False,
+                'draft_index': draft_index,
+                'field_index': -1,
+                'kind': 'material',
+            }
+
+        for struct_index, struct in enumerate(draft.structure_values):
+            key = f'struct:{struct.field_name}'
+            is_bad = struct.recognition == RECOGNITION_UNRECOGNIZED
+            is_excluded = not struct.include and not is_bad
+            input_name = f'fix_struct_{draft_index}_{struct_index}'
+            skip_name = f'skip_{input_name}'
+            fix_value = _fix_value_from_post(post, input_name, struct.raw)
+            if is_bad:
+                unrecognized_count += 1
+                # Показать введённое значение (в т.ч. после неудачной «Записать»).
+                display = (fix_value or '').strip()
+            else:
+                display = _cell_display_value(
+                    raw=struct.raw,
+                    value=struct.value,
+                    value_b=struct.value_b,
+                    value_kind=struct.value_kind,
+                    is_unrecognized=False,
+                )
+            if is_excluded:
+                display = ''
+            cells[key] = {
+                'display': display,
+                'raw': struct.raw or '',
+                'is_unrecognized': is_bad,
+                'is_excluded': is_excluded,
+                'target_label': struct.field_label or struct.field_name,
+                'column_label': struct.column_label,
+                'input_name': input_name if is_bad else '',
+                'skip_name': skip_name if is_bad else '',
+                'fix_value': fix_value if is_bad else '',
+                'skip_checked': bool(
+                    is_bad and post is not None and post.get(skip_name) == '1'
+                ),
+                'draft_index': draft_index,
+                'field_index': struct_index,
+                'kind': 'struct',
+            }
+
+        for prop_index, prop in enumerate(draft.properties):
+            key = f'prop:{prop.property_id}'
+            is_bad = prop.recognition == RECOGNITION_UNRECOGNIZED
+            is_excluded = not prop.include and not is_bad
+            input_name = f'fix_prop_{draft_index}_{prop_index}'
+            skip_name = f'skip_{input_name}'
+            fix_value = _fix_value_from_post(post, input_name, prop.raw)
+            if is_bad:
+                unrecognized_count += 1
+                display = (fix_value or '').strip()
+            else:
+                display = _cell_display_value(
+                    raw=prop.raw,
+                    value=prop.value,
+                    value_b=prop.value_b,
+                    value_kind=prop.value_kind,
+                    is_unrecognized=False,
+                )
+            if is_excluded:
+                display = ''
+            cells[key] = {
+                'display': display,
+                'raw': prop.raw or '',
+                'is_unrecognized': is_bad,
+                'is_excluded': is_excluded,
+                'target_label': prop.property_label or prop.property_name,
+                'column_label': prop.column_label,
+                'input_name': input_name if is_bad else '',
+                'skip_name': skip_name if is_bad else '',
+                'fix_value': fix_value if is_bad else '',
+                'skip_checked': bool(
+                    is_bad and post is not None and post.get(skip_name) == '1'
+                ),
+                'draft_index': draft_index,
+                'field_index': prop_index,
+                'kind': 'prop',
+            }
+
+        rows.append(
+            {
+                'draft_index': draft_index,
+                'source_row': draft.source_row,
+                'material_label': material_label,
+                'action': draft.action,
+                'cells': cells,
+                'cell_list': [
+                    {
+                        **(
+                            cells.get(column['key'])
+                            or _empty_grid_cell(
+                                label=column['label'],
+                                kind=column['kind'],
+                                draft_index=draft_index,
+                            )
+                        ),
+                        'letter': column['letter'],
+                        'col_index': col_index + 1,
+                    }
+                    for col_index, column in enumerate(columns)
+                ],
+            }
+        )
+
+    return {
+        'columns': columns,
+        'rows': rows,
+        'unrecognized_count': unrecognized_count,
+        'name_column_letter': 'A',
+        'row_count': len(rows),
+    }
 
 
 def apply_unrecognized_ignore_all(drafts: list[DraftMaterial]) -> list[DraftMaterial]:
@@ -690,11 +1049,14 @@ def _apply_manual_fix_to_property(prop: DraftProperty, raw_fix: str, source_row:
 
 
 def _should_mark_unrecognized(*, expects_number: bool, parse_mode: str, raw, parsed: dict) -> bool:
-    """True если числовое поле нельзя записать без участия техника.
+    """True если значение нельзя записать без участия техника.
 
-    Режим колонки «Текст» больше не обходит проверку: иначе значение уходит в черновик
-    строкой и падает на валидации («Введите корректное число»), минуя форму исправления.
+    Режим колонки «Текст» больше не обходит проверку для числовых полей: иначе значение
+    уходит в черновик строкой и падает на валидации («Введите корректное число»), минуя
+    форму исправления.
     """
+    if parse_mode in {PARSE_BOOLEAN, PARSE_DATE}:
+        return parsed.get('confidence') == CONFIDENCE_UNCERTAIN
     if not expects_number:
         return False
     if parse_mode != PARSE_TEXT:
@@ -783,15 +1145,8 @@ def _resolve_identity(*, workspace, name, code, match_policy, used_codes):
         return 'create', None, final_code, warnings
 
     if policy == MATCH_BY_NAME and name:
-        existing = (
-            Material.objects.filter(home_workspace=workspace, name__iexact=name)
-            .order_by('created_at')
-            .first()
-        )
-        if existing:
-            used_codes.add(existing.code)
-            warnings.append(f'Найден материал с таким названием ({existing.code}) — будет обновлён')
-            return 'update', str(existing.pk), existing.code, warnings
+        # Совпадения по названию обрабатываются на шаге записи (пропуск / префикс).
+        # Здесь никогда не обновляем существующий материал.
         final_code = code or _make_code(name, used_codes)
         if code:
             final_code = _unique_code(code, used_codes)
@@ -799,14 +1154,16 @@ def _resolve_identity(*, workspace, name, code, match_policy, used_codes):
             final_code = _make_code(name, used_codes)
         return 'create', None, final_code, warnings
 
-    # match by code
+    # match by code — тоже без перезаписи: при занятом коде выдаём уникальный
     if code:
         existing = Material.objects.filter(home_workspace=workspace, code=code).first()
-        final_code = _unique_code(code, used_codes) if not existing else code
         if existing:
-            used_codes.add(existing.code)
-            return 'update', str(existing.pk), existing.code, warnings
-        return 'create', None, final_code, warnings
+            final_code = _unique_code(code, used_codes)
+            warnings.append(
+                f'Код «{code}» уже занят ({existing.name}) — будет создан с кодом «{final_code}»'
+            )
+            return 'create', None, final_code, warnings
+        return 'create', None, _unique_code(code, used_codes), warnings
 
     final_code = _make_code(name or 'material', used_codes)
     return 'create', None, final_code, warnings
