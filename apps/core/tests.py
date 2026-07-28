@@ -867,12 +867,15 @@ class HelpPageTests(TestCase):
         self.assertContains(response, '4050/ 50мм')
         self.assertContains(response, '± погрешностью')
         self.assertContains(response, 'Знаков после запятой')
-        self.assertContains(response, 'исправить значения вручную')
-        self.assertContains(response, 'между колонками')
+        self.assertContains(response, 'проблемные ячейки')
+        self.assertContains(response, 'каталог колонок')
         self.assertContains(response, 'Выгрузить в Excel')
         self.assertContains(response, 'одного типа структуры')
         self.assertContains(response, 'пропускаются')
         self.assertContains(response, 'двухуровневая шапка')
+        self.assertContains(response, 'Теги для всех материалов')
+        self.assertContains(response, 'дубликатах по названию')
+        self.assertContains(response, 'уже исправленные значения')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):
