@@ -206,7 +206,7 @@ class BackupRestoreTests(TestCase):
                 response = self.client.post(
                     reverse('administration:backup_restore'),
                     {
-                        'dump_file': SimpleUploadedFile('materials_db_test.dump', b'PGDUMP'),
+                        'dump_file': SimpleUploadedFile('materials_db_test.dump', b'PGDMP' + b'\x00' * 20),
                         'confirm': 'on',
                     },
                 )
@@ -217,6 +217,29 @@ class BackupRestoreTests(TestCase):
             self.assertEqual(run.status, BackupRun.Status.SUCCESS)
             self.assertEqual(run.filename, 'materials_db_test.dump')
             self.assertFalse(any(Path(backup_dir).joinpath('tmp').glob('restore_*.dump')))
+
+    def test_restore_from_server_file(self):
+        with TemporaryDirectory() as backup_dir, override_settings(BACKUP_DIR=backup_dir):
+            dump = Path(backup_dir) / 'materials_db_20260730_120000.dump'
+            dump.write_bytes(b'PGDMP' + b'\x00' * 20)
+            with (
+                patch('apps.core.backup_views.is_postgresql', return_value=True),
+                patch('apps.core.backup.is_postgresql', return_value=True),
+                patch('apps.core.backup.run_pg_restore') as restore_mock,
+            ):
+                response = self.client.post(
+                    reverse('administration:backup_restore'),
+                    {
+                        'server_dump': dump.name,
+                        'confirm': 'on',
+                    },
+                )
+            self.assertRedirects(response, reverse('administration:backups'))
+            restore_mock.assert_called_once()
+            self.assertEqual(
+                BackupRun.objects.get(trigger=BackupRun.Trigger.RESTORE).filename,
+                dump.name,
+            )
 
     def test_restore_rejects_non_dump_extension(self):
         from django.core.files.uploadedfile import SimpleUploadedFile

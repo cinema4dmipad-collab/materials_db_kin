@@ -56,11 +56,18 @@ class BackupSettingsForm(forms.ModelForm):
 
 
 class BackupRestoreForm(forms.Form):
+    server_dump = forms.ChoiceField(
+        label='Файл на сервере (/backups)',
+        required=False,
+        widget=forms.Select(attrs=_BOOTSTRAP_INPUT),
+        help_text='Предпочтительно: дамп уже лежит на сервере — без загрузки через браузер.',
+    )
     dump_file = forms.FileField(
-        label='Файл дампа (.dump)',
+        label='Или загрузить .dump с компьютера',
+        required=False,
         help_text=(
-            'Только custom-format дамп (.dump), созданный этой системой. '
-            'Не выбирайте файл, который ещё скачивается в браузере.'
+            'Если Chrome пишет ERR_UPLOAD_FILE_CHANGED — скопируйте файл на рабочий стол '
+            'и выберите копию (не из Downloads, пока идёт/висела загрузка).'
         ),
         widget=forms.FileInput(attrs={**_BOOTSTRAP_INPUT, 'accept': '.dump,application/octet-stream'}),
     )
@@ -70,10 +77,17 @@ class BackupRestoreForm(forms.Form):
         widget=forms.CheckboxInput(attrs=_BOOTSTRAP_CHECKBOX),
     )
 
+    def __init__(self, *args, server_choices=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        choices = [('', '— не выбран —'), *(server_choices or [])]
+        self.fields['server_dump'].choices = choices
+
     def clean_dump_file(self):
         from django.conf import settings as django_settings
 
-        uploaded = self.cleaned_data['dump_file']
+        uploaded = self.cleaned_data.get('dump_file')
+        if not uploaded:
+            return uploaded
         name = (uploaded.name or '').lower()
         if not name.endswith('.dump'):
             raise ValidationError('Ожидается файл с расширением .dump.')
@@ -81,9 +95,19 @@ class BackupRestoreForm(forms.Form):
         if uploaded.size and uploaded.size > max_bytes:
             raise ValidationError(
                 f'Файл слишком большой (макс. {max_bytes // (1024 * 1024)} МБ). '
-                'Для больших дампов используйте CLI — см. deploy/BACKUP.md.'
+                'Скопируйте дамп на сервер в /backups и выберите его в списке выше.'
             )
         return uploaded
+
+    def clean(self):
+        cleaned = super().clean()
+        server_dump = (cleaned.get('server_dump') or '').strip()
+        dump_file = cleaned.get('dump_file')
+        if server_dump and dump_file:
+            raise ValidationError('Выберите либо файл на сервере, либо загрузку с компьютера — не оба сразу.')
+        if not server_dump and not dump_file:
+            raise ValidationError('Укажите файл на сервере или загрузите .dump с компьютера.')
+        return cleaned
 
 
 class TagForm(forms.ModelForm):

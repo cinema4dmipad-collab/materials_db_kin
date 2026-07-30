@@ -90,19 +90,27 @@
     <div class="card-body">
         <div class="alert alert-warning">
             Текущие данные PostgreSQL будут <strong>заменены</strong> содержимым дампа.
-            Файлы SeaweedFS / сканы этим действием не восстанавливаются. Лучше делать restore,
-            когда никто активно не пишет в систему.
+            Файлы SeaweedFS / сканы этим действием не восстанавливаются.
+        </div>
+        <div class="alert alert-info">
+            <strong>Рекомендуемый способ:</strong> сначала сделайте дамп на этом же сервере
+            («Сделать дамп сейчас»), затем выберите его в списке «Файл на сервере» —
+            без загрузки через браузер. Так не будет ошибки
+            <code>ERR_UPLOAD_FILE_CHANGED</code>.
         </div>
         <p class="text-muted small">
-            Ошибка браузера <code>ERR_UPLOAD_FILE_CHANGED</code> обычно значит, что файл ещё качался
-            или изменился после выбора. Дождитесь полного скачивания дампа, при необходимости
-            скопируйте его на рабочий стол и выберите файл заново.
+            <code>ERR_UPLOAD_FILE_CHANGED</code> — это ошибка Chrome <em>до</em> отправки на сервер:
+            файл изменился после выбора (часто Downloads / оборванное скачивание / OneDrive).
+            Скопируйте <code>.dump</code> на рабочий стол и выберите копию, либо используйте список на сервере.
         </p>
         <form method="post"
               action="{% url 'administration:backup_restore' %}"
               enctype="multipart/form-data"
               novalidate>
             {% csrf_token %}
+            <div class="mb-3">
+                {% include 'includes/bootstrap_form_field.html' with field=restore_form.server_dump %}
+            </div>
             <div class="mb-3">
                 {% include 'includes/bootstrap_form_field.html' with field=restore_form.dump_file %}
             </div>
@@ -113,7 +121,7 @@
                     class="btn btn-danger"
                     {% if not postgresql_available %}disabled{% endif %}
                     onclick="return confirm('Восстановить БД из дампа? Текущие данные будут заменены.');">
-                <i class="bi bi-upload me-1"></i>Загрузить и восстановить
+                <i class="bi bi-upload me-1"></i>Восстановить
             </button>
         </form>
     </div>
