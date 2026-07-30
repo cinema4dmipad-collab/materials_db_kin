@@ -51,7 +51,11 @@
                 <h2 class="h5 mb-0">Ручной дамп</h2>
             </div>
             <div class="card-body d-flex flex-column">
-                <p class="text-muted">Дамп будет сформирован и сразу передан в загрузку. На сервере он не сохраняется.</p>
+                <p class="text-muted">
+                    Дамп сначала создаётся на сервере, затем скачивается.
+                    Пока идёт создание, страница может долго «крутиться» — дождитесь окончания,
+                    не выбирайте незавершённый файл из Downloads для восстановления.
+                </p>
                 <form method="post" action="{% url 'administration:backup_manual' %}" class="mt-auto">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-primary w-100" {% if not postgresql_available %}disabled{% endif %}>
@@ -73,6 +77,11 @@
             Файлы SeaweedFS / сканы этим действием не восстанавливаются. Лучше делать restore,
             когда никто активно не пишет в систему.
         </div>
+        <p class="text-muted small">
+            Ошибка браузера <code>ERR_UPLOAD_FILE_CHANGED</code> обычно значит, что файл ещё качался
+            или изменился после выбора. Дождитесь полного скачивания дампа, при необходимости
+            скопируйте его на рабочий стол и выберите файл заново.
+        </p>
         <form method="post"
               action="{% url 'administration:backup_restore' %}"
               enctype="multipart/form-data"
