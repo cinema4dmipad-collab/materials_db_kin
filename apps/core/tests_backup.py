@@ -177,3 +177,56 @@ class BackupSchedulingTests(TestCase):
             self.assertTrue(temp_file.exists())
             self.assertFalse(named.exists())
             self.assertTrue(newer.exists())
+
+
+class BackupRestoreTests(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='backup-restore-admin',
+            email='backup-restore@example.com',
+            password=DEFAULT_TEST_PASSWORD,
+        )
+        self.client.force_login(self.superuser)
+
+    def test_restore_requires_confirm_and_dump(self):
+        response = self.client.post(reverse('administration:backup_restore'), {})
+        self.assertRedirects(response, reverse('administration:backups'))
+
+    def test_restore_calls_pg_restore_and_records_run(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        with TemporaryDirectory() as backup_dir, override_settings(BACKUP_DIR=backup_dir):
+            with (
+                patch('apps.core.backup_views.is_postgresql', return_value=True),
+                patch('apps.core.backup.is_postgresql', return_value=True),
+                patch('apps.core.backup.run_pg_restore') as restore_mock,
+                patch('apps.core.backup.shutil.which', return_value='/usr/bin/pg_restore'),
+            ):
+                response = self.client.post(
+                    reverse('administration:backup_restore'),
+                    {
+                        'dump_file': SimpleUploadedFile('materials_db_test.dump', b'PGDUMP'),
+                        'confirm': 'on',
+                    },
+                )
+
+            self.assertRedirects(response, reverse('administration:backups'))
+            restore_mock.assert_called_once()
+            run = BackupRun.objects.get(trigger=BackupRun.Trigger.RESTORE)
+            self.assertEqual(run.status, BackupRun.Status.SUCCESS)
+            self.assertEqual(run.filename, 'materials_db_test.dump')
+            self.assertFalse(any(Path(backup_dir).joinpath('tmp').glob('restore_*.dump')))
+
+    def test_restore_rejects_non_dump_extension(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        with patch('apps.core.backup_views.is_postgresql', return_value=True):
+            response = self.client.post(
+                reverse('administration:backup_restore'),
+                {
+                    'dump_file': SimpleUploadedFile('notes.txt', b'nope'),
+                    'confirm': 'on',
+                },
+            )
+        self.assertRedirects(response, reverse('administration:backups'))
+        self.assertFalse(BackupRun.objects.filter(trigger=BackupRun.Trigger.RESTORE).exists())

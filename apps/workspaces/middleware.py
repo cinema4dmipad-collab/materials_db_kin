@@ -35,6 +35,7 @@ _EXEMPT_URL_NAMES = frozenset(
         'core:help',
         'administration:backups',
         'administration:backup_manual',
+        'administration:backup_restore',
         'administration:backup_download',
     }
 )

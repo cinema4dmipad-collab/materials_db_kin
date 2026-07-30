@@ -8,6 +8,7 @@ app_name = 'administration'
 urlpatterns = [
     path('backups/', backup_views.BackupSettingsView.as_view(), name='backups'),
     path('backups/manual/', backup_views.BackupManualView.as_view(), name='backup_manual'),
+    path('backups/restore/', backup_views.BackupRestoreView.as_view(), name='backup_restore'),
     path(
         'backups/<int:pk>/download/',
         backup_views.BackupDownloadView.as_view(),

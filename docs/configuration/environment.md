@@ -21,6 +21,7 @@ Copy from [`.env.example`](../../.env.example) or [`.env.prod.example`](../../.e
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BACKUP_DIR` | `<BASE_DIR>/backups` / `/backups` in Docker | Directory for scheduled Postgres dumps |
+| `BACKUP_UPLOAD_MAX_BYTES` | `536870912` (512 MiB) | Max dump size for UI restore |
 
 See [`deploy/BACKUP.md`](../../deploy/BACKUP.md). Only PostgreSQL is backed up; SeaweedFS is not.
 

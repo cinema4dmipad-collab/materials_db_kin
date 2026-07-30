@@ -55,6 +55,34 @@ class BackupSettingsForm(forms.ModelForm):
         return settings
 
 
+class BackupRestoreForm(forms.Form):
+    dump_file = forms.FileField(
+        label='Файл дампа (.dump)',
+        help_text='Только custom-format дамп, созданный этой системой (pg_dump -Fc).',
+        widget=forms.FileInput(attrs={**_BOOTSTRAP_INPUT, 'accept': '.dump,application/octet-stream'}),
+    )
+    confirm = forms.BooleanField(
+        label='Понимаю: текущие данные БД будут заменены содержимым дампа',
+        required=True,
+        widget=forms.CheckboxInput(attrs=_BOOTSTRAP_CHECKBOX),
+    )
+
+    def clean_dump_file(self):
+        from django.conf import settings as django_settings
+
+        uploaded = self.cleaned_data['dump_file']
+        name = (uploaded.name or '').lower()
+        if not name.endswith('.dump'):
+            raise ValidationError('Ожидается файл с расширением .dump.')
+        max_bytes = getattr(django_settings, 'BACKUP_UPLOAD_MAX_BYTES', 512 * 1024 * 1024)
+        if uploaded.size and uploaded.size > max_bytes:
+            raise ValidationError(
+                f'Файл слишком большой (макс. {max_bytes // (1024 * 1024)} МБ). '
+                'Для больших дампов используйте CLI — см. deploy/BACKUP.md.'
+            )
+        return uploaded
+
+
 class TagForm(forms.ModelForm):
     is_global = forms.BooleanField(
         required=False,
