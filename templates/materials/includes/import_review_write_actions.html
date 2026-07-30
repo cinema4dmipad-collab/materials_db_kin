@@ -1,0 +1,35 @@
+{% if not import_has_validation_errors %}
+<div class="import-review-write-actions d-flex flex-wrap gap-2 align-items-center{% if align == 'end' %} justify-content-end{% endif %}">
+    {% if has_unrecognized %}
+    <button type="button"
+            class="btn btn-outline-secondary"
+            data-bs-toggle="modal"
+            data-bs-target="#import-ignore-unrecognized-modal"
+            title="Нераспознанные значения останутся пустыми; дубликаты по названию не запишутся (если выбран пропуск)">
+        Игнорировать все и записать
+    </button>
+    {% if show_help %}
+    <span class="import-help__trigger" tabindex="0" aria-label="Подсказка: игнорировать все">
+        <span class="import-help__mark" aria-hidden="true">?</span>
+        <span class="import-help__tip import-help__tip--end" role="tooltip">
+            Кривые (нераспознанные) значения не будут записаны — поля останутся пустыми.
+            Дубликаты по названию тоже не попадут в базу, если выбран вариант
+            «Не записывать дубликаты» (или получат префикс/постфикс, если вы их задали).
+        </span>
+    </span>
+    {% endif %}
+    {% endif %}
+    <button type="submit"
+            name="action"
+            value="review_resolve_manual"
+            class="btn btn-primary{% if primary_class %} {{ primary_class }}{% endif %}"
+            {% if not can_apply %}disabled{% endif %}
+            data-import-busy="1"
+            {% if form_id %}form="{{ form_id }}"{% endif %}>
+        {{ wizard_forward_label|default:"Записать" }}
+        {% if draft_create_count or draft_update_count %}
+        ({{ draft_create_count }} созд.{% if draft_update_count %}, {{ draft_update_count }} обн.{% endif %})
+        {% endif %}
+    </button>
+</div>
+{% endif %}

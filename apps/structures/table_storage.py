@@ -4,7 +4,8 @@ from decimal import Decimal
 from apps.materials.models import Material
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES
 from apps.structures.decimal_range import format_decimal_field_display, read_decimal_field_state
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
+from apps.structures.choice_options import choice_label_for_value, resolved_choice_options
+from apps.structures.models import CHOICE_FIELD_TYPE, MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 
 
@@ -18,12 +19,9 @@ class DisplayValue:
 
     def get_value(self):
         if self.field.field_type == MATERIAL_LINK_FIELD_TYPE and self._value not in (None, ''):
-            from apps.structures.forms import material_from_value
+            from apps.structures.forms import material_link_display
 
-            material = material_from_value(self._value)
-            if material is not None:
-                return f'{material.code} - {material.name}'
-            return self._value
+            return material_link_display(self._value)
         if self.field.field_type == 'DecimalField':
             state = read_decimal_field_state(self._row, self.field.name)
             return format_decimal_field_display(
@@ -40,7 +38,10 @@ class DisplayValue:
             return None
         if self._value in (None, ''):
             return None
-        return self._value
+        from apps.structures.forms import material_from_value
+
+        material = material_from_value(self._value)
+        return str(material.pk) if material is not None else None
 
 
 def _coerce_for_db(field: StructureField, value):
@@ -129,26 +130,70 @@ def load_field_data(structure_type: StructureType, row_id: uuid.UUID) -> dict:
 SERVICE_COLUMNS = {'id', 'created_at', 'updated_at', 'created_by'}
 
 
+def _structure_field_label_fragment(field: StructureField, record: dict) -> str | None:
+    if field.field_type == 'DecimalField':
+        state = read_decimal_field_state(record, field.name)
+        text = format_decimal_field_display(
+            value_kind=state['value_kind'],
+            value=state['value'],
+            value_b=state['value_b'],
+            decimal_places=field.decimal_places or DEFAULT_DECIMAL_PLACES,
+        )
+        return text if text != '—' else None
+
+    value = record.get(field.name)
+    if value in (None, ''):
+        return None
+
+    if field.field_type == MATERIAL_LINK_FIELD_TYPE:
+        from apps.structures.forms import MATERIAL_LINK_MISSING_LABEL, material_link_display
+
+        text = material_link_display(value)
+        return None if text == MATERIAL_LINK_MISSING_LABEL else text
+
+    options = resolved_choice_options(field)
+    if field.field_type == CHOICE_FIELD_TYPE or options:
+        return choice_label_for_value(options, value) or str(value)
+
+    return str(value)
+
+
 def structure_record_label(record: dict, structure_type: StructureType) -> str:
     for field in _supported_fields(structure_type):
-        if field.field_type == 'DecimalField':
-            state = read_decimal_field_state(record, field.name)
-            text = format_decimal_field_display(
-                value_kind=state['value_kind'],
-                value=state['value'],
-                value_b=state['value_b'],
-                decimal_places=field.decimal_places or DEFAULT_DECIMAL_PLACES,
-            )
-            if text != '—':
-                return text
-            continue
-        value = record.get(field.name)
-        if value not in (None, ''):
-            if field.field_type == MATERIAL_LINK_FIELD_TYPE:
-                return str(DisplayValue(field, value).get_value())
-            return str(value)
+        fragment = _structure_field_label_fragment(field, record)
+        if fragment:
+            return fragment
     record_id = str(record.get('id') or '')
-    return record_id[:8] if record_id else '—'
+    if record_id:
+        return f'Запись {record_id[:8]}…'
+    return '—'
+
+
+def linked_materials_display_label(linked_materials) -> str:
+    if not linked_materials:
+        return ''
+    if len(linked_materials) == 1:
+        return linked_materials[0]['name']
+    return ', '.join(material['name'] for material in linked_materials)
+
+
+def structure_record_display_label(
+    record: dict,
+    structure_type: StructureType,
+    linked_materials=None,
+    *,
+    workspace=None,
+) -> str:
+    if linked_materials is None:
+        linked_materials = linked_materials_for_record(
+            structure_type,
+            record['id'],
+            workspace=workspace,
+        )
+    material_label = linked_materials_display_label(linked_materials)
+    if material_label:
+        return material_label
+    return structure_record_label(record, structure_type)
 
 
 def count_linked_materials(structure_type: StructureType, row_id) -> int:
@@ -158,3 +203,17 @@ def count_linked_materials(structure_type: StructureType, row_id) -> int:
         struct_type=structure_type,
         struct_props_id=row_id,
     ).count()
+
+
+def linked_materials_for_record(structure_type: StructureType, row_id, workspace=None):
+    from apps.materials.models import Material
+
+    queryset = Material.objects.filter(
+        struct_type=structure_type,
+        struct_props_id=row_id,
+    ).order_by('code', 'name')
+    if workspace is not None:
+        from apps.workspaces.services import materials_visible_in
+
+        queryset = queryset.filter(pk__in=materials_visible_in(workspace).values('pk'))
+    return list(queryset.values('pk', 'code', 'name'))

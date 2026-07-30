@@ -4,14 +4,14 @@
         <div class="import-layout-schema__title">Превью разметки листа</div>
         <div class="import-layout-schema__legend">
             {% if layout_schema.has_groups %}
-            <span class="import-layout-schema__swatch import-layout-schema__swatch--group">Группы · стр. {{ layout_schema.group_row }}</span>
+            <span class="import-layout-schema__swatch import-layout-schema__swatch--group">Группы · строка {{ layout_schema.group_row }}</span>
             {% endif %}
-            <span class="import-layout-schema__swatch import-layout-schema__swatch--header">Заголовки · стр. {{ layout_schema.header_row }}</span>
+            <span class="import-layout-schema__swatch import-layout-schema__swatch--header">Заголовки · строка {{ layout_schema.header_row }}</span>
             <span class="import-layout-schema__swatch import-layout-schema__swatch--data">Данные</span>
             {% if layout_schema.cols_total %}
             <span class="import-layout-schema__meta">
                 {{ layout_schema.cols_shown }}{% if layout_schema.cols_total > layout_schema.cols_shown %}/{{ layout_schema.cols_total }}{% endif %} кол.
-                {% if layout_schema.data_rows_shown %} · {{ layout_schema.data_rows_shown }} стр. данных{% endif %}
+                {% if layout_schema.data_rows_shown %} · {{ layout_schema.data_rows_shown }} строк данных{% endif %}
             </span>
             {% endif %}
         </div>

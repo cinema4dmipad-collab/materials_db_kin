@@ -7,8 +7,8 @@
             <span class="import-help__mark" aria-hidden="true">?</span>
             <span class="import-help__tip import-help__tip--start" role="tooltip">
                 В пространстве уже есть материалы с такими названиями.
-                Перезапись при импорте запрещена: пропустите эти строки
-                или задайте префикс и создайте их как новые.
+                Перезапись при импорте запрещена: пропустите эти строки,
+                задайте префикс или постфикс и создайте их как новые.
             </span>
         </span>
     </div>
@@ -54,7 +54,7 @@
                        name="duplicate_name_policy"
                        id="import-dup-skip"
                        value="skip"
-                       {% if request.POST.duplicate_name_policy != 'prefix' %}checked{% endif %}>
+                       {% if request.POST.duplicate_name_policy != 'prefix' and request.POST.duplicate_name_policy != 'postfix' %}checked{% endif %}>
                 <span class="import-collision-option__body">
                     <span class="import-collision-option__label">Не записывать дубликаты</span>
                     <span class="import-collision-option__hint">Строки с совпавшим названием будут пропущены</span>
@@ -68,7 +68,18 @@
                        {% if request.POST.duplicate_name_policy == 'prefix' %}checked{% endif %}>
                 <span class="import-collision-option__body">
                     <span class="import-collision-option__label">Добавить префикс и создать как новые</span>
-                    <span class="import-collision-option__hint">Название изменится, существующие материалы не трогаем</span>
+                    <span class="import-collision-option__hint">Префикс добавится в начало названия</span>
+                </span>
+            </label>
+            <label class="import-collision-option">
+                <input type="radio"
+                       name="duplicate_name_policy"
+                       id="import-dup-postfix"
+                       value="postfix"
+                       {% if request.POST.duplicate_name_policy == 'postfix' %}checked{% endif %}>
+                <span class="import-collision-option__body">
+                    <span class="import-collision-option__label">Добавить постфикс и создать как новые</span>
+                    <span class="import-collision-option__hint">Постфикс добавится в конец названия</span>
                 </span>
             </label>
         </div>
@@ -83,25 +94,48 @@
                    maxlength="40"
                    autocomplete="off">
         </div>
+        <div class="import-collision-prefix" id="import-collision-postfix-wrap">
+            <label class="form-label form-label-sm mb-1" for="import-dup-postfix-input">Постфикс</label>
+            <input type="text"
+                   class="form-control form-control-sm"
+                   name="duplicate_name_postfix"
+                   id="import-dup-postfix-input"
+                   value="{{ request.POST.duplicate_name_postfix|default:'' }}"
+                   placeholder="напр. -импорт"
+                   maxlength="40"
+                   autocomplete="off">
+        </div>
     </div>
 </div>
 <script>
 (function () {
     var skip = document.getElementById('import-dup-skip');
     var prefix = document.getElementById('import-dup-prefix');
-    var wrap = document.getElementById('import-collision-prefix-wrap');
-    var input = document.getElementById('import-dup-prefix-input');
-    if (!skip || !prefix || !wrap) return;
-    function sync(focusInput) {
-        var on = prefix.checked;
-        wrap.classList.toggle('is-disabled', !on);
-        if (input) {
-            input.disabled = !on;
-            if (on && focusInput) input.focus();
+    var postfix = document.getElementById('import-dup-postfix');
+    var prefixWrap = document.getElementById('import-collision-prefix-wrap');
+    var postfixWrap = document.getElementById('import-collision-postfix-wrap');
+    var prefixInput = document.getElementById('import-dup-prefix-input');
+    var postfixInput = document.getElementById('import-dup-postfix-input');
+    if (!skip || !prefix || !postfix || !prefixWrap || !postfixWrap) return;
+
+    function sync(focusMode) {
+        var prefixOn = prefix.checked;
+        var postfixOn = postfix.checked;
+        prefixWrap.classList.toggle('is-disabled', !prefixOn);
+        postfixWrap.classList.toggle('is-disabled', !postfixOn);
+        if (prefixInput) {
+            prefixInput.disabled = !prefixOn;
+            if (prefixOn && focusMode === 'prefix') prefixInput.focus();
+        }
+        if (postfixInput) {
+            postfixInput.disabled = !postfixOn;
+            if (postfixOn && focusMode === 'postfix') postfixInput.focus();
         }
     }
+
     skip.addEventListener('change', function () { sync(false); });
-    prefix.addEventListener('change', function () { sync(true); });
+    prefix.addEventListener('change', function () { sync('prefix'); });
+    postfix.addEventListener('change', function () { sync('postfix'); });
     sync(false);
 })();
 </script>

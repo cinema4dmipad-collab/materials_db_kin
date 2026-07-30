@@ -1,5 +1,9 @@
 /* Jira-like app shell layout (KeenetiCA colors unchanged) */
 
+:root {
+    --app-topbar-height: 3.5rem;
+}
+
 .app-body--shell {
     height: 100vh;
     overflow: hidden;
@@ -541,6 +545,15 @@
     border-left-color: var(--kx-brand);
     color: var(--kx-brand-dark);
     font-weight: 600;
+}
+
+.workspace-sidebar__link--muted {
+    color: var(--kx-text-muted);
+    font-size: 0.8125rem;
+}
+
+.workspace-sidebar__link--muted:hover {
+    color: var(--kx-brand-dark);
 }
 
 .workspace-sidebar__footer {

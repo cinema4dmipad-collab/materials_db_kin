@@ -592,6 +592,37 @@ a:hover {
     --bs-btn-hover-color: var(--kx-brand-dark);
 }
 
+.btn-action-bookmark {
+    --bs-btn-color: var(--kx-text-muted);
+    --bs-btn-border-color: var(--kx-border-strong);
+    --bs-btn-hover-bg: var(--kx-surface-muted);
+    --bs-btn-hover-border-color: var(--kx-border-strong);
+    --bs-btn-hover-color: var(--tone-amber-text, #664d03);
+}
+
+.btn-action-bookmark.is-bookmarked {
+    --bs-btn-color: var(--tone-amber-text, #664d03);
+    --bs-btn-border-color: rgba(230, 167, 0, 0.55);
+    --bs-btn-bg: #fff8e8;
+    --bs-btn-hover-bg: #fff1cc;
+    --bs-btn-hover-border-color: rgba(230, 167, 0, 0.75);
+    --bs-btn-hover-color: var(--tone-amber-text, #664d03);
+}
+
+.bookmark-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.bookmark-toggle-btn svg {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
 .material-visibility-panel {
     background: var(--kx-brand-soft);
     border-color: rgba(0, 118, 121, 0.22) !important;
@@ -1341,14 +1372,18 @@ a.entity-tag.tone-neutral:hover {
 
 .app-flash-messages {
     position: fixed;
-    top: calc(3.5rem + 0.75rem);
-    right: 1rem;
+    top: calc(var(--app-topbar-height, 3.5rem) + 0.75rem);
+    left: 50%;
+    right: auto;
     z-index: 1080;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    max-width: min(28rem, calc(100vw - 2rem));
+    align-items: stretch;
+    gap: 0.55rem;
+    width: min(36rem, calc(100vw - 1.5rem));
+    max-width: min(36rem, calc(100vw - 1.5rem));
     margin: 0;
+    transform: translateX(-50%);
     pointer-events: none;
 }
 
@@ -1359,8 +1394,9 @@ a.entity-tag.tone-neutral:hover {
     pointer-events: auto;
     background-color: #ffffff;
     border: 1px solid var(--kx-border-strong, #c9d2d2);
-    box-shadow: 0 10px 28px rgba(16, 24, 40, 0.18);
-    animation: appFlashIn 0.35s ease-out;
+    border-radius: 0.55rem;
+    box-shadow: 0 12px 32px rgba(16, 24, 40, 0.22);
+    animation: appFlashIn 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .app-flash-alert.alert-success {
@@ -1392,7 +1428,7 @@ a.entity-tag.tone-neutral:hover {
 @keyframes appFlashIn {
     from {
         opacity: 0;
-        transform: translateY(-0.4rem);
+        transform: translateY(-0.85rem);
     }
     to {
         opacity: 1;

@@ -46,17 +46,6 @@ _BOOTSTRAP_SELECT = {'class': 'form-select'}
 STRUCTURE_SERVICE_FIELDS = {'id', 'created_at', 'updated_at', 'created_by'}
 
 
-def structure_instance_label(instance: dict) -> str:
-    record_id = str(instance.get('id') or '')
-    code = instance.get('code')
-    if code:
-        return str(code)
-
-    for field_name, value in instance.items():
-        if field_name not in STRUCTURE_SERVICE_FIELDS and value not in (None, ''):
-            return str(value)
-    return record_id[:8]
-
 _LAYER_NUMBER_WIDGET = {
     'class': 'form-control layer-number-field',
     'readonly': True,

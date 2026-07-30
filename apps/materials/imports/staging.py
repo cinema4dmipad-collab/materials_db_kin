@@ -17,6 +17,7 @@ from apps.materials.imports.mapping import (
     TARGET_TAGS,
     TARGET_TECHNOLOGY,
     normalize_mapping_entry,
+    resolve_tag_column_indices,
 )
 from apps.materials.imports.structure_values import build_structure_sql_payload
 from django.core.exceptions import ValidationError
@@ -142,6 +143,7 @@ def build_staging_draft(
     workspace,
     match_policy: str = MATCH_BY_NAME,
     structure_type_id: str | None = None,
+    tag_columns: list[str] | None = None,
 ) -> list[DraftMaterial]:
     structure_field_cache = {
         field.name: field
@@ -159,6 +161,10 @@ def build_staging_draft(
         target, parse_mode = normalize_mapping_entry(entry)
         map_by_index[int(key)] = target
         parse_by_index[int(key)] = parse_mode
+
+    tag_indices = set(
+        resolve_tag_column_indices(table.columns, mapping, tag_columns)
+    )
 
     drafts: list[DraftMaterial] = []
     used_codes: set[str] = set()
@@ -181,151 +187,154 @@ def build_staging_draft(
 
         for col in table.columns:
             target = map_by_index.get(col.index, TARGET_SKIP)
-            if target == TARGET_SKIP:
+            in_tags = col.index in tag_indices
+            if target == TARGET_SKIP and not in_tags:
                 continue
             raw = wide_row.get(col.index)
             parse_mode = parse_by_index.get(col.index, PARSE_AUTO)
 
-            if target == TARGET_CODE:
-                fields['code'] = _as_text(raw)
-            elif target == TARGET_NAME:
-                fields['name'] = _as_text(raw)
-                name_column_label = col.display or name_column_label
-            elif target == TARGET_DESCRIPTION:
+            if target not in (TARGET_SKIP, TARGET_TAGS):
+                if target == TARGET_CODE:
+                    fields['code'] = _as_text(raw)
+                elif target == TARGET_NAME:
+                    fields['name'] = _as_text(raw)
+                    name_column_label = col.display or name_column_label
+                elif target == TARGET_DESCRIPTION:
+                    text = _as_text(raw)
+                    if text:
+                        fields['description'] = (
+                            f'{fields["description"]}; {text}'.strip('; ')
+                            if fields['description']
+                            else text
+                        )
+                elif target == TARGET_MANUFACTURER:
+                    fields['manufacturer'] = _as_text(raw)
+                elif target == TARGET_AVAILABILITY:
+                    fields['availability'] = _as_text(raw)
+                elif target == TARGET_TECHNOLOGY:
+                    fields['technology'] = _as_text(raw)
+                elif target.startswith(TARGET_STRUCTURE_PREFIX):
+                    field_name = target.split(':', 1)[1]
+                    structure_field = structure_field_cache.get(field_name)
+                    if not structure_field:
+                        warnings.append(f'Поле структуры {field_name} не найдено ({col.display})')
+                    else:
+                        expects_number = structure_field.field_type in _NUMERIC_STRUCTURE_FIELD_TYPES
+                        if structure_field.field_type == 'MaterialLink':
+                            parse_mode = PARSE_TEXT
+                        elif expects_number and parse_mode == PARSE_TEXT:
+                            # Числовое поле нельзя писать «как текст» — иначе «30±3» уйдёт в ручную правку.
+                            parse_mode = PARSE_AUTO
+                        parsed = parse_property_cell(raw, mode=parse_mode)
+                        field_label = (structure_field.label or structure_field.name or '').strip()
+                        if parsed is None:
+                            # Сопоставлено, но пусто — оставляем в черновике (можно снять галочку).
+                            struct_vals.append(
+                                DraftStructureValue(
+                                    field_name=structure_field.name,
+                                    field_label=field_label,
+                                    column_label=col.display,
+                                    raw='',
+                                    value_kind=VALUE_KIND_SCALAR,
+                                    value='',
+                                    value_b='',
+                                    confidence=CONFIDENCE_OK,
+                                    note='пусто',
+                                    include=True,
+                                )
+                            )
+                        elif _should_mark_unrecognized(
+                            expects_number=expects_number,
+                            parse_mode=parse_mode,
+                            raw=raw,
+                            parsed=parsed,
+                        ):
+                            struct_vals.append(
+                                _unrecognized_structure_value(
+                                    structure_field=structure_field,
+                                    column_label=col.display,
+                                    raw=_as_text(raw),
+                                )
+                            )
+                        else:
+                            struct_vals.append(
+                                DraftStructureValue(
+                                    field_name=structure_field.name,
+                                    field_label=field_label,
+                                    column_label=col.display,
+                                    raw=_as_text(raw),
+                                    value_kind=parsed['value_kind'],
+                                    value=str(parsed['value']),
+                                    value_b='' if parsed['value_b'] is None else str(parsed['value_b']),
+                                    confidence=parsed.get('confidence', CONFIDENCE_OK),
+                                    note=parsed.get('note', ''),
+                                    include=True,
+                                )
+                            )
+                elif target.startswith(TARGET_PROPERTY_PREFIX):
+                    prop_id = target.split(':', 1)[1]
+                    prop_info = property_cache.get(prop_id)
+                    if not prop_info:
+                        warnings.append(f'Свойство {prop_id} не найдено ({col.display})')
+                    else:
+                        expects_number = prop_info[2] == 'number'
+                        if prop_info[2] == 'material_link':
+                            parse_mode = PARSE_TEXT
+                        elif expects_number and parse_mode == PARSE_TEXT:
+                            parse_mode = PARSE_AUTO
+                        parsed = parse_property_cell(raw, mode=parse_mode)
+                        if parsed is None:
+                            props.append(
+                                DraftProperty(
+                                    property_name=prop_info[1],
+                                    property_id=prop_info[0],
+                                    property_label=prop_info[3],
+                                    column_label=col.display,
+                                    raw='',
+                                    value_kind=VALUE_KIND_SCALAR,
+                                    value='',
+                                    value_b='',
+                                    confidence=CONFIDENCE_OK,
+                                    note='пусто',
+                                    include=True,
+                                )
+                            )
+                        elif _should_mark_unrecognized(
+                            expects_number=expects_number,
+                            parse_mode=parse_mode,
+                            raw=raw,
+                            parsed=parsed,
+                        ):
+                            props.append(
+                                _unrecognized_property_value(
+                                    prop_info=prop_info,
+                                    column_label=col.display,
+                                    raw=_as_text(raw),
+                                )
+                            )
+                        else:
+                            props.append(
+                                DraftProperty(
+                                    property_name=prop_info[1],
+                                    property_id=prop_info[0],
+                                    property_label=prop_info[3],
+                                    column_label=col.display,
+                                    raw=_as_text(raw),
+                                    value_kind=parsed['value_kind'],
+                                    value=str(parsed['value']),
+                                    value_b='' if parsed['value_b'] is None else str(parsed['value_b']),
+                                    confidence=parsed.get('confidence', CONFIDENCE_OK),
+                                    note=parsed.get('note', ''),
+                                    include=True,
+                                )
+                            )
+
+            if in_tags:
                 text = _as_text(raw)
                 if text:
-                    fields['description'] = (
-                        f'{fields["description"]}; {text}'.strip('; ')
-                        if fields['description']
-                        else text
-                    )
-            elif target == TARGET_MANUFACTURER:
-                fields['manufacturer'] = _as_text(raw)
-            elif target == TARGET_AVAILABILITY:
-                fields['availability'] = _as_text(raw)
-            elif target == TARGET_TECHNOLOGY:
-                fields['technology'] = _as_text(raw)
-            elif target == TARGET_TAGS:
-                text = _as_text(raw)
-                if text:
-                    fields['tags'].append(_tag_from_column(col, text))
-            elif target.startswith(TARGET_STRUCTURE_PREFIX):
-                field_name = target.split(':', 1)[1]
-                structure_field = structure_field_cache.get(field_name)
-                if not structure_field:
-                    warnings.append(f'Поле структуры {field_name} не найдено ({col.display})')
-                    continue
-                expects_number = structure_field.field_type in _NUMERIC_STRUCTURE_FIELD_TYPES
-                if structure_field.field_type == 'MaterialLink':
-                    parse_mode = PARSE_TEXT
-                elif expects_number and parse_mode == PARSE_TEXT:
-                    # Числовое поле нельзя писать «как текст» — иначе «30±3» уйдёт в ручную правку.
-                    parse_mode = PARSE_AUTO
-                parsed = parse_property_cell(raw, mode=parse_mode)
-                field_label = (structure_field.label or structure_field.name or '').strip()
-                if parsed is None:
-                    # Сопоставлено, но пусто — оставляем в черновике (можно снять галочку).
-                    struct_vals.append(
-                        DraftStructureValue(
-                            field_name=structure_field.name,
-                            field_label=field_label,
-                            column_label=col.display,
-                            raw='',
-                            value_kind=VALUE_KIND_SCALAR,
-                            value='',
-                            value_b='',
-                            confidence=CONFIDENCE_OK,
-                            note='пусто',
-                            include=True,
-                        )
-                    )
-                    continue
-                if _should_mark_unrecognized(
-                    expects_number=expects_number,
-                    parse_mode=parse_mode,
-                    raw=raw,
-                    parsed=parsed,
-                ):
-                    struct_vals.append(
-                        _unrecognized_structure_value(
-                            structure_field=structure_field,
-                            column_label=col.display,
-                            raw=_as_text(raw),
-                        )
-                    )
-                    continue
-                struct_vals.append(
-                    DraftStructureValue(
-                        field_name=structure_field.name,
-                        field_label=field_label,
-                        column_label=col.display,
-                        raw=_as_text(raw),
-                        value_kind=parsed['value_kind'],
-                        value=str(parsed['value']),
-                        value_b='' if parsed['value_b'] is None else str(parsed['value_b']),
-                        confidence=parsed.get('confidence', CONFIDENCE_OK),
-                        note=parsed.get('note', ''),
-                        include=True,
-                    )
-                )
-            elif target.startswith(TARGET_PROPERTY_PREFIX):
-                prop_id = target.split(':', 1)[1]
-                prop_info = property_cache.get(prop_id)
-                if not prop_info:
-                    warnings.append(f'Свойство {prop_id} не найдено ({col.display})')
-                    continue
-                expects_number = prop_info[2] == 'number'
-                if prop_info[2] == 'material_link':
-                    parse_mode = PARSE_TEXT
-                elif expects_number and parse_mode == PARSE_TEXT:
-                    parse_mode = PARSE_AUTO
-                parsed = parse_property_cell(raw, mode=parse_mode)
-                if parsed is None:
-                    props.append(
-                        DraftProperty(
-                            property_name=prop_info[1],
-                            property_id=prop_info[0],
-                            property_label=prop_info[3],
-                            column_label=col.display,
-                            raw='',
-                            value_kind=VALUE_KIND_SCALAR,
-                            value='',
-                            value_b='',
-                            confidence=CONFIDENCE_OK,
-                            note='пусто',
-                            include=True,
-                        )
-                    )
-                    continue
-                if _should_mark_unrecognized(
-                    expects_number=expects_number,
-                    parse_mode=parse_mode,
-                    raw=raw,
-                    parsed=parsed,
-                ):
-                    props.append(
-                        _unrecognized_property_value(
-                            prop_info=prop_info,
-                            column_label=col.display,
-                            raw=_as_text(raw),
-                        )
-                    )
-                    continue
-                props.append(
-                    DraftProperty(
-                        property_name=prop_info[1],
-                        property_id=prop_info[0],
-                        property_label=prop_info[3],
-                        column_label=col.display,
-                        raw=_as_text(raw),
-                        value_kind=parsed['value_kind'],
-                        value=str(parsed['value']),
-                        value_b='' if parsed['value_b'] is None else str(parsed['value_b']),
-                        confidence=parsed.get('confidence', CONFIDENCE_OK),
-                        note=parsed.get('note', ''),
-                        include=True,
-                    )
-                )
+                    tag_name = _tag_from_column(col, text)
+                    if tag_name and tag_name not in fields['tags']:
+                        fields['tags'].append(tag_name)
 
         _append_duplicate_field_warnings(struct_vals, props, warnings)
 
@@ -539,6 +548,7 @@ def apply_review_post(drafts: list[DraftMaterial], post) -> list[DraftMaterial]:
 
 DUPLICATE_NAME_SKIP = 'skip'
 DUPLICATE_NAME_PREFIX = 'prefix'
+DUPLICATE_NAME_POSTFIX = 'postfix'
 
 
 def name_collisions_for_drafts(workspace, drafts: list[DraftMaterial]) -> list[dict]:
@@ -593,18 +603,23 @@ def apply_duplicate_name_policy(
     *,
     mode: str,
     prefix: str = '',
+    postfix: str = '',
 ) -> list[DraftMaterial]:
     """
     mode=skip — не записывать строки с совпавшим названием.
     mode=prefix — добавить префикс к названию и создать как новые.
+    mode=postfix — добавить постфикс к названию и создать как новые.
     """
     if not collisions:
         return drafts
     indexes = {int(item['draft_index']) for item in collisions}
     mode = (mode or DUPLICATE_NAME_SKIP).strip() or DUPLICATE_NAME_SKIP
     prefix = (prefix or '').strip()
+    postfix = (postfix or '').strip()
     if mode == DUPLICATE_NAME_PREFIX and not prefix:
         raise ValueError('Укажите префикс для дубликатов по названию.')
+    if mode == DUPLICATE_NAME_POSTFIX and not postfix:
+        raise ValueError('Укажите постфикс для дубликатов по названию.')
 
     used_codes = {draft.code for draft in drafts if draft.code}
     for index, draft in enumerate(drafts):
@@ -617,8 +632,10 @@ def apply_duplicate_name_policy(
                 'Пропущен: материал с таким названием уже есть в пространстве'
             )
             continue
-        # prefix → create as new
-        draft.name = f'{prefix}{draft.name}'
+        if mode == DUPLICATE_NAME_POSTFIX:
+            draft.name = f'{draft.name}{postfix}'
+        else:
+            draft.name = f'{prefix}{draft.name}'
         draft.code = _make_code(draft.name or draft.code or 'material', used_codes)
         draft.existing_pk = None
         draft.action = 'create'
@@ -631,16 +648,87 @@ def has_unresolved_unrecognized(drafts: list[DraftMaterial]) -> bool:
 
 
 def iter_unrecognized_fields(drafts: list[DraftMaterial], post=None) -> list[dict]:
+    """Только нераспознанные ячейки (для счётчика и обратной совместимости)."""
+    return [
+        item
+        for item in iter_review_editable_fields(drafts, post=post)
+        if item.get('is_unrecognized')
+    ]
+
+
+def iter_review_editable_fields(drafts: list[DraftMaterial], post=None) -> list[dict]:
+    """Все ячейки таблицы на шаге «Запись», которые можно править вручную."""
+    active_drafts = [d for d in drafts if d.action != 'skip']
+    material_columns = [
+        (key, label, attr)
+        for key, label, attr in _MATERIAL_GRID_FIELDS
+        if any(str(getattr(d, attr, '') or '').strip() for d in active_drafts)
+    ]
     items: list[dict] = []
     for draft_index, draft in enumerate(drafts):
         if draft.action == 'skip':
             continue
         material_label = draft.name or draft.code or f'строка {draft.source_row}'
+        name_input = f'fix_material_{draft_index}_name'
+        name_skip = f'skip_{name_input}'
+        items.append(
+            {
+                'draft_index': draft_index,
+                'field_index': -1,
+                'kind': 'material',
+                'attr': 'name',
+                'source_row': draft.source_row,
+                'material_label': material_label,
+                'column_label': '',
+                'target_label': 'Название',
+                'raw': draft.name or '',
+                'fix_value': _fix_value_from_post(post, name_input, draft.name or ''),
+                'input_name': name_input,
+                'skip_name': name_skip,
+                'skip_checked': post is not None and post.get(name_skip) == '1',
+                'is_unrecognized': False,
+                'allow_skip': False,
+            }
+        )
+        for key, label, attr in material_columns:
+            text = str(getattr(draft, attr, '') or '').strip()
+            input_name = f'fix_material_{draft_index}_{attr}'
+            skip_name = f'skip_{input_name}'
+            items.append(
+                {
+                    'draft_index': draft_index,
+                    'field_index': -1,
+                    'kind': 'material',
+                    'attr': attr,
+                    'column_key': key,
+                    'source_row': draft.source_row,
+                    'material_label': material_label,
+                    'column_label': '',
+                    'target_label': label,
+                    'raw': text,
+                    'fix_value': _fix_value_from_post(post, input_name, text),
+                    'input_name': input_name,
+                    'skip_name': skip_name,
+                    'skip_checked': post is not None and post.get(skip_name) == '1',
+                    'is_unrecognized': False,
+                    'allow_skip': True,
+                }
+            )
         for struct_index, struct in enumerate(draft.structure_values):
-            if struct.recognition != RECOGNITION_UNRECOGNIZED:
-                continue
+            is_bad = struct.recognition == RECOGNITION_UNRECOGNIZED
             input_name = f'fix_struct_{draft_index}_{struct_index}'
-            fix_value = _fix_value_from_post(post, input_name, struct.raw)
+            skip_name = f'skip_{input_name}'
+            default = (
+                (struct.raw or '')
+                if is_bad
+                else _cell_display_value(
+                    raw=struct.raw,
+                    value=struct.value,
+                    value_b=struct.value_b,
+                    value_kind=struct.value_kind,
+                    is_unrecognized=False,
+                )
+            )
             items.append(
                 {
                     'draft_index': draft_index,
@@ -650,18 +738,30 @@ def iter_unrecognized_fields(drafts: list[DraftMaterial], post=None) -> list[dic
                     'material_label': material_label,
                     'column_label': struct.column_label,
                     'target_label': struct.field_label,
-                    'raw': struct.raw,
-                    'fix_value': fix_value,
+                    'raw': struct.raw or '',
+                    'fix_value': _fix_value_from_post(post, input_name, default),
                     'input_name': input_name,
-                    'skip_name': f'skip_{input_name}',
-                    'skip_checked': post is not None and post.get(f'skip_{input_name}') == '1',
+                    'skip_name': skip_name,
+                    'skip_checked': post is not None and post.get(skip_name) == '1',
+                    'is_unrecognized': is_bad,
+                    'allow_skip': True,
                 }
             )
         for prop_index, prop in enumerate(draft.properties):
-            if prop.recognition != RECOGNITION_UNRECOGNIZED:
-                continue
+            is_bad = prop.recognition == RECOGNITION_UNRECOGNIZED
             input_name = f'fix_prop_{draft_index}_{prop_index}'
-            fix_value = _fix_value_from_post(post, input_name, prop.raw)
+            skip_name = f'skip_{input_name}'
+            default = (
+                (prop.raw or '')
+                if is_bad
+                else _cell_display_value(
+                    raw=prop.raw,
+                    value=prop.value,
+                    value_b=prop.value_b,
+                    value_kind=prop.value_kind,
+                    is_unrecognized=False,
+                )
+            )
             items.append(
                 {
                     'draft_index': draft_index,
@@ -671,11 +771,13 @@ def iter_unrecognized_fields(drafts: list[DraftMaterial], post=None) -> list[dic
                     'material_label': material_label,
                     'column_label': prop.column_label,
                     'target_label': prop.property_label or prop.property_name,
-                    'raw': prop.raw,
-                    'fix_value': fix_value,
+                    'raw': prop.raw or '',
+                    'fix_value': _fix_value_from_post(post, input_name, default),
                     'input_name': input_name,
-                    'skip_name': f'skip_{input_name}',
-                    'skip_checked': post is not None and post.get(f'skip_{input_name}') == '1',
+                    'skip_name': skip_name,
+                    'skip_checked': post is not None and post.get(skip_name) == '1',
+                    'is_unrecognized': is_bad,
+                    'allow_skip': True,
                 }
             )
     return items
@@ -730,6 +832,8 @@ def _empty_grid_cell(*, label: str, kind: str, draft_index: int) -> dict:
         'raw': '',
         'is_unrecognized': False,
         'is_excluded': False,
+        'is_editable': False,
+        'allow_skip': True,
         'target_label': label,
         'column_label': '',
         'input_name': '',
@@ -744,9 +848,9 @@ def _empty_grid_cell(*, label: str, kind: str, draft_index: int) -> dict:
 
 def build_review_fix_grid(drafts: list[DraftMaterial], post=None) -> dict:
     """
-    Таблица значений к записи на шаге правки нераспознанных.
+    Таблица значений к записи на шаге «Запись».
     Строки — все draft create/update; колонки — метаданные, структура и свойства.
-    Подсвеченные ячейки — нераспознанные (правятся вручную).
+    Все ячейки редактируемы; жёлтые — нераспознанные системой.
     """
     row_indices = [
         index
@@ -794,26 +898,56 @@ def build_review_fix_grid(drafts: list[DraftMaterial], post=None) -> dict:
     for draft_index in row_indices:
         draft = drafts[draft_index]
         material_label = draft.name or draft.code or f'строка {draft.source_row}'
+        name_input = f'fix_material_{draft_index}_name'
+        name_skip = f'skip_{name_input}'
+        name_fix = _fix_value_from_post(post, name_input, draft.name or '')
+        name_cell = {
+            'display': name_fix or material_label,
+            'raw': draft.name or '',
+            'is_unrecognized': False,
+            'is_excluded': False,
+            'is_editable': True,
+            'allow_skip': False,
+            'target_label': 'Название',
+            'column_label': '',
+            'input_name': name_input,
+            'skip_name': name_skip,
+            'fix_value': name_fix,
+            'skip_checked': False,
+            'draft_index': draft_index,
+            'field_index': -1,
+            'kind': 'material',
+            'attr': 'name',
+            'col_index': 0,
+            'letter': 'A',
+        }
         cells: dict[str, dict] = {}
 
         for key, label, attr in _MATERIAL_GRID_FIELDS:
             if key not in seen_keys:
                 continue
             text = str(getattr(draft, attr, '') or '').strip()
+            input_name = f'fix_material_{draft_index}_{attr}'
+            skip_name = f'skip_{input_name}'
+            fix_value = _fix_value_from_post(post, input_name, text)
+            skip_checked = bool(post is not None and post.get(skip_name) == '1')
             cells[key] = {
-                'display': text,
+                'display': '' if skip_checked else fix_value,
                 'raw': text,
                 'is_unrecognized': False,
-                'is_excluded': False,
+                'is_excluded': skip_checked,
+                'is_editable': True,
+                'allow_skip': True,
                 'target_label': label,
                 'column_label': '',
-                'input_name': '',
-                'skip_name': '',
-                'fix_value': '',
-                'skip_checked': False,
+                'input_name': input_name,
+                'skip_name': skip_name,
+                'fix_value': fix_value,
+                'skip_checked': skip_checked,
                 'draft_index': draft_index,
                 'field_index': -1,
                 'kind': 'material',
+                'attr': attr,
             }
 
         for struct_index, struct in enumerate(draft.structure_values):
@@ -822,34 +956,41 @@ def build_review_fix_grid(drafts: list[DraftMaterial], post=None) -> dict:
             is_excluded = not struct.include and not is_bad
             input_name = f'fix_struct_{draft_index}_{struct_index}'
             skip_name = f'skip_{input_name}'
-            fix_value = _fix_value_from_post(post, input_name, struct.raw)
-            if is_bad:
-                unrecognized_count += 1
-                # Показать введённое значение (в т.ч. после неудачной «Записать»).
-                display = (fix_value or '').strip()
-            else:
-                display = _cell_display_value(
+            default = (
+                (struct.raw or '')
+                if is_bad
+                else _cell_display_value(
                     raw=struct.raw,
                     value=struct.value,
                     value_b=struct.value_b,
                     value_kind=struct.value_kind,
                     is_unrecognized=False,
                 )
-            if is_excluded:
+            )
+            fix_value = _fix_value_from_post(post, input_name, default)
+            skip_checked = bool(post is not None and post.get(skip_name) == '1')
+            if is_bad:
+                unrecognized_count += 1
+                display = (fix_value or '').strip()
+            else:
+                display = fix_value if post is not None and input_name in post else default
+            if is_excluded and not (post is not None and input_name in post):
                 display = ''
+            if skip_checked:
+                display = (struct.raw or default or '').strip()
             cells[key] = {
                 'display': display,
                 'raw': struct.raw or '',
                 'is_unrecognized': is_bad,
-                'is_excluded': is_excluded,
+                'is_excluded': is_excluded or skip_checked,
+                'is_editable': True,
+                'allow_skip': True,
                 'target_label': struct.field_label or struct.field_name,
                 'column_label': struct.column_label,
-                'input_name': input_name if is_bad else '',
-                'skip_name': skip_name if is_bad else '',
-                'fix_value': fix_value if is_bad else '',
-                'skip_checked': bool(
-                    is_bad and post is not None and post.get(skip_name) == '1'
-                ),
+                'input_name': input_name,
+                'skip_name': skip_name,
+                'fix_value': fix_value,
+                'skip_checked': skip_checked,
                 'draft_index': draft_index,
                 'field_index': struct_index,
                 'kind': 'struct',
@@ -861,33 +1002,41 @@ def build_review_fix_grid(drafts: list[DraftMaterial], post=None) -> dict:
             is_excluded = not prop.include and not is_bad
             input_name = f'fix_prop_{draft_index}_{prop_index}'
             skip_name = f'skip_{input_name}'
-            fix_value = _fix_value_from_post(post, input_name, prop.raw)
-            if is_bad:
-                unrecognized_count += 1
-                display = (fix_value or '').strip()
-            else:
-                display = _cell_display_value(
+            default = (
+                (prop.raw or '')
+                if is_bad
+                else _cell_display_value(
                     raw=prop.raw,
                     value=prop.value,
                     value_b=prop.value_b,
                     value_kind=prop.value_kind,
                     is_unrecognized=False,
                 )
-            if is_excluded:
+            )
+            fix_value = _fix_value_from_post(post, input_name, default)
+            skip_checked = bool(post is not None and post.get(skip_name) == '1')
+            if is_bad:
+                unrecognized_count += 1
+                display = (fix_value or '').strip()
+            else:
+                display = fix_value if post is not None and input_name in post else default
+            if is_excluded and not (post is not None and input_name in post):
                 display = ''
+            if skip_checked:
+                display = (prop.raw or default or '').strip()
             cells[key] = {
                 'display': display,
                 'raw': prop.raw or '',
                 'is_unrecognized': is_bad,
-                'is_excluded': is_excluded,
+                'is_excluded': is_excluded or skip_checked,
+                'is_editable': True,
+                'allow_skip': True,
                 'target_label': prop.property_label or prop.property_name,
                 'column_label': prop.column_label,
-                'input_name': input_name if is_bad else '',
-                'skip_name': skip_name if is_bad else '',
-                'fix_value': fix_value if is_bad else '',
-                'skip_checked': bool(
-                    is_bad and post is not None and post.get(skip_name) == '1'
-                ),
+                'input_name': input_name,
+                'skip_name': skip_name,
+                'fix_value': fix_value,
+                'skip_checked': skip_checked,
                 'draft_index': draft_index,
                 'field_index': prop_index,
                 'kind': 'prop',
@@ -897,8 +1046,9 @@ def build_review_fix_grid(drafts: list[DraftMaterial], post=None) -> dict:
             {
                 'draft_index': draft_index,
                 'source_row': draft.source_row,
-                'material_label': material_label,
+                'material_label': name_fix or material_label,
                 'action': draft.action,
+                'name_cell': name_cell,
                 'cells': cells,
                 'cell_list': [
                     {
@@ -947,40 +1097,113 @@ def apply_unrecognized_ignore_all(drafts: list[DraftMaterial]) -> list[DraftMate
 
 
 def apply_unrecognized_manual_fixes(drafts: list[DraftMaterial], post) -> tuple[list[DraftMaterial], list[str]]:
+    """
+    Применяет правки из таблицы на шаге «Запись».
+    Нераспознанные поля по-прежнему требуют значение или «Пропустить»;
+    остальные поля можно переписать или очистить (пустой → не записывать).
+    """
     errors: list[str] = []
+    used_codes = {
+        draft.code
+        for draft in drafts
+        if draft.action != 'skip' and draft.code
+    }
     for draft_index, draft in enumerate(drafts):
         if draft.action == 'skip':
             continue
-        for struct_index, struct in enumerate(draft.structure_values):
-            if struct.recognition != RECOGNITION_UNRECOGNIZED:
+
+        name_key = f'fix_material_{draft_index}_name'
+        if name_key in post:
+            new_name = (post.get(name_key) or '').strip()
+            if not new_name:
+                errors.append(
+                    f'Строка {draft.source_row}: укажите название материала.'
+                )
+            else:
+                old_name = (draft.name or '').strip()
+                draft.name = new_name
+                if new_name != old_name:
+                    if draft.code:
+                        used_codes.discard(draft.code)
+                    draft.code = _make_code(new_name, used_codes)
+                    used_codes.add(draft.code)
+
+        for _key, label, attr in _MATERIAL_GRID_FIELDS:
+            field_key = f'fix_material_{draft_index}_{attr}'
+            if field_key not in post and post.get(f'skip_{field_key}') != '1':
                 continue
+            if post.get(f'skip_{field_key}') == '1':
+                setattr(draft, attr, '')
+                continue
+            setattr(draft, attr, (post.get(field_key) or '').strip())
+
+        for struct_index, struct in enumerate(draft.structure_values):
             key = f'fix_struct_{draft_index}_{struct_index}'
+            is_bad = struct.recognition == RECOGNITION_UNRECOGNIZED
+            posted = key in post or post.get(f'skip_{key}') == '1'
+            if not posted and not is_bad:
+                continue
             if post.get(f'skip_{key}') == '1':
                 _ignore_unrecognized_structure(struct)
                 continue
             raw_fix = (post.get(key) or '').strip()
             if not raw_fix:
-                errors.append(
-                    f'Строка {draft.source_row}, «{struct.column_label}» → {struct.field_label}: '
-                    f'введите значение или отметьте «Пропустить».'
+                if is_bad:
+                    errors.append(
+                        f'Строка {draft.source_row}, «{struct.column_label}» → {struct.field_label}: '
+                        f'введите значение или отметьте «Пропустить».'
+                    )
+                else:
+                    _ignore_unrecognized_structure(struct)
+                continue
+            current_display = (
+                (struct.raw or '')
+                if is_bad
+                else _cell_display_value(
+                    raw=struct.raw,
+                    value=struct.value,
+                    value_b=struct.value_b,
+                    value_kind=struct.value_kind,
+                    is_unrecognized=False,
                 )
+            )
+            if not is_bad and raw_fix == (current_display or '').strip():
                 continue
             error = _apply_manual_fix_to_structure(struct, raw_fix, draft.source_row)
             if error:
                 errors.append(error)
+
         for prop_index, prop in enumerate(draft.properties):
-            if prop.recognition != RECOGNITION_UNRECOGNIZED:
-                continue
             key = f'fix_prop_{draft_index}_{prop_index}'
+            is_bad = prop.recognition == RECOGNITION_UNRECOGNIZED
+            posted = key in post or post.get(f'skip_{key}') == '1'
+            if not posted and not is_bad:
+                continue
             if post.get(f'skip_{key}') == '1':
                 _ignore_unrecognized_property(prop)
                 continue
             raw_fix = (post.get(key) or '').strip()
             if not raw_fix:
-                errors.append(
-                    f'Строка {draft.source_row}, «{prop.column_label}» → {prop.property_name}: '
-                    f'введите значение или отметьте «Пропустить».'
+                if is_bad:
+                    errors.append(
+                        f'Строка {draft.source_row}, «{prop.column_label}» → {prop.property_name}: '
+                        f'введите значение или отметьте «Пропустить».'
+                    )
+                else:
+                    _ignore_unrecognized_property(prop)
+                continue
+            current_display = (
+                (prop.raw or '')
+                if is_bad
+                else _cell_display_value(
+                    raw=prop.raw,
+                    value=prop.value,
+                    value_b=prop.value_b,
+                    value_kind=prop.value_kind,
+                    is_unrecognized=False,
                 )
+            )
+            if not is_bad and raw_fix == (current_display or '').strip():
                 continue
             error = _apply_manual_fix_to_property(prop, raw_fix, draft.source_row)
             if error:
@@ -1016,6 +1239,7 @@ def _apply_manual_fix_to_structure(struct: DraftStructureValue, raw_fix: str, so
             f'Строка {source_row}, «{struct.column_label}»: '
             f'«{raw_fix[:40]}» не удалось распознать как число.'
         )
+    struct.raw = raw_fix
     struct.value_kind = parsed['value_kind']
     struct.value = str(parsed['value'])
     struct.value_b = '' if parsed['value_b'] is None else str(parsed['value_b'])
@@ -1038,6 +1262,7 @@ def _apply_manual_fix_to_property(prop: DraftProperty, raw_fix: str, source_row:
             f'Строка {source_row}, «{prop.column_label}»: '
             f'«{raw_fix[:40]}» не удалось распознать как число.'
         )
+    prop.raw = raw_fix
     prop.value_kind = parsed['value_kind']
     prop.value = str(parsed['value'])
     prop.value_b = '' if parsed['value_b'] is None else str(parsed['value_b'])

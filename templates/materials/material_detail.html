@@ -21,6 +21,7 @@
             <p class="text-muted mb-0 small">Код: <strong>{{ material.code }}</strong></p>
         </div>
         <div class="text-nowrap d-inline-flex align-items-center gap-1">
+            {% include 'includes/bookmark_toggle.html' %}
             {% if not material_is_readonly %}
             {% url 'materials:edit' material.pk as material_edit_url %}
             {% include 'includes/table_action_icon.html' with action='edit' url=material_edit_url title='Изменить' %}

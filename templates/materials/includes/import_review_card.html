@@ -10,7 +10,9 @@
             {{ material.name }}
         </a>
         {% if material.struct_type %}
-        {% include 'includes/type_badge.html' with label=material.struct_type.name tone=material.struct_type.display_color %}
+        <div class="import-review-card__type">
+            {% include 'includes/type_badge.html' with label=material.struct_type.name tone=material.struct_type.display_color %}
+        </div>
         {% endif %}
     </div>
     <div class="import-review-card__meta text-muted small">

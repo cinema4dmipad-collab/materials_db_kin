@@ -10,6 +10,7 @@ Cross-cutting features: landing page, in-app help, tag management, list filterin
 |-----|------|
 | `/` | Dashboard |
 | `/help/` | Help page (Russian user guide) |
+| `/bookmarks/` | User bookmarks list (materials, samples, scans, structure records, structure types) |
 | `/tags/` | Tag list — tabs **Пространство** / **Общие**, filter **Активные** / **Архив** |
 | `/accounts/profile/` | Current user profile (via `apps/workspaces`) |
 
@@ -40,6 +41,12 @@ Templates: `includes/list_filter_bar.html`, `includes/client_filter_bar.html`, `
 * Assignment: `get_or_create_tags` / `assign_tags` use the **entity** workspace (home/sample/scan), not the viewer’s active workspace when they differ
 * Inline edit on detail cards: `MaterialTagsForm` / `SampleTagsForm` / `ScanTagsForm` + shared `includes/entity_tags_form.html` (only when entity is editable in active workspace)
 * Helpers: `apps/core/tag_utils.py`, `apps/core/widgets.py`, `apps/core/tag_forms.py`
+
+## Bookmarks
+
+* Model: `UserBookmark` — per-user pins for materials, samples, scans, structure records, structure types (`apps/core/bookmarks.py`)
+* UI: `includes/bookmark_toggle.html` on detail/list pages; sidebar section + `/bookmarks/` list
+* Structure type bookmark opens material create with `struct_type` pre-selected
 
 ## Forms and Helpers
 

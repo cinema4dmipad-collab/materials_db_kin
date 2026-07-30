@@ -1,83 +1,83 @@
-{% load static %}
-<aside class="workspace-sidebar" id="appWorkspaceSidebar" aria-label="Навигация приложения">
-    <div class="workspace-sidebar__header">
-        {% if active_workspace %}
-        <a href="{% url 'core:dashboard' %}"
-           class="workspace-sidebar__home-link"
-           title="Дашборд"
-           aria-label="Дашборд">
-            <i class="bi bi-speedometer2 workspace-sidebar__icon" aria-hidden="true"></i>
-            <span class="workspace-sidebar__link-text">Дашборд</span>
-        </a>
-        {% else %}
-        <span class="workspace-sidebar__home-label">Пространство не выбрано</span>
-        {% endif %}
-    </div>
-
-    {% if not active_workspace %}
-    <div class="workspace-sidebar__notice">
-        {% if user_workspaces %}
-        <p class="workspace-sidebar__notice-text">Выберите рабочее пространство на главном экране, чтобы открыть разделы приложения.</p>
-        {% else %}
-        <p class="workspace-sidebar__notice-text">Доступных пространств нет. Обратитесь к администратору.</p>
-        {% endif %}
-    </div>
-    {% endif %}
-
-    <nav class="workspace-sidebar__nav">
-        {% if main_nav_items %}
-        <div class="workspace-sidebar__section">
-            <div class="workspace-sidebar__section-title">Разделы</div>
-            <ul class="workspace-sidebar__list">
-                {% for item in main_nav_items %}
-                {% if item.visible %}
-                <li>
-                    <a href="{{ item.url }}"
-                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}"
-                       title="{{ item.label }}"
-                       aria-label="{{ item.label }}">
-                        <i class="{{ item.icon }} workspace-sidebar__icon" aria-hidden="true"></i>
-                        <span class="workspace-sidebar__link-text">{{ item.label }}</span>
-                    </a>
-                </li>
-                {% endif %}
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-
-        {% for section in workspace_nav_sections %}
-        <div class="workspace-sidebar__section">
-            <div class="workspace-sidebar__section-title">{{ section.title }}</div>
-            <ul class="workspace-sidebar__list">
-                {% for item in section.items %}
-                {% if item.visible %}
-                <li>
-                    <a href="{{ item.url }}"
-                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}"
-                       title="{{ item.label }}"
-                       aria-label="{{ item.label }}">
-                        <i class="{{ item.icon }} workspace-sidebar__icon" aria-hidden="true"></i>
-                        <span class="workspace-sidebar__link-text">{{ item.label }}</span>
-                    </a>
-                </li>
-                {% endif %}
-                {% endfor %}
-            </ul>
-        </div>
-        {% endfor %}
-    </nav>
-
-    {% if workspace_user_groups or active_workspace %}
-    <div class="workspace-sidebar__footer">
-        {% if active_workspace %}
-        <span class="workspace-sidebar__footer-workspace" title="{{ active_workspace.name }}">{{ active_workspace.name }}</span>
-        {% endif %}
-        {% if workspace_user_groups %}
-        <span class="workspace-sidebar__role">
-            {% for group in workspace_user_groups %}{{ group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
-        </span>
-        {% endif %}
-    </div>
-    {% endif %}
-</aside>
+{% load static %}
+<aside class="workspace-sidebar" id="appWorkspaceSidebar" aria-label="Навигация приложения">
+    <div class="workspace-sidebar__header">
+        {% if active_workspace %}
+        <a href="{% url 'core:dashboard' %}"
+           class="workspace-sidebar__home-link"
+           title="Дашборд"
+           aria-label="Дашборд">
+            <i class="bi bi-speedometer2 workspace-sidebar__icon" aria-hidden="true"></i>
+            <span class="workspace-sidebar__link-text">Дашборд</span>
+        </a>
+        {% else %}
+        <span class="workspace-sidebar__home-label">Пространство не выбрано</span>
+        {% endif %}
+    </div>
+
+    {% if not active_workspace %}
+    <div class="workspace-sidebar__notice">
+        {% if user_workspaces %}
+        <p class="workspace-sidebar__notice-text">Выберите рабочее пространство на главном экране, чтобы открыть разделы приложения.</p>
+        {% else %}
+        <p class="workspace-sidebar__notice-text">Доступных пространств нет. Обратитесь к администратору.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <nav class="workspace-sidebar__nav">
+        {% if main_nav_items %}
+        <div class="workspace-sidebar__section">
+            <div class="workspace-sidebar__section-title">Разделы</div>
+            <ul class="workspace-sidebar__list">
+                {% for item in main_nav_items %}
+                {% if item.visible %}
+                <li>
+                    <a href="{{ item.url }}"
+                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}{% if item.is_footer_link %} workspace-sidebar__link--muted{% endif %}"
+                       title="{% if item.subtitle %}{{ item.label }} · {{ item.subtitle }}{% else %}{{ item.label }}{% endif %}"
+                       aria-label="{{ item.label }}">
+                        <i class="{{ item.icon }} workspace-sidebar__icon" aria-hidden="true"></i>
+                        <span class="workspace-sidebar__link-text">{{ item.label }}</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% for section in workspace_nav_sections %}
+        <div class="workspace-sidebar__section">
+            <div class="workspace-sidebar__section-title">{{ section.title }}</div>
+            <ul class="workspace-sidebar__list">
+                {% for item in section.items %}
+                {% if item.visible %}
+                <li>
+                    <a href="{{ item.url }}"
+                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}{% if item.is_footer_link %} workspace-sidebar__link--muted{% endif %}"
+                       title="{% if item.subtitle %}{{ item.label }} · {{ item.subtitle }}{% else %}{{ item.label }}{% endif %}"
+                       aria-label="{{ item.label }}">
+                        <i class="{{ item.icon }} workspace-sidebar__icon" aria-hidden="true"></i>
+                        <span class="workspace-sidebar__link-text">{{ item.label }}</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </nav>
+
+    {% if workspace_user_groups or active_workspace %}
+    <div class="workspace-sidebar__footer">
+        {% if active_workspace %}
+        <span class="workspace-sidebar__footer-workspace" title="{{ active_workspace.name }}">{{ active_workspace.name }}</span>
+        {% endif %}
+        {% if workspace_user_groups %}
+        <span class="workspace-sidebar__role">
+            {% for group in workspace_user_groups %}{{ group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </span>
+        {% endif %}
+    </div>
+    {% endif %}
+</aside>

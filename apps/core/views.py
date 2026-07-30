@@ -108,7 +108,7 @@ def _build_dashboard_attention(*, request, workspace):
         items.append(
             {
                 'kind': 'import_pending',
-                'label': 'Незавершённый импорт',
+                'label': 'Продолжить импорт',
                 'count': 1,
                 'url': reverse('materials:import'),
                 'detail': get_import_session_name(request.session),
@@ -125,7 +125,7 @@ def _build_dashboard_attention(*, request, workspace):
                 'label': 'Импорт к разбору',
                 'count': pending_review,
                 'url': reverse('materials:import_review'),
-                'detail': 'Материалы с тегом статус::утвержден',
+                'detail': 'Материалы с тегом статус::на проверке',
             }
         )
 

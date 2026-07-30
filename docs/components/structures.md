@@ -33,6 +33,8 @@ Table names **must** start with `structures_`, snake_case latin, max 100 chars, 
 3. **Manage type** — `/structures/types/<code>/manage/` — color, fields, create/drop SQL table
 4. **Records** — `/structures/<code>/` — CRUD on SQL-backed instances (when table created)
 
+List/detail show linked material names for `MaterialLink` fields; **Развернуть** loads material properties via `structure_material_expand.js`. Bookmark toggles on list, detail, and type pages.
+
 After save, modal prompts to create SQL table. Manage page shows table name input before **Create**.
 
 Once `is_created=True`:

@@ -286,6 +286,16 @@ class SampleDetailView(AppViewMixin, DetailView):
             item for item in sample_properties if item.property_id not in material_property_ids
         ]
         context.update(get_material_structure_context(self.object.material))
+        from apps.core.bookmarks import bookmark_context
+        from apps.core.models import BookmarkEntityType
+
+        context.update(
+            bookmark_context(
+                self.request,
+                entity_type=BookmarkEntityType.SAMPLE,
+                entity=self.object,
+            )
+        )
         return context
 
 
