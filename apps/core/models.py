@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 
@@ -141,3 +142,92 @@ class UserBookmark(models.Model):
 
     def __str__(self):
         return self.label or f'{self.entity_type}:{self.entity_id}'
+
+
+class BackupSettings(models.Model):
+    """Глобальные настройки резервного копирования PostgreSQL."""
+
+    enabled = models.BooleanField(default=False, verbose_name='Авто копирование')
+    schedule_hour = models.IntegerField(
+        default=3,
+        validators=[MinValueValidator(0), MaxValueValidator(23)],
+        verbose_name='Час запуска',
+        help_text='От 0 до 23.',
+    )
+    schedule_minute = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(59)],
+        verbose_name='Минута запуска',
+        help_text='От 0 до 59.',
+    )
+    retention_count = models.PositiveIntegerField(
+        default=7,
+        validators=[MinValueValidator(1)],
+        verbose_name='Количество хранимых копий',
+        help_text='Минимум 1.',
+    )
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлено')
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_backup_settings',
+        verbose_name='Обновил',
+    )
+
+    class Meta:
+        verbose_name = 'настройка резервного копирования'
+        verbose_name_plural = 'настройки резервного копирования'
+
+    @classmethod
+    def get_solo(cls):
+        settings, _ = cls.objects.get_or_create(pk=1)
+        return settings
+
+    def __str__(self):
+        return 'Настройки резервного копирования'
+
+
+class BackupRun(models.Model):
+    class Trigger(models.TextChoices):
+        MANUAL = 'manual', 'Вручную'
+        SCHEDULED = 'scheduled', 'По расписанию'
+
+    class Status(models.TextChoices):
+        RUNNING = 'running', 'Выполняется'
+        SUCCESS = 'success', 'Успешно'
+        FAILED = 'failed', 'Ошибка'
+
+    started_at = models.DateTimeField(auto_now_add=True, verbose_name='Начато')
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name='Завершено')
+    trigger = models.CharField(
+        max_length=10,
+        choices=Trigger.choices,
+        verbose_name='Запуск',
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.RUNNING,
+        verbose_name='Статус',
+    )
+    filename = models.CharField(max_length=255, blank=True, verbose_name='Имя файла')
+    size_bytes = models.BigIntegerField(null=True, blank=True, verbose_name='Размер, байт')
+    error_message = models.TextField(blank=True, verbose_name='Сообщение об ошибке')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_backup_runs',
+        verbose_name='Создал',
+    )
+
+    class Meta:
+        ordering = ['-started_at']
+        verbose_name = 'запуск резервного копирования'
+        verbose_name_plural = 'запуски резервного копирования'
+
+    def __str__(self):
+        return f'{self.get_trigger_display()}: {self.get_status_display()} ({self.started_at:%d.%m.%Y %H:%M})'

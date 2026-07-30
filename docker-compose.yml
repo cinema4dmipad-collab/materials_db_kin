@@ -62,6 +62,7 @@ services:
     environment:
       DB_HOST: postgres
       DB_ENGINE: postgresql
+      BACKUP_DIR: /backups
       AWS_S3_ENDPOINT_URL: http://seaweedfs:8333
     depends_on:
       postgres:
@@ -70,8 +71,35 @@ services:
         condition: service_completed_successfully
     volumes:
       - staticfiles:/app/staticfiles
+      - backups:/backups
     expose:
       - '8000'
+    restart: unless-stopped
+
+  backup-cron:
+    build:
+      context: .
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim-bookworm}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+        PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
+    image: ${WEB_IMAGE:-materials-db-web:local}
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_ENGINE: postgresql
+      BACKUP_DIR: /backups
+      AWS_S3_ENDPOINT_URL: http://seaweedfs:8333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_started
+    volumes:
+      - backups:/backups
+    entrypoint: ['/bin/sh', '-c']
+    command: ['while true; do python manage.py run_scheduled_backup || true; sleep 60; done']
     restart: unless-stopped
 
   nginx:
@@ -89,3 +117,4 @@ volumes:
   postgres_data:
   seaweedfs_data:
   staticfiles:
+  backups:

@@ -1,7 +1,9 @@
+from datetime import time
+
 from django import forms
 from django.core.exceptions import ValidationError
 
-from apps.core.models import Tag
+from apps.core.models import BackupSettings, Tag
 from apps.core.tag_utils import (
     normalize_tag_name,
     tag_slug_from_name,
@@ -12,6 +14,45 @@ from apps.core.tag_utils import (
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _BOOTSTRAP_TEXTAREA = {'class': 'form-control', 'rows': 3}
 _BOOTSTRAP_CHECKBOX = {'class': 'form-check-input'}
+
+
+class BackupSettingsForm(forms.ModelForm):
+    schedule_time = forms.TimeField(
+        label='Время запуска',
+        widget=forms.TimeInput(attrs={**_BOOTSTRAP_INPUT, 'type': 'time'}, format='%H:%M'),
+        input_formats=['%H:%M', '%H:%M:%S'],
+        help_text='Ежедневный запуск по локальному времени сервера.',
+    )
+
+    class Meta:
+        model = BackupSettings
+        fields = ['enabled', 'retention_count']
+        widgets = {
+            'enabled': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECKBOX),
+            'retention_count': forms.NumberInput(attrs={**_BOOTSTRAP_INPUT, 'min': 1}),
+        }
+        labels = {
+            'enabled': 'Авто копирование',
+            'retention_count': 'Количество хранимых копий',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        instance = kwargs.get('instance') or getattr(self, 'instance', None)
+        if instance and instance.pk:
+            self.fields['schedule_time'].initial = time(
+                hour=instance.schedule_hour,
+                minute=instance.schedule_minute,
+            )
+
+    def save(self, commit=True):
+        settings = super().save(commit=False)
+        schedule_time = self.cleaned_data['schedule_time']
+        settings.schedule_hour = schedule_time.hour
+        settings.schedule_minute = schedule_time.minute
+        if commit:
+            settings.save()
+        return settings
 
 
 class TagForm(forms.ModelForm):

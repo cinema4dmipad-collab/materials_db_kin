@@ -158,6 +158,16 @@ def workspace_navigation(request):
             )
 
     admin_items = []
+    if is_system_admin(user):
+        admin_items.append(
+            {
+                'label': 'Бэкапы',
+                'icon': 'bi-database-down',
+                'url': reverse('administration:backups'),
+                'active': _admin_active('backups', 'backup_manual', 'backup_download'),
+                'visible': True,
+            }
+        )
     if can_manage_global_users(user):
         admin_items.append(
             {

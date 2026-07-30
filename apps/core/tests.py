@@ -879,6 +879,7 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'постфикс')
         self.assertContains(response, 'изменённые вручную')
         self.assertContains(response, 'Развернуть')
+        self.assertContains(response, 'Администрирование → Бэкапы')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):
