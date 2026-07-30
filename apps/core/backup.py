@@ -14,7 +14,8 @@ from django.utils import timezone
 from apps.core.models import BackupRun, BackupSettings
 
 SCHEDULED_DUMP_NAME_RE = re.compile(r'^materials_db_\d{8}_\d{6}\.dump$')
-STALE_RUNNING_AFTER = timedelta(hours=6)
+# Короткий TTL: после restore из чужого дампа часто остаётся RUNNING без процесса.
+STALE_RUNNING_AFTER = timedelta(minutes=10)
 
 
 class BackupError(Exception):
@@ -45,25 +46,54 @@ def get_temp_dir() -> Path:
 
 
 def _clear_stale_backup_state() -> None:
-    """Снимает зависшие RUNNING и устаревший lock-файл после краша процесса."""
-    cutoff = timezone.now() - STALE_RUNNING_AFTER
+    """Снимает зависшие RUNNING и устаревший lock-файл после краша / restore."""
+    now = timezone.now()
+    cutoff = now - STALE_RUNNING_AFTER
     BackupRun.objects.filter(status=BackupRun.Status.RUNNING, started_at__lt=cutoff).update(
         status=BackupRun.Status.FAILED,
-        finished_at=timezone.now(),
+        finished_at=now,
         error_message='Прервано: процесс резервного копирования не завершился.',
     )
 
     lock_path = get_backup_dir() / '.backup.lock'
-    if not lock_path.exists():
+    if lock_path.exists():
+        if BackupRun.objects.filter(status=BackupRun.Status.RUNNING).exists():
+            return
+        try:
+            age = now.timestamp() - lock_path.stat().st_mtime
+        except OSError:
+            return
+        if age > STALE_RUNNING_AFTER.total_seconds():
+            lock_path.unlink(missing_ok=True)
         return
-    if BackupRun.objects.filter(status=BackupRun.Status.RUNNING).exists():
-        return
-    try:
-        age = timezone.now().timestamp() - lock_path.stat().st_mtime
-    except OSError:
-        return
-    if age > STALE_RUNNING_AFTER.total_seconds():
-        lock_path.unlink(missing_ok=True)
+
+    # Нет lock-файла, но в БД есть RUNNING — сирота (краш воркера или restore дампа).
+    BackupRun.objects.filter(status=BackupRun.Status.RUNNING).update(
+        status=BackupRun.Status.FAILED,
+        finished_at=now,
+        error_message=(
+            'Прервано: запуск остался в статусе «выполняется» без активного процесса '
+            '(часто после восстановления дампа).'
+        ),
+    )
+
+
+def cancel_running_backups(*, reason: str = 'Отменено администратором.') -> int:
+    """Принудительно завершает все RUNNING и снимает lock."""
+    now = timezone.now()
+    updated = BackupRun.objects.filter(status=BackupRun.Status.RUNNING).update(
+        status=BackupRun.Status.FAILED,
+        finished_at=now,
+        error_message=reason,
+    )
+    lock_path = get_backup_dir() / '.backup.lock'
+    lock_path.unlink(missing_ok=True)
+    return updated
+
+
+def get_running_backup() -> BackupRun | None:
+    _clear_stale_backup_state()
+    return BackupRun.objects.filter(status=BackupRun.Status.RUNNING).order_by('-started_at').first()
 
 
 @contextmanager
@@ -72,13 +102,19 @@ def backup_lock() -> Iterator[None]:
     _clear_stale_backup_state()
 
     if BackupRun.objects.filter(status=BackupRun.Status.RUNNING).exists():
-        raise BackupError('Резервное копирование уже выполняется.')
+        raise BackupError(
+            'Резервное копирование уже выполняется или остался зависший запуск. '
+            'Нажмите «Сбросить зависший запуск» на странице бэкапов и повторите.'
+        )
 
     lock_path = get_backup_dir() / '.backup.lock'
     try:
         descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError as exc:
-        raise BackupError('Резервное копирование уже выполняется.') from exc
+        raise BackupError(
+            'Резервное копирование уже выполняется или остался зависший запуск. '
+            'Нажмите «Сбросить зависший запуск» на странице бэкапов и повторите.'
+        ) from exc
 
     try:
         with os.fdopen(descriptor, 'w', encoding='utf-8') as lock_file:
@@ -208,6 +244,13 @@ def restore_from_dump(*, dump_path: Path, original_name: str = '', user=None) ->
             run_pg_restore(dump_path)
         except BackupError:
             raise
+
+        # Дамп мог вернуть старые RUNNING-записи — сбрасываем, не трогая текущий lock.
+        BackupRun.objects.filter(status=BackupRun.Status.RUNNING).update(
+            status=BackupRun.Status.FAILED,
+            finished_at=timezone.now(),
+            error_message='Сброшено после восстановления дампа.',
+        )
 
         from django.db import IntegrityError
 

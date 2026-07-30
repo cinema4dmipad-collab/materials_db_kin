@@ -230,3 +230,40 @@ class BackupRestoreTests(TestCase):
             )
         self.assertRedirects(response, reverse('administration:backups'))
         self.assertFalse(BackupRun.objects.filter(trigger=BackupRun.Trigger.RESTORE).exists())
+
+
+class BackupStuckRunningTests(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='backup-stuck-admin',
+            email='backup-stuck@example.com',
+            password=DEFAULT_TEST_PASSWORD,
+        )
+        self.client.force_login(self.superuser)
+
+    def test_orphan_running_without_lock_is_cleared_on_page(self):
+        from apps.core.backup import get_running_backup
+
+        with TemporaryDirectory() as backup_dir, override_settings(BACKUP_DIR=backup_dir):
+            BackupRun.objects.create(
+                trigger=BackupRun.Trigger.MANUAL,
+                status=BackupRun.Status.RUNNING,
+            )
+            self.assertIsNone(get_running_backup())
+            stuck = BackupRun.objects.get()
+            self.assertEqual(stuck.status, BackupRun.Status.FAILED)
+
+    def test_cancel_running_endpoint(self):
+        with TemporaryDirectory() as backup_dir, override_settings(BACKUP_DIR=backup_dir):
+            Path(backup_dir).mkdir(parents=True, exist_ok=True)
+            lock = Path(backup_dir) / '.backup.lock'
+            lock.write_text('1', encoding='utf-8')
+            BackupRun.objects.create(
+                trigger=BackupRun.Trigger.MANUAL,
+                status=BackupRun.Status.RUNNING,
+            )
+            # Keep RUNNING for cancel: create lock so orphan cleanup won't auto-fail.
+            response = self.client.post(reverse('administration:backup_cancel_running'))
+            self.assertRedirects(response, reverse('administration:backups'))
+            self.assertEqual(BackupRun.objects.get().status, BackupRun.Status.FAILED)
+            self.assertFalse(lock.exists())

@@ -10,6 +10,11 @@ urlpatterns = [
     path('backups/manual/', backup_views.BackupManualView.as_view(), name='backup_manual'),
     path('backups/restore/', backup_views.BackupRestoreView.as_view(), name='backup_restore'),
     path(
+        'backups/cancel-running/',
+        backup_views.BackupCancelRunningView.as_view(),
+        name='backup_cancel_running',
+    ),
+    path(
         'backups/<int:pk>/download/',
         backup_views.BackupDownloadView.as_view(),
         name='backup_download',

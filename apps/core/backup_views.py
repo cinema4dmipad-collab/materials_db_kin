@@ -12,8 +12,10 @@ from django.views.generic.edit import FormView
 
 from apps.core.backup import (
     BackupError,
+    cancel_running_backups,
     create_manual_temp_dump,
     get_backup_dir,
+    get_running_backup,
     get_temp_dir,
     is_postgresql,
     restore_from_dump,
@@ -53,6 +55,7 @@ class BackupSettingsView(SystemAdminRequiredMixin, FormView):
         context['postgresql_available'] = is_postgresql()
         context['is_postgresql'] = context['postgresql_available']
         context['restore_form'] = kwargs.get('restore_form') or BackupRestoreForm()
+        context['running_backup'] = get_running_backup()
         return context
 
     def form_valid(self, form):
@@ -156,6 +159,24 @@ class BackupRestoreView(SystemAdminRequiredMixin, View):
             if target is not None:
                 target.unlink(missing_ok=True)
 
+        return redirect('administration:backups')
+
+    def get(self, request, *args, **kwargs):
+        return HttpResponseNotAllowed(['POST'])
+
+
+class BackupCancelRunningView(SystemAdminRequiredMixin, View):
+    http_method_names = ['post']
+
+    def post(self, request, *args, **kwargs):
+        cancelled = cancel_running_backups()
+        if cancelled:
+            messages.success(
+                request,
+                f'Отменено зависших запусков: {cancelled}. Можно снова сделать дамп.',
+            )
+        else:
+            messages.info(request, 'Активных запусков не найдено.')
         return redirect('administration:backups')
 
     def get(self, request, *args, **kwargs):
