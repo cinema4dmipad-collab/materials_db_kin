@@ -151,6 +151,8 @@ class BackupSchedulingTests(TestCase):
                 run_pg_dump(Path('unused.dump'))
 
     def test_retention_does_not_delete_temp_manual_dumps(self):
+        import os
+
         settings = BackupSettings.get_solo()
         settings.retention_count = 1
         settings.save(update_fields=['retention_count'])
@@ -164,6 +166,9 @@ class BackupSchedulingTests(TestCase):
             named.write_bytes(b'OLD')
             newer = Path(backup_dir) / 'materials_db_20260102_010101.dump'
             newer.write_bytes(b'NEW')
+            # Explicit mtimes: CI filesystems often share the same second.
+            os.utime(named, (1_700_000_000, 1_700_000_000))
+            os.utime(newer, (1_700_000_100, 1_700_000_100))
 
             from apps.core.backup import apply_retention
 

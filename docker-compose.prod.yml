@@ -32,6 +32,7 @@ services:
         DOKPLOY_COMMIT_HASH: ${DOKPLOY_COMMIT_HASH:-}
         SOURCE_COMMIT: ${SOURCE_COMMIT:-}
         BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-1}
+        POSTGRES_CLIENT_MAJOR: ${POSTGRES_CLIENT_MAJOR:-18}
     image: ${WEB_IMAGE:-materials-db-web:prod}
     pull_policy: build
     env_file: .env
@@ -59,6 +60,7 @@ services:
         DOKPLOY_COMMIT_HASH: ${DOKPLOY_COMMIT_HASH:-}
         SOURCE_COMMIT: ${SOURCE_COMMIT:-}
         BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-1}
+        POSTGRES_CLIENT_MAJOR: ${POSTGRES_CLIENT_MAJOR:-18}
     image: ${WEB_IMAGE:-materials-db-web:prod}
     pull_policy: build
     env_file: .env

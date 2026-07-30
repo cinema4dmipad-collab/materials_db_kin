@@ -57,6 +57,7 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
         PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
+        POSTGRES_CLIENT_MAJOR: ${POSTGRES_CLIENT_MAJOR:-18}
     image: ${WEB_IMAGE:-materials-db-web:local}
     env_file: .env
     environment:
@@ -84,6 +85,7 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
         PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
+        POSTGRES_CLIENT_MAJOR: ${POSTGRES_CLIENT_MAJOR:-18}
     image: ${WEB_IMAGE:-materials-db-web:local}
     env_file: .env
     environment:

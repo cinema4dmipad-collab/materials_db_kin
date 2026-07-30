@@ -21,7 +21,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# PostgreSQL 16 client (server in compose is postgres:16-*; stock bookworm client is 15).
+# pg_dump major must be >= Postgres server major (prod may be 18.x).
+ARG POSTGRES_CLIENT_MAJOR=18
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl gnupg libpq5 libpq-dev gcc \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -29,7 +30,7 @@ RUN apt-get update \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-client-16 \
+    && apt-get install -y --no-install-recommends postgresql-client-${POSTGRES_CLIENT_MAJOR} \
     && rm -rf /var/lib/apt/lists/*
 
 COPY deploy/ci/pip_mirror_env.sh /tmp/pip_mirror_env.sh
