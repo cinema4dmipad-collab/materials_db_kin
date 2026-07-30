@@ -58,7 +58,10 @@ class BackupSettingsForm(forms.ModelForm):
 class BackupRestoreForm(forms.Form):
     dump_file = forms.FileField(
         label='Файл дампа (.dump)',
-        help_text='Только custom-format дамп, созданный этой системой (pg_dump -Fc).',
+        help_text=(
+            'Только custom-format дамп (.dump), созданный этой системой. '
+            'Не выбирайте файл, который ещё скачивается в браузере.'
+        ),
         widget=forms.FileInput(attrs={**_BOOTSTRAP_INPUT, 'accept': '.dump,application/octet-stream'}),
     )
     confirm = forms.BooleanField(

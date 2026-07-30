@@ -24,6 +24,7 @@ def env_str(name: str, default: str = '') -> str:
 
 
 BACKUP_DIR = Path(env_str('BACKUP_DIR', str(BASE_DIR / 'backups')))
+BACKUP_SUBPROCESS_TIMEOUT = int(env_str('BACKUP_SUBPROCESS_TIMEOUT', '1800'))
 
 
 def env_bool(name: str, default: bool = False) -> bool:

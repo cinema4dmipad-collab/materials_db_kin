@@ -96,9 +96,12 @@ def run_pg_dump(output_path: Path) -> None:
         raise BackupError('Резервное копирование доступно только для PostgreSQL.')
 
     database = settings.DATABASES['default']
+    timeout = int(getattr(settings, 'BACKUP_SUBPROCESS_TIMEOUT', 1800))
     command = [
         ensure_pg_dump(),
         '-Fc',
+        # Не ждать блокировки бесконечно (иначе кнопка «висит» в браузере).
+        '--lock-wait-timeout=60000',
         '-f',
         str(output_path),
         '-h',
@@ -114,7 +117,18 @@ def run_pg_dump(output_path: Path) -> None:
         environment['PGPASSWORD'] = password
 
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True, env=environment)
+        subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise BackupError(
+            f'pg_dump превысил лимит времени ({timeout} с). Повторите позже или увеличьте BACKUP_SUBPROCESS_TIMEOUT.'
+        ) from exc
     except subprocess.CalledProcessError as exc:
         message = exc.stderr.strip() or exc.stdout.strip() or str(exc)
         raise BackupError(f'pg_dump завершился с ошибкой: {message}') from exc
@@ -163,7 +177,13 @@ def run_pg_restore(dump_path: Path) -> None:
             capture_output=True,
             text=True,
             env=environment,
+            timeout=int(getattr(settings, 'BACKUP_SUBPROCESS_TIMEOUT', 1800)),
         )
+    except subprocess.TimeoutExpired as exc:
+        timeout = int(getattr(settings, 'BACKUP_SUBPROCESS_TIMEOUT', 1800))
+        raise BackupError(
+            f'pg_restore превысил лимит времени ({timeout} с). Повторите позже или увеличьте BACKUP_SUBPROCESS_TIMEOUT.'
+        ) from exc
     except OSError as exc:
         raise BackupError(f'Не удалось запустить pg_restore: {exc}') from exc
 
