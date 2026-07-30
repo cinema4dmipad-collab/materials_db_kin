@@ -2033,7 +2033,7 @@ class MaterialImportUITests(TestCase):
         self.assertContains(preview, 'Черновик')
         self.assertContains(preview, 'Записать')
         self.assertContains(preview, 'import-wizard-nav')
-        self.assertContains(preview, 'value="review_apply"')
+        self.assertContains(preview, 'value="review_resolve_manual"')
         self.assertNotContains(preview, 'Построчно (точнее)')
         self.assertEqual(preview.context['wizard_forward_label'], 'Записать')
         self.assertFalse(Material.objects.filter(name='Стеклоткань демо').exists())
@@ -2041,7 +2041,7 @@ class MaterialImportUITests(TestCase):
         apply_response = self.client.post(
             reverse('materials:import'),
             {
-                'action': 'review_apply',
+                'action': 'review_resolve_manual',
                 'review_marker': '1',
                 'include_struct_0_0': '1',
                 'include_1_0': '1',
@@ -2135,7 +2135,7 @@ class MaterialImportUITests(TestCase):
         apply_response = self.client.post(
             reverse('materials:import'),
             {
-                'action': 'review_apply',
+                'action': 'review_resolve_manual',
                 'review_marker': '1',
                 'include_struct_0_0': '1',
             },
@@ -2191,7 +2191,7 @@ class MaterialImportUITests(TestCase):
         apply_response = self.client.post(
             reverse('materials:import'),
             {
-                'action': 'review_apply',
+                'action': 'review_resolve_manual',
                 'review_marker': '1',
                 'include_struct_0_0': '1',
             },
@@ -2340,7 +2340,7 @@ class MaterialImportUITests(TestCase):
         apply_response = self.client.post(
             reverse('materials:import'),
             {
-                'action': 'review_apply',
+                'action': 'review_resolve_manual',
                 'review_marker': '1',
                 'duplicate_name_policy': 'skip',
                 'include_struct_0_0': '1',
@@ -2392,7 +2392,7 @@ class MaterialImportUITests(TestCase):
         apply_response = self.client.post(
             reverse('materials:import'),
             {
-                'action': 'review_apply',
+                'action': 'review_resolve_manual',
                 'review_marker': '1',
                 'duplicate_name_policy': 'prefix',
                 'duplicate_name_prefix': 'импорт-',
@@ -2440,7 +2440,7 @@ class MaterialImportUITests(TestCase):
         apply_response = self.client.post(
             reverse('materials:import'),
             {
-                'action': 'review_apply',
+                'action': 'review_resolve_manual',
                 'review_marker': '1',
                 'duplicate_name_policy': 'postfix',
                 'duplicate_name_postfix': '-импорт',
@@ -2499,7 +2499,7 @@ class MaterialImportUITests(TestCase):
         self.assertContains(review, 'import-validation-report')
         self.assertContains(review, 'запись запрещена')
         self.assertContains(review, 'Исправить сопоставление')
-        self.assertNotContains(review, 'value="review_apply"')
+        self.assertNotContains(review, 'value="review_resolve_manual"')
         self.assertNotContains(review, 'value="review_iterate_start"')
         self.assertNotContains(review, 'value="review_recheck"')
 
@@ -2509,7 +2509,7 @@ class MaterialImportUITests(TestCase):
 
         blocked = self.client.post(
             reverse('materials:import'),
-            {'action': 'review_apply', 'review_marker': '1'},
+            {'action': 'review_resolve_manual', 'review_marker': '1'},
         )
         self.assertEqual(blocked.status_code, 200)
         self.assertContains(blocked, 'запись запрещена')
