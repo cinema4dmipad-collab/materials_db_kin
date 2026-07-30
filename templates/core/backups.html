@@ -17,6 +17,22 @@
 </div>
 {% endif %}
 
+{% if running_backup %}
+<div class="alert alert-danger d-flex flex-wrap justify-content-between align-items-center gap-3" role="alert">
+    <div>
+        Есть зависший запуск со статусом «Выполняется»
+        (с {{ running_backup.started_at|date:"d.m.Y H:i" }}, {{ running_backup.get_trigger_display }}).
+        Пока он не сброшен, новый дамп не начнётся.
+    </div>
+    <form method="post" action="{% url 'administration:backup_cancel_running' %}" class="mb-0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-light">
+            Сбросить зависший запуск
+        </button>
+    </form>
+</div>
+{% endif %}
+
 <div class="row g-4 mb-4">
     <div class="col-lg-8">
         <div class="card h-100">
