@@ -876,6 +876,9 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Теги для всех материалов')
         self.assertContains(response, 'дубликатах по названию')
         self.assertContains(response, 'уже исправленные значения')
+        self.assertContains(response, 'постфикс')
+        self.assertContains(response, 'изменённые вручную')
+        self.assertContains(response, 'Развернуть')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):
