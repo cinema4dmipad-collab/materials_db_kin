@@ -45,6 +45,51 @@ def get_temp_dir() -> Path:
     return temp_dir
 
 
+def list_server_dumps() -> list[tuple[str, str]]:
+    """Список .dump в BACKUP_DIR для выбора в UI: (filename, label)."""
+    backup_dir = get_backup_dir()
+    items: list[tuple[str, str, float]] = []
+    for path in backup_dir.glob('*.dump'):
+        if not path.is_file():
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        size_kb = max(stat.st_size / 1024, 0.1)
+        label = f'{path.name} ({size_kb:.1f} КБ)'
+        items.append((path.name, label, stat.st_mtime))
+    items.sort(key=lambda row: row[2], reverse=True)
+    return [(name, label) for name, label, _mtime in items]
+
+
+def resolve_server_dump(filename: str) -> Path:
+    """Безопасно резолвит имя файла внутри BACKUP_DIR."""
+    name = Path(filename).name
+    if not name or name != filename or not name.endswith('.dump'):
+        raise BackupError('Некорректное имя файла дампа.')
+    backup_dir = get_backup_dir().resolve()
+    path = (backup_dir / name).resolve()
+    if path.parent != backup_dir or not path.is_file():
+        raise BackupError('Файл дампа на сервере не найден.')
+    return path
+
+
+def assert_pg_custom_dump(path: Path) -> None:
+    """Проверяет сигнатуру custom-format pg_dump (PGDMP)."""
+    try:
+        with path.open('rb') as handle:
+            magic = handle.read(5)
+    except OSError as exc:
+        raise BackupError(f'Не удалось прочитать файл дампа: {exc}') from exc
+    if magic != b'PGDMP':
+        raise BackupError(
+            'Файл не похож на целый дамп pg_dump (-Fc). '
+            'Возможно, скачивание оборвалось — скачайте снова через «Скачать» в таблице '
+            'или скопируйте файл на рабочий стол и загрузите копию.'
+        )
+
+
 def _clear_stale_backup_state() -> None:
     """Снимает зависшие RUNNING и устаревший lock-файл после краша / restore."""
     now = timezone.now()
@@ -185,6 +230,7 @@ def run_pg_restore(dump_path: Path) -> None:
         raise BackupError('Восстановление доступно только для PostgreSQL.')
     if not dump_path.is_file():
         raise BackupError('Файл дампа не найден.')
+    assert_pg_custom_dump(dump_path)
 
     database = settings.DATABASES['default']
     command = [

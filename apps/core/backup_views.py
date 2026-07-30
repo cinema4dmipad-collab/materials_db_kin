@@ -17,6 +17,8 @@ from apps.core.backup import (
     get_running_backup,
     get_temp_dir,
     is_postgresql,
+    list_server_dumps,
+    resolve_server_dump,
     restore_from_dump,
 )
 from apps.core.forms import BackupRestoreForm, BackupSettingsForm
@@ -39,8 +41,12 @@ class BackupSettingsView(SystemAdminRequiredMixin, FormView):
         context['backup_runs'] = BackupRun.objects.all()[:20]
         context['postgresql_available'] = is_postgresql()
         context['is_postgresql'] = context['postgresql_available']
-        context['restore_form'] = kwargs.get('restore_form') or BackupRestoreForm()
+        server_choices = list_server_dumps()
+        context['restore_form'] = kwargs.get('restore_form') or BackupRestoreForm(
+            server_choices=server_choices
+        )
         context['running_backup'] = get_running_backup()
+        context['server_dumps_count'] = len(server_choices)
         return context
 
     def form_valid(self, form):
@@ -91,31 +97,47 @@ class BackupRestoreView(SystemAdminRequiredMixin, View):
             messages.error(request, 'Восстановление доступно только для PostgreSQL.')
             return redirect('administration:backups')
 
-        form = BackupRestoreForm(request.POST, request.FILES)
+        form = BackupRestoreForm(
+            request.POST,
+            request.FILES,
+            server_choices=list_server_dumps(),
+        )
         if not form.is_valid():
+            for error in form.non_field_errors():
+                messages.error(request, error)
             for field_errors in form.errors.values():
                 for error in field_errors:
                     messages.error(request, error)
             return redirect('administration:backups')
 
-        uploaded = form.cleaned_data['dump_file']
+        server_dump = (form.cleaned_data.get('server_dump') or '').strip()
+        uploaded = form.cleaned_data.get('dump_file')
         target = None
+        cleanup_target = False
+        original_name = ''
+
         try:
-            get_temp_dir()
-            with tempfile.NamedTemporaryFile(
-                suffix='.dump',
-                prefix='restore_',
-                dir=get_temp_dir(),
-                delete=False,
-            ) as temporary_file:
-                target = Path(temporary_file.name)
-                for chunk in uploaded.chunks():
-                    temporary_file.write(chunk)
+            if server_dump:
+                target = resolve_server_dump(server_dump)
+                original_name = target.name
+            else:
+                get_temp_dir()
+                with tempfile.NamedTemporaryFile(
+                    suffix='.dump',
+                    prefix='restore_',
+                    dir=get_temp_dir(),
+                    delete=False,
+                ) as temporary_file:
+                    target = Path(temporary_file.name)
+                    cleanup_target = True
+                    for chunk in uploaded.chunks():
+                        temporary_file.write(chunk)
+                original_name = uploaded.name
 
             connections.close_all()
             restore_from_dump(
                 dump_path=target,
-                original_name=uploaded.name,
+                original_name=original_name,
                 user=request.user if request.user.is_authenticated else None,
             )
             messages.success(
@@ -127,7 +149,7 @@ class BackupRestoreView(SystemAdminRequiredMixin, View):
         except Exception as exc:  # noqa: BLE001
             messages.error(request, f'Не удалось восстановить дамп: {exc}')
         finally:
-            if target is not None:
+            if cleanup_target and target is not None:
                 target.unlink(missing_ok=True)
 
         return redirect('administration:backups')
