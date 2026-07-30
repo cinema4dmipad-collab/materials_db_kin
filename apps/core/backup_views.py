@@ -6,14 +6,13 @@ from django.db import connections
 from django.http import FileResponse, Http404, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
-from django.utils import timezone
 from django.views import View
 from django.views.generic.edit import FormView
 
 from apps.core.backup import (
     BackupError,
     cancel_running_backups,
-    create_manual_temp_dump,
+    create_manual_volume_dump,
     get_backup_dir,
     get_running_backup,
     get_temp_dir,
@@ -23,20 +22,6 @@ from apps.core.backup import (
 from apps.core.forms import BackupRestoreForm, BackupSettingsForm
 from apps.core.models import BackupRun, BackupSettings
 from apps.workspaces.mixins import SystemAdminRequiredMixin
-
-
-class TemporaryBackupFileResponse(FileResponse):
-    """Удаляет временный дамп после завершения HTTP-ответа."""
-
-    def __init__(self, *args, temporary_path: Path, **kwargs):
-        self.temporary_path = temporary_path
-        super().__init__(*args, **kwargs)
-
-    def close(self):
-        try:
-            super().close()
-        finally:
-            self.temporary_path.unlink(missing_ok=True)
 
 
 class BackupSettingsView(SystemAdminRequiredMixin, FormView):
@@ -74,38 +59,25 @@ class BackupManualView(SystemAdminRequiredMixin, View):
             messages.error(request, 'Резервное копирование доступно только для PostgreSQL.')
             return redirect('administration:backups')
 
-        dump_path = None
         try:
-            backup_run, dump_path = create_manual_temp_dump(request.user)
+            backup_run = create_manual_volume_dump(request.user)
         except BackupError as exc:
             messages.error(request, str(exc))
             return redirect('administration:backups')
 
-        if backup_run.status != BackupRun.Status.SUCCESS or not dump_path.exists():
-            if dump_path is not None:
-                dump_path.unlink(missing_ok=True)
+        if backup_run is None or backup_run.status != BackupRun.Status.SUCCESS:
             messages.error(
                 request,
-                backup_run.error_message or 'Не удалось создать резервную копию.',
+                getattr(backup_run, 'error_message', None) or 'Не удалось создать резервную копию.',
             )
             return redirect('administration:backups')
 
-        filename = f'materials_db_{timezone.localtime(backup_run.started_at):%Y%m%d_%H%M%S}.dump'
-        try:
-            response = TemporaryBackupFileResponse(
-                dump_path.open('rb'),
-                as_attachment=True,
-                filename=filename,
-                temporary_path=dump_path,
-            )
-        except OSError:
-            dump_path.unlink(missing_ok=True)
-            messages.error(request, 'Не удалось открыть файл резервной копии.')
-            return redirect('administration:backups')
-
-        backup_run.filename = ''
-        backup_run.save(update_fields=['filename'])
-        return response
+        # Файл лежит на томе — отдельный GET можно повторить, если браузер оборвал связь.
+        messages.success(
+            request,
+            'Дамп создан. Если скачивание оборвалось — нажмите «Скачать» в таблице запусков.',
+        )
+        return redirect('administration:backup_download', pk=backup_run.pk)
 
     def get(self, request, *args, **kwargs):
         return HttpResponseNotAllowed(['POST'])
@@ -140,7 +112,6 @@ class BackupRestoreView(SystemAdminRequiredMixin, View):
                 for chunk in uploaded.chunks():
                     temporary_file.write(chunk)
 
-            # Close ORM connections before pg_restore --clean drops objects under us.
             connections.close_all()
             restore_from_dump(
                 dump_path=target,
@@ -153,7 +124,7 @@ class BackupRestoreView(SystemAdminRequiredMixin, View):
             )
         except BackupError as exc:
             messages.error(request, str(exc))
-        except Exception as exc:  # noqa: BLE001 — surface unexpected restore failures
+        except Exception as exc:  # noqa: BLE001
             messages.error(request, f'Не удалось восстановить дамп: {exc}')
         finally:
             if target is not None:
@@ -188,7 +159,7 @@ class BackupDownloadView(SystemAdminRequiredMixin, View):
         backup_run = get_object_or_404(
             BackupRun,
             pk=pk,
-            trigger=BackupRun.Trigger.SCHEDULED,
+            trigger__in=(BackupRun.Trigger.SCHEDULED, BackupRun.Trigger.MANUAL),
             status=BackupRun.Status.SUCCESS,
         )
         if not backup_run.filename:
@@ -199,8 +170,10 @@ class BackupDownloadView(SystemAdminRequiredMixin, View):
         if backup_path.parent != backup_dir or not backup_path.is_file():
             raise Http404('Файл резервной копии не найден.')
 
-        return FileResponse(
+        response = FileResponse(
             backup_path.open('rb'),
             as_attachment=True,
             filename=backup_path.name,
         )
+        response['Content-Length'] = backup_path.stat().st_size
+        return response
