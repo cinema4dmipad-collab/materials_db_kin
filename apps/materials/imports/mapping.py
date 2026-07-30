@@ -38,15 +38,18 @@ OPTIONAL_MATERIAL_TARGETS = (
     (TARGET_MANUFACTURER, 'Производитель'),
     (TARGET_AVAILABILITY, 'Доступность'),
     (TARGET_TECHNOLOGY, 'Технология'),
-    (TARGET_TAGS, 'Теги (для «Марка» → марка::значение)'),
 )
 OPTIONAL_MATERIAL_TARGET_KEYS = frozenset(target for target, _label in OPTIONAL_MATERIAL_TARGETS)
 
+TARGET_TAG_ROW_PREFIX = 'tag:'
+
 
 def field_mapping_section(target: str, *, is_primary: bool) -> str:
-    """Секция конструктора: primary | material | property."""
+    """Секция конструктора: primary | material | property | tag."""
     if is_primary:
         return 'primary'
+    if (target or '').startswith(TARGET_TAG_ROW_PREFIX) or target == TARGET_TAGS:
+        return 'tag'
     if (target or '').startswith(TARGET_PROPERTY_PREFIX):
         return 'property'
     return 'material'
@@ -287,6 +290,29 @@ def _field_ui_label(raw: str) -> str:
     return text or raw
 
 
+def resolve_tag_column_indices(
+    columns: list[WideColumn],
+    mapping: dict,
+    tag_columns: list[str] | None = None,
+) -> list[int]:
+    """Индексы колонок, из которых формируются scoped-теги (порядок как в файле)."""
+    indices: set[int] = set()
+    for raw in tag_columns or []:
+        try:
+            indices.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+    for key, entry in (mapping or {}).items():
+        target, _parse = normalize_mapping_entry(entry)
+        if target == TARGET_TAGS:
+            try:
+                indices.add(int(key))
+            except (TypeError, ValueError):
+                continue
+    order = [column.index for column in columns]
+    return [index for index in order if index in indices]
+
+
 def build_field_mapping_rows(
     *,
     columns: list[WideColumn],
@@ -295,6 +321,7 @@ def build_field_mapping_rows(
     match_policy: str | None = None,
     target_labels: dict[str, str] | None = None,
     sample_row: dict | None = None,
+    tag_columns: list[str] | None = None,
 ) -> list[dict]:
     """
     Проекция column→target на строки «поле → колонка» для UI.
@@ -325,6 +352,8 @@ def build_field_mapping_rows(
     for target, (column, parse) in by_target.items():
         if target in primary_set:
             continue
+        if target == TARGET_TAGS:
+            continue
         ordered_targets.append((target, _field_ui_label(labels.get(target, target)), False))
 
     sample = sample_row or {}
@@ -341,17 +370,62 @@ def build_field_mapping_rows(
             'is_primary': section == 'primary',
             'is_material': section == 'material',
             'is_property': section == 'property',
+            'is_tag': section == 'tag',
             'is_addon': section != 'primary',
             'section': section,
             'target': target,
+            'mapping_target': target,
             'target_label': label,
             'is_required_target': target in required_keys,
             'column': column,
             'column_index': column.index if column is not None else None,
             'parse': parse,
             'sample': sample_text,
+            'tag_preview': '',
+        })
+
+    column_by_index = {column.index: column for column in columns}
+    for col_index in resolve_tag_column_indices(columns, mapping, tag_columns):
+        column = column_by_index.get(col_index)
+        if column is None:
+            continue
+        key = str(column.index)
+        if key in mapping:
+            _target, parse = normalize_mapping_entry(mapping[key])
+        else:
+            parse = PARSE_AUTO
+        sample_text = _sample_text(sample.get(column.index))
+        tag_preview = _preview_tag_from_column(column, sample_text)
+        rows.append({
+            'is_field_row': True,
+            'is_primary': False,
+            'is_material': False,
+            'is_property': False,
+            'is_tag': True,
+            'is_addon': True,
+            'section': 'tag',
+            'target': f'{TARGET_TAG_ROW_PREFIX}{column.index}',
+            'mapping_target': TARGET_TAGS,
+            'target_label': column.display or column.label or f'Колонка {column.index + 1}',
+            'is_required_target': False,
+            'column': column,
+            'column_index': column.index,
+            'parse': parse,
+            'sample': sample_text,
+            'tag_preview': tag_preview,
         })
     return rows
+
+
+def _preview_tag_from_column(column: WideColumn, sample_text: str) -> str:
+    from apps.materials.imports.staging import _tag_from_column
+
+    if not sample_text or sample_text == '—':
+        from apps.materials.imports.staging import _tag_scope_from_column
+
+        scope = _tag_scope_from_column(column.group or '', column.label or '')
+        return f'{scope}::…'
+    return _tag_from_column(column, sample_text)
 
 
 def unused_columns_from_mapping(

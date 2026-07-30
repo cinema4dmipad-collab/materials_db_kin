@@ -5,7 +5,7 @@
 {% block title %}Проверка импорта — База композитов{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/import_review.css' %}?v={{ app_version }}-cols2" rel="stylesheet">
+<link href="{% static 'css/import_review.css' %}?v={{ app_version }}-cols4" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -14,8 +14,8 @@
         <h1 class="h4 mb-1">Проверка импорта</h1>
         <p class="text-muted mb-0 small">
             Новые материалы из импорта попадают в
-            <code>{{ status_approved }}</code> («Утвержден»).
-            Перетащите в «Проверено» — станет <code>{{ status_verified }}</code>.
+            <code>{{ status_approved }}</code> («{{ column_label_pending }}»).
+            Перетащите в «{{ column_label_established }}» — станет <code>{{ status_verified }}</code>.
         </p>
     </div>
     <div class="d-flex flex-wrap gap-2">
@@ -27,9 +27,9 @@
 <div class="import-review-board" id="import-review-board"
      data-review-url="{% url 'materials:import_review' %}"
      data-csrf="{{ csrf_token }}">
-    <section class="import-review-column" data-column="approved" data-drop-zone="approved" aria-label="Утвержден">
+    <section class="import-review-column" data-column="approved" data-drop-zone="approved" aria-label="{{ column_label_pending }}">
         <header class="import-review-column__head">
-            <h2 class="import-review-column__title">Утвержден</h2>
+            <h2 class="import-review-column__title">{{ column_label_pending }}</h2>
             <span class="badge text-bg-warning" id="import-review-approved-count">{{ approved_count }}</span>
         </header>
         <div class="import-review-column__body">
@@ -37,15 +37,15 @@
             {% include 'materials/includes/import_review_card.html' with material=material status='approved' %}
             {% empty %}
             <p class="import-review-empty text-muted small mb-0" data-empty-approved>
-                Нет материалов со статусом «утвержден».
+                Нет материалов со статусом «на проверке».
             </p>
             {% endfor %}
         </div>
     </section>
 
-    <section class="import-review-column" data-column="verified" data-drop-zone="verified" aria-label="Проверено">
+    <section class="import-review-column" data-column="verified" data-drop-zone="verified" aria-label="{{ column_label_established }}">
         <header class="import-review-column__head">
-            <h2 class="import-review-column__title">Проверено</h2>
+            <h2 class="import-review-column__title">{{ column_label_established }}</h2>
             <span class="badge text-bg-success" id="import-review-verified-count">{{ verified_count }}</span>
         </header>
         <div class="import-review-column__body">
@@ -53,7 +53,7 @@
             {% include 'materials/includes/import_review_card.html' with material=material status='verified' %}
             {% empty %}
             <p class="import-review-empty text-muted small mb-0" data-empty-verified>
-                Перетащите сюда проверенные материалы.
+                Перетащите сюда учреждённые материалы.
             </p>
             {% endfor %}
         </div>
@@ -62,5 +62,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/import_review.js' %}?v={{ app_version }}-cols2"></script>
+<script src="{% static 'js/import_review.js' %}?v={{ app_version }}-cols4"></script>
 {% endblock %}

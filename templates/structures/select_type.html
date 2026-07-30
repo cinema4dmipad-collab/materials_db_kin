@@ -39,11 +39,12 @@
 
                         <div class="card-body d-flex flex-column">
 
-                            <h2 class="h5 card-title d-flex align-items-center gap-2 flex-wrap">
-
-                                {% include 'includes/type_badge.html' with label=st.name tone=st.display_color %}
-
-                            </h2>
+                            <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                                <h2 class="h5 card-title mb-0">
+                                    {% include 'includes/type_badge.html' with label=st.name tone=st.display_color %}
+                                </h2>
+                                {% include 'includes/bookmark_toggle.html' with bookmark_entity_type=structure_type_bookmark_entity_type bookmark_entity_id=st.bookmark_entity_id bookmark_context_slug=st.code is_bookmarked=st.is_bookmarked bookmark_next_url=request.get_full_path %}
+                            </div>
 
                             <p class="card-text text-muted small mb-2">
                                 Код: <code>{{ st.code }}</code><br>

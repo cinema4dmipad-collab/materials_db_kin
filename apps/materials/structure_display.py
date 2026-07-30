@@ -4,7 +4,7 @@ from apps.core.unit_display import split_label_and_unit
 from apps.structures.display_format import format_structure_field_display
 from apps.structures.constants import DEFAULT_DECIMAL_PLACES
 from apps.structures.decimal_range import format_decimal_field_display, read_decimal_field_state
-from apps.structures.forms import material_from_value
+from apps.structures.forms import material_link_display
 from apps.structures.choice_options import choice_label_for_value, resolved_choice_options
 from apps.structures.models import CHOICE_FIELD_TYPE, MATERIAL_LINK_FIELD_TYPE
 
@@ -24,10 +24,7 @@ def structure_field_display_value(field, value, structure_params=None):
     if value is None or value == '':
         return '—'
     if field.field_type == MATERIAL_LINK_FIELD_TYPE:
-        material = material_from_value(value)
-        if material is not None:
-            return f'{material.code} - {material.name}'
-        return value
+        return material_link_display(value)
     options = resolved_choice_options(field)
     if field.field_type == CHOICE_FIELD_TYPE or options:
         return choice_label_for_value(options, value) or '—'

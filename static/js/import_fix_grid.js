@@ -12,6 +12,7 @@
     var editorRaw = document.getElementById('import-fix-editor-raw');
     var editorInput = document.getElementById('import-fix-editor-input');
     var editorSkip = document.getElementById('import-fix-editor-skip');
+    var editorSkipWrap = document.getElementById('import-fix-editor-skip-wrap');
     var editorClose = document.getElementById('import-fix-editor-close');
     var jumpBtn = document.getElementById('import-unrecognized-jump');
     var gridWrap = document.getElementById('import-fix-grid-wrap');
@@ -51,7 +52,12 @@
         var titleText = document.getElementById('import-unrecognized-title-text');
         var hint = document.getElementById('import-unrecognized-hint');
         var label = document.getElementById('import-fix-attention-label');
+        var hasProblemsInitially = !!jumpBtn;
         var resolved = remaining === 0;
+
+        if (!hasProblemsInitially) {
+            return;
+        }
 
         if (panel) {
             panel.classList.toggle('is-resolved', resolved);
@@ -81,14 +87,22 @@
         }
         if (hint) {
             hint.textContent = resolved
-                ? 'Все жёлтые ячейки обработаны. Можно нажимать «Записать».'
+                ? 'Все жёлтые ячейки обработаны. Синим отмечены изменённые вручную. Можно нажимать «Записать».'
                 : (
                     'В таблице — все значения, которые будут записаны в базу. '
+                    + 'Кликните любую ячейку, чтобы изменить значение. '
                     + 'Подсвеченные ячейки система не разобрала: кликните ячейку или бейдж «Предупреждение», '
-                    + 'чтобы переходить по ним по кругу и править значение ниже. '
-                    + 'Исправленные ячейки подсвечиваются зелёным.'
+                    + 'чтобы переходить по ним по кругу. '
+                    + 'Исправленные ячейки подсвечиваются зелёным, изменённые вручную — синим.'
                 );
         }
+    }
+
+    function wasUnrecognized(cell) {
+        return cell.getAttribute('data-was-unrecognized') === '1'
+            || cell.classList.contains('is-unrecognized')
+            || cell.classList.contains('is-fixed')
+            || cell.classList.contains('is-skipped');
     }
 
     function applyCellResolution(cell) {
@@ -101,20 +115,33 @@
         var skipInput = hiddenSkip(inputName);
         var skipped = !!(skipInput && skipInput.checked);
         var value = valueInput ? valueInput.value : '';
+        var problem = wasUnrecognized(cell);
 
-        cell.classList.remove('is-skipped', 'is-fixed', 'is-unrecognized');
+        cell.classList.remove('is-skipped', 'is-fixed', 'is-unrecognized', 'is-excluded', 'is-edited');
         if (skipped) {
             cell.classList.add('is-skipped');
             cell.title = 'Игнорируется при записи: ' + (raw || '—');
             setCellDisplay(cell, raw);
-        } else if (String(value).trim() !== '') {
+            if (problem) {
+                cell.setAttribute('data-was-unrecognized', '1');
+            }
+        } else if (problem && String(value).trim() !== '') {
             cell.classList.add('is-fixed');
+            cell.setAttribute('data-was-unrecognized', '1');
             cell.title = 'Исправлено: ' + String(value).trim();
             setCellDisplay(cell, value);
-        } else {
+        } else if (problem && String(value).trim() === '') {
             cell.classList.add('is-unrecognized');
+            cell.setAttribute('data-was-unrecognized', '1');
             cell.title = 'Клик — исправить: ' + (raw || '');
             setCellDisplay(cell, raw);
+        } else if (isValueEdited(inputName, value)) {
+            cell.classList.add('is-edited');
+            cell.title = 'Изменено: ' + (String(value).trim() || '—');
+            setCellDisplay(cell, value);
+        } else {
+            cell.title = 'Клик — изменить: ' + (String(value).trim() || raw || '');
+            setCellDisplay(cell, value);
         }
         updateAttentionCount();
     }
@@ -125,6 +152,21 @@
 
     function hiddenSkip(inputName) {
         return form.querySelector('[data-fix-skip="' + CSS.escape(inputName) + '"]');
+    }
+
+    function initialValue(inputName) {
+        var valueInput = hiddenValue(inputName);
+        if (!valueInput) {
+            return '';
+        }
+        if (!valueInput.hasAttribute('data-initial-value')) {
+            valueInput.setAttribute('data-initial-value', valueInput.value);
+        }
+        return valueInput.getAttribute('data-initial-value') || '';
+    }
+
+    function isValueEdited(inputName, value) {
+        return String(value) !== String(initialValue(inputName));
     }
 
     function clearHeaderHighlights() {
@@ -189,6 +231,7 @@
     }
 
     function clearSelection() {
+        syncFromEditor();
         if (selectedCell) {
             selectedCell.classList.remove('is-selected');
             selectedCell = null;
@@ -222,6 +265,7 @@
         var target = cell.getAttribute('data-target-label') || '';
         var column = cell.getAttribute('data-column-label') || '';
         var raw = cell.getAttribute('data-raw') || '';
+        var allowSkip = cell.getAttribute('data-allow-skip') !== '0';
 
         if (editorMeta) {
             editorMeta.textContent = 'строка ' + sourceRow
@@ -240,8 +284,12 @@
             editorInput.value = valueInput ? valueInput.value : raw;
             editorInput.disabled = !!(skipInput && skipInput.checked);
         }
+        if (editorSkipWrap) {
+            editorSkipWrap.classList.toggle('d-none', !allowSkip || !skipInput);
+        }
         if (editorSkip) {
             editorSkip.checked = !!(skipInput && skipInput.checked);
+            editorSkip.disabled = !allowSkip || !skipInput;
         }
 
         editor.classList.remove('d-none');
@@ -275,11 +323,11 @@
         if (valueInput && editorInput) {
             valueInput.value = editorInput.value;
         }
-        if (skipInput && editorSkip) {
+        if (skipInput && editorSkip && !editorSkip.disabled) {
             skipInput.checked = editorSkip.checked;
         }
         if (editorInput) {
-            editorInput.disabled = !!(editorSkip && editorSkip.checked);
+            editorInput.disabled = !!(editorSkip && editorSkip.checked && !editorSkip.disabled);
         }
         applyCellResolution(selectedCell);
     }
@@ -321,7 +369,9 @@
             // Enter в поле правки не должен жать «Записать».
             event.preventDefault();
             syncFromEditor();
-            jumpToNextProblem();
+            if (problemCells().length) {
+                jumpToNextProblem();
+            }
         });
     }
     if (editorSkip) {
@@ -360,6 +410,14 @@
 
     form.addEventListener('submit', function () {
         syncFromEditor();
+    }, true);
+
+    form.querySelectorAll('[data-fix-input]').forEach(function (input) {
+        input.setAttribute('data-initial-value', input.value);
+    });
+
+    grid.querySelectorAll('[data-fix-cell].is-unrecognized').forEach(function (cell) {
+        cell.setAttribute('data-was-unrecognized', '1');
     });
 
     updateAttentionCount();

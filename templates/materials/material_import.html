@@ -4,7 +4,7 @@
 {% block title %}Импорт материалов — База композитов{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-maptags2" rel="stylesheet">
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-tags4" rel="stylesheet">
 <link href="{% static 'css/reference_properties_picker.css' %}?v={{ app_version }}" rel="stylesheet">
 {% endblock %}
 
@@ -133,9 +133,9 @@
                             <div class="import-schema__stats-label">Статистика по листу</div>
                             {% if layout_schema %}
                             <ul class="import-schema__stats-list">
-                                <li>Заголовки · стр. {{ layout_schema.header_row }}</li>
+                                <li>Заголовки · строка {{ layout_schema.header_row }}</li>
                                 {% if layout_schema.has_groups %}
-                                <li>Группы · стр. {{ layout_schema.group_row }}</li>
+                                <li>Группы · строка {{ layout_schema.group_row }}</li>
                                 {% else %}
                                 <li>Групп колонок нет</li>
                                 {% endif %}
@@ -144,7 +144,7 @@
                                     {{ layout_schema.cols_shown }}{% if layout_schema.cols_total > layout_schema.cols_shown %}/{{ layout_schema.cols_total }}{% endif %}
                                 </li>
                                 {% if layout_schema.data_rows_shown %}
-                                <li>В превью данных: {{ layout_schema.data_rows_shown }}</li>
+                                <li>Строк данных: {{ layout_schema.data_rows_shown }}</li>
                                 {% endif %}
                             </ul>
                             {% elif layout_hint %}
@@ -293,7 +293,7 @@
         <p class="small text-muted mb-3">
             Файл: <strong>{{ staged_filename }}</strong>
             {% if wide_table.sheet_name %} · лист «{{ wide_table.sheet_name }}»{% endif %}
-            · заголовок стр. {{ config.header_row }}{% if config.group_row %}, группы стр. {{ config.group_row }}{% endif %}
+            · заголовок, строка {{ config.header_row }}{% if config.group_row %}, группы, строка {{ config.group_row }}{% endif %}
             · строк: {{ wide_table.rows|length }}
         </p>
 
@@ -379,6 +379,13 @@
                        data-map-index="{{ item.column.index }}">
                 <input type="hidden" name="parse_{{ item.column.index }}" value="{{ item.parse }}"
                        data-parse-index="{{ item.column.index }}">
+                {% endfor %}
+            </div>
+            <div id="import-map-tag-columns" class="d-none" aria-hidden="true">
+                {% for item in field_mapping_rows %}
+                {% if item.is_tag and item.column_index != None %}
+                <input type="hidden" name="tag_col" value="{{ item.column_index }}">
+                {% endif %}
                 {% endfor %}
             </div>
 
@@ -542,6 +549,35 @@
                                     </td>
                                 </tr>
                             </tbody>
+                            <tbody class="import-map-section"
+                                   data-map-section="tag"
+                                   id="import-map-section-tag">
+                                <tr class="import-map-section__header">
+                                    <th scope="colgroup" colspan="4">
+                                        <button type="button"
+                                                class="import-map-section__toggle"
+                                                data-map-section-toggle
+                                                aria-expanded="true"
+                                                aria-controls="import-map-field-rows-tag">
+                                            <span class="import-map-section__chevron" aria-hidden="true"></span>
+                                            <span class="import-map-section__title">Теги</span>
+                                            <span class="badge text-bg-light border import-map-section__count"
+                                                  data-map-section-count>0</span>
+                                        </button>
+                                    </th>
+                                </tr>
+                                {% for item in field_mapping_rows %}
+                                {% if item.is_tag %}
+                                {% include 'materials/includes/import_map_field_row.html' with item=item %}
+                                {% endif %}
+                                {% endfor %}
+                                <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_tag %} d-none{% endif %}{% endfor %}"
+                                    data-map-section-empty>
+                                    <td colspan="4" class="text-muted small">
+                                        Перетащите колонки из каталога или значение/колонку из полей выше.
+                                    </td>
+                                </tr>
+                            </tbody>
                         </table>
                     </div>
                 </section>
@@ -595,458 +631,7 @@
             {% if selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
         </p>
 
-        {% if has_unrecognized %}
-        <form method="post" class="mb-0" id="import-unrecognized-form">
-            {% csrf_token %}
-            {% for item in unrecognized_fields %}
-            <input type="hidden"
-                   class="import-fix-hidden-value"
-                   name="{{ item.input_name }}"
-                   id="id_{{ item.input_name }}"
-                   value="{{ item.fix_value }}"
-                   data-fix-input="{{ item.input_name }}">
-            <input type="checkbox"
-                   class="d-none import-fix-hidden-skip"
-                   name="{{ item.skip_name }}"
-                   id="id_{{ item.skip_name }}"
-                   value="1"
-                   data-fix-skip="{{ item.input_name }}"
-                   {% if item.skip_checked %}checked{% endif %}>
-            {% endfor %}
-
-                <div class="import-wizard-nav-bar mb-3" role="region" aria-label="Навигация мастера импорта">
-                    <nav class="import-wizard-nav">
-                        <div class="import-wizard-nav__back">
-                            {% if wizard_back_url %}
-                            <a href="{{ wizard_back_url }}" class="btn btn-outline-secondary import-wizard-nav__back-btn">
-                                ← {{ wizard_back_label|default:"Назад" }}
-                            </a>
-                            {% endif %}
-                        </div>
-                        <div class="import-wizard-nav__forward d-flex flex-wrap gap-2 align-items-center">
-                            <button type="button"
-                                    class="btn btn-outline-secondary"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#import-ignore-unrecognized-modal"
-                                    title="Нераспознанные значения останутся пустыми; дубликаты по названию не запишутся (если выбран пропуск)">
-                                Игнорировать все и записать
-                            </button>
-                            <span class="import-help__trigger" tabindex="0" aria-label="Подсказка: игнорировать все">
-                                <span class="import-help__mark" aria-hidden="true">?</span>
-                                <span class="import-help__tip import-help__tip--end" role="tooltip">
-                                    Кривые (нераспознанные) значения не будут записаны — поля останутся пустыми.
-                                    Дубликаты по названию тоже не попадут в базу, если выбран вариант
-                                    «Не записывать дубликаты» (или получат префикс, если вы его задали).
-                                </span>
-                            </span>
-                            <button type="submit"
-                                    name="action"
-                                    value="review_resolve_manual"
-                                    class="btn btn-primary import-wizard-nav__forward-btn"
-                                    data-import-busy="1">
-                                {{ wizard_forward_label|default:"Записать" }}
-                            </button>
-                            <span class="import-help__trigger" tabindex="0" aria-label="Подсказка">
-                                <span class="import-help__mark" aria-hidden="true">?</span>
-                                <span class="import-help__tip import-help__tip--end" role="tooltip">
-                                    «Записать» — сохранить исправления и записать в базу.
-                                    «Игнорировать все» — кривые значения и (по выбранной политике) дубликаты не запишутся.
-                                </span>
-                            </span>
-                        </div>
-                    </nav>
-                </div>
-
-                {% include "materials/includes/import_name_collisions.html" %}
-
-        <div class="import-unrecognized-panel mb-3" id="import-unrecognized-fields">
-            <div class="import-unrecognized-panel__title">
-                <button type="button"
-                        class="badge text-bg-warning border-0 me-2 import-unrecognized-jump"
-                        id="import-unrecognized-jump"
-                        title="Перейти к следующей проблемной ячейке"
-                        aria-label="Перейти к следующей проблемной ячейке">
-                    Предупреждение
-                </button>
-                <span id="import-unrecognized-title-text">Нераспознанные значения</span>
-                <span class="import-help__trigger" tabindex="0" aria-label="Подсказка" id="import-unrecognized-hint-trigger">
-                    <span class="import-help__mark" aria-hidden="true">?</span>
-                    <span class="import-help__tip import-help__tip--start" role="tooltip" id="import-unrecognized-hint">
-                        В таблице — все значения, которые будут записаны в базу.
-                        Подсвеченные ячейки система не разобрала: кликните ячейку или бейдж «Предупреждение»,
-                        чтобы переходить по ним по кругу и править значение ниже.
-                        Исправленные ячейки подсвечиваются зелёным.
-                    </span>
-                </span>
-            </div>
-            <p class="import-unrecognized-panel__meta mb-2">
-                Черновик: {{ draft_create_count }} созд.{% if name_collision_count %} · совпадений по названию: {{ name_collision_count }}{% endif %}
-                · <span id="import-fix-attention-label">требуют внимания</span>:
-                <strong id="import-fix-attention-count">{{ unrecognized_count }}</strong>
-                · строк к записи: <strong>{{ review_fix_grid.rows|length }}</strong>
-            </p>
-
-                <div class="import-fix-sheet mb-3" id="import-fix-sheet">
-                    <div class="import-fix-grid-wrap" id="import-fix-grid-wrap">
-                        <table class="import-fix-grid" id="import-fix-grid">
-                            <thead>
-                                <tr>
-                                    <th scope="col" class="import-fix-grid__sticky import-fix-grid__name"
-                                        data-col-index="0">Название</th>
-                                    {% for col in review_fix_grid.columns %}
-                                    <th scope="col" title="{{ col.label }}" data-col-index="{{ forloop.counter }}">{{ col.label }}</th>
-                                    {% endfor %}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for row in review_fix_grid.rows %}
-                                <tr data-draft-index="{{ row.draft_index }}" data-source-row="{{ row.source_row }}">
-                                    <td class="import-fix-grid__sticky import-fix-grid__name"
-                                        data-col-index="0"
-                                        title="{{ row.material_label }} · строка {{ row.source_row }}">{{ row.material_label }}</td>
-                                    {% for cell in row.cell_list %}
-                                    <td class="import-fix-cell{% if cell.is_unrecognized %} is-unrecognized{% elif cell.is_excluded %} is-excluded{% endif %}"
-                                        data-col-index="{{ cell.col_index }}"
-                                        {% if cell.is_unrecognized %}
-                                        tabindex="0"
-                                        role="button"
-                                        data-fix-cell
-                                        data-input-name="{{ cell.input_name }}"
-                                        data-skip-name="{{ cell.skip_name }}"
-                                        data-raw="{{ cell.raw|escape }}"
-                                        data-target-label="{{ cell.target_label|escape }}"
-                                        data-column-label="{{ cell.column_label|escape }}"
-                                        data-material-label="{{ row.material_label|escape }}"
-                                        data-source-row="{{ row.source_row }}"
-                                        title="Клик — исправить: {{ cell.raw }}"
-                                        {% elif cell.is_excluded %}
-                                        title="Не будет записано"
-                                        {% else %}
-                                        title="{{ cell.display }}"
-                                        {% endif %}>
-                                        {% if cell.display %}{{ cell.display }}{% else %}<span class="import-fix-cell__empty">&nbsp;</span>{% endif %}
-                                    </td>
-                                    {% endfor %}
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="{{ review_fix_grid.columns|length|add:1 }}" class="text-muted">
-                                        Нет строк к записи.
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div class="import-fix-editor d-none mb-0" id="import-fix-editor" hidden>
-                        <div class="import-fix-editor__head">
-                            <div>
-                                <div class="import-fix-editor__title">Правка значения</div>
-                                <p class="import-fix-editor__meta mb-0" id="import-fix-editor-meta"></p>
-                            </div>
-                            <button type="button" class="btn-close" id="import-fix-editor-close" aria-label="Закрыть"></button>
-                        </div>
-                        <p class="small mb-2">
-                            Было:
-                            <code id="import-fix-editor-raw" class="import-fix-editor__raw"></code>
-                        </p>
-                        <div class="row g-2 align-items-end">
-                            <div class="col-md-8">
-                                <label class="form-label" for="import-fix-editor-input">Новое значение</label>
-                                <input type="text"
-                                       class="form-control"
-                                       id="import-fix-editor-input"
-                                       autocomplete="off"
-                                       spellcheck="false"
-                                       placeholder="Число, диапазон, ±, да/нет или дата"
-                                       aria-describedby="import-unrecognized-hint">
-                            </div>
-                            <div class="col-md-4">
-                                <div class="form-check mt-md-4">
-                                    <input type="checkbox"
-                                           class="form-check-input"
-                                           id="import-fix-editor-skip"
-                                           value="1">
-                                    <label class="form-check-label" for="import-fix-editor-skip">
-                                        Пропустить (не записывать)
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-        </div>
-
-        </form>
-
-        <div class="modal fade" id="import-ignore-unrecognized-modal" tabindex="-1"
-             aria-labelledby="import-ignore-unrecognized-title" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2 class="modal-title fs-5" id="import-ignore-unrecognized-title">
-                            Игнорировать нераспознанные поля?
-                        </h2>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="mb-2">
-                            Если продолжить, <strong>{{ unrecognized_count }}</strong>
-                            {% if unrecognized_count == 1 %}поле останется пустым{% else %}полей останутся пустыми{% endif %}
-                            после записи материалов.
-                        </p>
-                        {% if name_collision_count %}
-                        <p class="mb-2">
-                            Также учтутся совпадения по названию
-                            (<strong>({{ name_collision_count }})</strong>:
-                            дубликаты не запишутся или получат префикс — по выбору в блоке предупреждения выше.
-                        </p>
-                        {% endif %}
-                        <p class="mb-0 small text-muted">
-                            Кривые (нераспознанные) значения из Excel не сохранятся.
-                            Остальные поля черновика запишутся как обычно.
-                        </p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                            Отменить
-                        </button>
-                        <button type="submit"
-                                form="import-unrecognized-form"
-                                name="action"
-                                value="review_resolve_ignore"
-                                class="btn btn-warning"
-                                data-bs-dismiss="modal"
-                                data-import-busy="1">
-                            Всё равно продолжить
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% if import_has_validation_errors and import_report and import_report.errors %}
-        <div class="card border-danger mb-3" id="import-validation-report">
-            <div class="card-header py-2">
-                <span class="fw-semibold text-danger">Также есть ошибки валидации</span>
-                <span class="small text-muted ms-2">Исправьте их после нераспознанных полей</span>
-            </div>
-            <div class="card-body py-2">
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0">
-                        <thead><tr><th>Строка</th><th>Колонка</th><th>Ошибка</th></tr></thead>
-                        <tbody>
-                            {% for error in import_report.errors %}
-                            <tr>
-                                <td>{{ error.row|default:"—" }}</td>
-                                <td>{% if error.column %}<code>{{ error.column }}</code>{% else %}—{% endif %}</td>
-                                <td>{{ error.message }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        {% else %}
-
-        {% if import_has_validation_errors %}
-        <div class="alert alert-danger py-3 mb-3">
-            <div class="fw-semibold mb-1">Есть ошибки валидации — запись запрещена</div>
-            <p class="mb-0 small">
-                Подробности — в блоке «Проверка перед записью» ниже.
-                Вернитесь к сопоставлению колонок, поправьте маппинг и снова соберите черновик.
-            </p>
-        </div>
-        {% endif %}
-
-        <form method="post" id="import-review-form">
-            {% csrf_token %}
-            <input type="hidden" name="review_marker" value="1">
-
-            <div class="import-wizard-nav-bar mb-3" role="region" aria-label="Навигация мастера импорта">
-                <nav class="import-wizard-nav">
-                    <div class="import-wizard-nav__back">
-                        {% if wizard_back_url %}
-                        <a href="{{ wizard_back_url }}" class="btn btn-outline-secondary import-wizard-nav__back-btn">
-                            ← {{ wizard_back_label|default:"Назад" }}
-                        </a>
-                        {% endif %}
-                    </div>
-                    <div class="import-wizard-nav__forward d-flex flex-wrap gap-2 align-items-center">
-                        {% if import_has_validation_errors %}
-                        <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-primary">
-                            Исправить сопоставление →
-                        </a>
-                        {% else %}
-                        <button type="submit" name="action" value="review_apply"
-                                class="btn btn-success import-wizard-nav__forward-btn"
-                                {% if not can_apply %}disabled{% endif %}
-                                data-import-busy="1">
-                            {{ wizard_forward_label|default:"Записать" }}
-                            {% if draft_create_count or draft_update_count %}
-                            ({{ draft_create_count }} созд.{% if draft_update_count %}, {{ draft_update_count }} обн.{% endif %})
-                            {% endif %}
-                        </button>
-                        <button type="submit" name="action" value="review_iterate_start" class="btn btn-link btn-sm"
-                                {% if not can_apply %}disabled{% endif %}>
-                            Построчно
-                        </button>
-                        <span class="import-help__trigger" tabindex="0" aria-label="Подсказка">
-                            <span class="import-help__mark" aria-hidden="true">?</span>
-                            <span class="import-help__tip import-help__tip--end" role="tooltip">
-                                «Записать» — записать черновик в базу. Назад — к сопоставлению колонок.
-                            </span>
-                        </span>
-                        {% endif %}
-                    </div>
-                </nav>
-            </div>
-
-            {% include "materials/includes/import_name_collisions.html" %}
-
-        <div class="alert alert-secondary py-3 mb-3">
-            <div class="fw-semibold mb-1">Итог по черновику</div>
-            <ul class="mb-0 ps-3">
-                <li>Будет <strong>создано</strong>: {{ draft_create_count }}</li>
-                {% if name_collision_count %}
-                <li class="text-warning">Совпадений по названию: {{ name_collision_count }}</li>
-                {% endif %}
-                {% if draft_skip_count %}
-                <li>Пропущено в черновике: {{ draft_skip_count }}</li>
-                {% endif %}
-                {% if uncertain_count %}
-                <li class="text-warning">Сомнительных строк: {{ uncertain_count }}</li>
-                {% endif %}
-                {% if unrecognized_count %}
-                <li class="text-warning">Нераспознанных полей: {{ unrecognized_count }}</li>
-                {% endif %}
-            </ul>
-        </div>
-
-            <div class="mb-3">
-                <button class="btn btn-outline-secondary btn-sm" type="button"
-                        data-bs-toggle="collapse" data-bs-target="#import-draft-details"
-                        aria-expanded="false" aria-controls="import-draft-details">
-                    Показать строки черновика ({{ draft_rows|length }})
-                </button>
-            </div>
-
-            <div class="collapse mb-3" id="import-draft-details">
-                <div class="table-responsive border rounded">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Проп.</th>
-                                <th>Строка</th>
-                                <th>Код</th>
-                                <th>Название</th>
-                                <th>Действие</th>
-                                <th>Свойства / разбор</th>
-                                <th>Замечания</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for draft in draft_rows %}
-                            <tr class="{% if draft.action == 'create' and not draft.name or draft.has_uncertain %}table-warning{% endif %}{% if draft.action == 'skip' %} opacity-50{% endif %}">
-                                <td>
-                                    <input type="checkbox" name="skip_{{ forloop.counter0 }}" value="1"
-                                           {% if draft.action == 'skip' %}checked{% endif %}
-                                           title="Пропустить строку">
-                                </td>
-                                <td>{{ draft.source_row }}</td>
-                                <td><code>{{ draft.code }}</code></td>
-                                <td>
-                                    {% if draft.name %}{{ draft.name }}{% else %}<span class="text-muted">нет названия ★</span>{% endif %}
-                                </td>
-                                <td>
-                                    {% if draft.action == 'update' %}
-                                    <span class="badge text-bg-info">обновить</span>
-                                    {% elif draft.action == 'skip' %}
-                                    <span class="badge text-bg-secondary">пропуск</span>
-                                    {% else %}
-                                    <span class="badge text-bg-success">создать</span>
-                                    {% endif %}
-                                </td>
-                                <td class="small">
-                                    {% with struct_n=draft.structure_values|length prop_n=draft.properties|length %}
-                                    <button class="btn btn-link btn-sm p-0" type="button"
-                                            data-bs-toggle="collapse"
-                                            data-bs-target="#draft-props-{{ forloop.counter0 }}"
-                                            aria-expanded="false">
-                                        поля ({{ struct_n|add:prop_n }})
-                                    </button>
-                                    {% endwith %}
-                                    <div class="collapse mt-2" id="draft-props-{{ forloop.counter0 }}">
-                                        {% if draft.tags %}<div><span class="text-muted">теги:</span> {{ draft.tags }}</div>{% endif %}
-                                        {% for struct in draft.structure_values %}
-                                        <div class="border-bottom py-1">
-                                            <label class="d-flex gap-2 align-items-start mb-0">
-                                                <input type="checkbox" name="include_struct_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="1"
-                                                       {% if struct.include %}checked{% endif %}
-                                                       title="Снять — игнорировать поле, даже если в Excel есть значение">
-                                                <span>
-                                                    <strong>{{ struct.column_label }}</strong>
-                                                    → <span class="text-primary">структура</span> {{ struct.field_label }}:
-                                                    {% if struct.note == 'пусто' or not struct.value and not struct.value_b %}
-                                                    <span class="text-muted fst-italic">пусто</span>
-                                                    {% else %}
-                                                    {{ struct.value }}{% if struct.value_b %} / {{ struct.value_b }}{% endif %}
-                                                    {% endif %}
-                                                    {% if struct.confidence == 'uncertain' %}
-                                                    <span class="badge text-bg-warning">проверить</span>
-                                                    {% endif %}
-                                                </span>
-                                            </label>
-                                        </div>
-                                        {% endfor %}
-                                        {% for prop in draft.properties %}
-                                        <div class="border-bottom py-1">
-                                            <label class="d-flex gap-2 align-items-start mb-0">
-                                                <input type="checkbox" name="include_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="1"
-                                                       {% if prop.include %}checked{% endif %}
-                                                       title="Снять — игнорировать свойство, даже если в Excel есть значение">
-                                                <span>
-                                                    <strong>{{ prop.column_label }}</strong>
-                                                    → <span class="text-secondary">доп.</span> {{ prop.property_name }}:
-                                                    {% if prop.note == 'пусто' or not prop.value and not prop.value_b %}
-                                                    <span class="text-muted fst-italic">пусто</span>
-                                                    {% else %}
-                                                    {{ prop.value }}{% if prop.value_b %} / {{ prop.value_b }}{% endif %}
-                                                    {% endif %}
-                                                    {% if prop.confidence == 'uncertain' %}
-                                                    <span class="badge text-bg-warning">проверить</span>
-                                                    {% endif %}
-                                                </span>
-                                            </label>
-                                        </div>
-                                        {% empty %}
-                                        {% if not draft.structure_values %}
-                                        <span class="text-muted">без значений</span>
-                                        {% endif %}
-                                        {% endfor %}
-                                    </div>
-                                </td>
-                                <td class="small text-muted">
-                                    {% for w in draft.warnings %}{{ w }}{% if not forloop.last %}; {% endif %}{% endfor %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <p class="small text-muted mt-2 mb-0">
-                    Чекбокс в первой колонке — пропустить всю строку.
-                    Раскройте «поля», чтобы снять отдельные свойства.
-                    Если детали свёрнуты, при «Применить» используются галочки из черновика (как после маппинга).
-                    В маппинге «пропустить» — колонка не участвует вообще.
-                </p>
-            </div>
-        </form>
-        {% endif %}
+        {% include 'materials/includes/import_review_grid.html' %}
         {% endif %}
 
         {% if has_staged_file and step == 'iterate' and iterate_draft %}
@@ -1307,9 +892,9 @@
 {% endif %}
 {% if step == 'mapping' %}
 <script src="{% static 'js/reference_properties_picker.js' %}?v={{ app_version }}"></script>
-<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map16"></script>
+<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map22"></script>
 {% endif %}
-{% if step == 'review' and has_unrecognized %}
-<script src="{% static 'js/import_fix_grid.js' %}?v={{ app_version }}-fixgrid10"></script>
+{% if step == 'review' %}
+<script src="{% static 'js/import_fix_grid.js' %}?v={{ app_version }}-fixgrid13"></script>
 {% endif %}
 {% endblock %}

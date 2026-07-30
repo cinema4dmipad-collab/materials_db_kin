@@ -1,15 +1,21 @@
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}{{ record_label }} — {{ structure_type.name }}{% endblock %}
+{% block title %}{{ display_label }} — {{ structure_type.name }}{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/structure_detail.css' %}?v={{ app_version }}-mat2" rel="stylesheet">
+{% endblock %}
 
 {% block content %}
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
-            <h1 class="h4 mb-1">{{ record_label }}</h1>
+            <h1 class="h4 mb-1">{{ display_label }}</h1>
             <p class="text-muted small mb-0">{{ structure_type.name }}</p>
         </div>
-        <div class="text-nowrap">
+        <div class="text-nowrap d-inline-flex align-items-center gap-1">
+            {% include 'includes/bookmark_toggle.html' with bookmark_toggle_style='button' %}
             <a href="{% url 'structures:edit' structure_type.code record.id %}" class="btn btn-primary btn-sm">Изменить</a>
             <a href="{% url 'structures:delete' structure_type.code record.id %}"
                class="btn btn-outline-danger btn-sm"
@@ -41,13 +47,52 @@
     </div>
 </div>
 
+{% if linked_materials %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Связанные материалы</h2>
+    </div>
+    <div class="card-body"
+         data-structure-material-expand-root
+         data-material-properties-url="{% url 'materials:properties_json' pk='00000000-0000-0000-0000-000000000000' %}"
+         data-material-detail-url="{% url 'materials:detail' pk='00000000-0000-0000-0000-000000000000' %}">
+        {% for material in linked_materials %}
+        <div class="{% if not forloop.last %}mb-3 pb-3 border-bottom{% endif %}">
+            <div class="structure-material-link">
+                <a href="{% url 'materials:detail' material.pk %}">{{ material.name }}</a>
+                <span class="text-muted small">({{ material.code }})</span>
+                <button type="button"
+                        class="btn btn-link structure-material-expand"
+                        data-material-id="{{ material.pk }}"
+                        aria-expanded="false"
+                        aria-controls="structure-linked-material-preview-{{ material.pk }}">
+                    Развернуть
+                </button>
+            </div>
+            <div id="structure-linked-material-preview-{{ material.pk }}"
+                 class="structure-material-preview d-none"
+                 hidden
+                 role="region"
+                 aria-label="Свойства материала {{ material.name }}">
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <div class="card">
     <div class="card-header">
         <h2 class="h5 mb-0">Параметры</h2>
     </div>
     <div class="card-body p-0">
         {% if display_values %}
-        <div class="table-responsive">
+        <div
+            class="table-responsive"
+            data-structure-material-expand-root
+            data-material-properties-url="{% url 'materials:properties_json' pk='00000000-0000-0000-0000-000000000000' %}"
+            data-material-detail-url="{% url 'materials:detail' pk='00000000-0000-0000-0000-000000000000' %}"
+        >
             <table class="table table-striped table-hover mb-0">
                 <thead>
                     <tr>
@@ -61,7 +106,22 @@
                         <td>{{ item.field.label }}</td>
                         <td>
                             {% if item.material_pk %}
-                            <a href="{% url 'materials:detail' item.material_pk %}">{{ item.get_value|default:"—" }}</a>
+                            <div class="structure-material-link">
+                                <a href="{% url 'materials:detail' item.material_pk %}">{{ item.get_value|default:"—" }}</a>
+                                <button type="button"
+                                        class="btn btn-link structure-material-expand"
+                                        data-material-id="{{ item.material_pk }}"
+                                        aria-expanded="false"
+                                        aria-controls="structure-material-preview-{{ item.field.pk }}">
+                                    Развернуть
+                                </button>
+                            </div>
+                            <div id="structure-material-preview-{{ item.field.pk }}"
+                                 class="structure-material-preview d-none"
+                                 hidden
+                                 role="region"
+                                 aria-label="Свойства материала {{ item.get_value|default:'—' }}">
+                            </div>
                             {% else %}
                             {{ item.get_value|default:"—" }}
                             {% endif %}
@@ -76,4 +136,8 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/structure_material_expand.js' %}?v={{ app_version }}-mat2"></script>
 {% endblock %}

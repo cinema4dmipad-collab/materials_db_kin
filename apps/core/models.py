@@ -81,3 +81,63 @@ class Tag(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class BookmarkEntityType(models.TextChoices):
+    MATERIAL = 'material', 'Материал'
+    SAMPLE = 'sample', 'Образец'
+    SCAN = 'scan', 'Скан'
+    STRUCTURE_RECORD = 'structure_record', 'Запись структуры'
+    STRUCTURE_TYPE = 'structure_type', 'Тип структуры'
+
+
+class UserBookmark(models.Model):
+    """Персональная закладка пользователя в рамках рабочего пространства."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='bookmarks',
+        verbose_name='Пользователь',
+    )
+    workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.CASCADE,
+        related_name='user_bookmarks',
+        verbose_name='Пространство',
+    )
+    entity_type = models.CharField(
+        max_length=20,
+        choices=BookmarkEntityType.choices,
+        verbose_name='Тип объекта',
+    )
+    entity_id = models.UUIDField(verbose_name='ID объекта')
+    parent_id = models.UUIDField(
+        null=True,
+        blank=True,
+        verbose_name='Родительский ID',
+        help_text='Для сканов — UUID образца.',
+    )
+    context_slug = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Контекст (slug)',
+        help_text='Для записей структуры — code типа структуры.',
+    )
+    label = models.CharField(max_length=300, blank=True, verbose_name='Подпись')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создана')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'закладка'
+        verbose_name_plural = 'закладки'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'workspace', 'entity_type', 'entity_id'],
+                name='unique_user_bookmark_per_entity',
+            ),
+        ]
+
+    def __str__(self):
+        return self.label or f'{self.entity_type}:{self.entity_id}'

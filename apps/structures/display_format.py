@@ -41,7 +41,9 @@ def format_structure_field_display(field, value):
     if field.field_type == 'FloatField':
         return format_decimal_display(value)
     if field.field_type == MATERIAL_LINK_FIELD_TYPE:
-        return value
+        from apps.structures.forms import material_link_display
+
+        return material_link_display(value)
     options = resolved_choice_options(field)
     if field.field_type == CHOICE_FIELD_TYPE or options:
         return choice_label_for_value(options, value) or '—'

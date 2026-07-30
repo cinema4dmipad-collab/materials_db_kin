@@ -24,6 +24,7 @@ from apps.materials.imports.mapping import (
     TARGET_SKIP,
     TARGET_STRUCTURE_PREFIX,
     TARGET_TAGS,
+    TARGET_DESCRIPTION,
     apply_profile_to_columns,
     build_field_mapping_rows,
     find_duplicate_mapping_targets,
@@ -200,10 +201,10 @@ class MaterialImportServiceTests(TestCase):
         self.assertNotIn('Создано из файла импорта', material.description or '')
         self.assertNotIn('Создано из файла импорта', material.description_display)
         self.assertIn(
-            'статус::утвержден',
+            'статус::на проверке',
             set(material.tags.values_list('name', flat=True)),
         )
-        status_tag = material.tags.get(name='статус::утвержден')
+        status_tag = material.tags.get(name='статус::на проверке')
         self.assertEqual((status_tag.color or '').upper(), '#E6A700')
 
     def test_update_does_not_force_approved_status_tag(self):
@@ -411,10 +412,66 @@ class MaterialImportMappingUnitTests(TestCase):
             match_policy='name',
             sample_row={0: 'Т-23', 1: 'E-glass', 2: '300'},
         )
-        tags_row = next(row for row in rows_tags if row['target'] == TARGET_TAGS)
-        self.assertTrue(tags_row['is_material'])
+        tags_row = next(row for row in rows_tags if row.get('is_tag'))
+        self.assertTrue(tags_row['is_tag'])
+        self.assertEqual(tags_row['section'], 'tag')
+        self.assertFalse(tags_row['is_material'])
         self.assertFalse(tags_row['is_property'])
         self.assertTrue(tags_row['is_addon'])
+        self.assertEqual(tags_row['mapping_target'], TARGET_TAGS)
+        self.assertIn('::', tags_row['tag_preview'])
+
+        mapping_with_field_and_tag = dict(mapping_with_tags)
+        mapping_with_field_and_tag['1'] = {
+            'target': f'{TARGET_STRUCTURE_PREFIX}{density_field.name}',
+            'parse': 'auto',
+        }
+        rows_dual = build_field_mapping_rows(
+            columns=columns,
+            mapping=mapping_with_field_and_tag,
+            structure_fields=[density_field],
+            match_policy='name',
+            sample_row={0: 'Т-23', 1: 'E-glass', 2: '300'},
+            tag_columns=['1'],
+        )
+        tag_rows = [row for row in rows_dual if row.get('is_tag')]
+        self.assertEqual(len(tag_rows), 1)
+        self.assertEqual(tag_rows[0]['column_index'], 1)
+        structure_rows = [
+            row for row in rows_dual
+            if row['target'] == f'{TARGET_STRUCTURE_PREFIX}{density_field.name}'
+        ]
+        self.assertEqual(len(structure_rows), 1)
+        self.assertEqual(structure_rows[0]['column_index'], 1)
+
+    def test_build_staging_draft_tag_column_alongside_field_mapping(self):
+        from apps.materials.imports.wide import WideColumn
+
+        columns = [
+            WideColumn(index=0, label='Наименование', group=''),
+            WideColumn(index=1, label='Марка', group=''),
+        ]
+        table = WideTable(
+            sheet_name='test',
+            header_row=1,
+            columns=columns,
+            rows=[{0: 'Ткань A', 1: 'E-glass'}],
+            preview_rows=[{0: 'Ткань A', 1: 'E-glass'}],
+        )
+        mapping = {
+            '0': {'target': TARGET_NAME, 'parse': 'auto'},
+            '1': {'target': TARGET_DESCRIPTION, 'parse': 'auto'},
+        }
+        drafts = build_staging_draft(
+            table,
+            mapping,
+            workspace=self.workspace,
+            match_policy=MATCH_BY_NAME,
+            tag_columns=['1'],
+        )
+        self.assertEqual(len(drafts), 1)
+        self.assertIn('марка::E-glass', drafts[0].tags)
+        self.assertIn('E-glass', drafts[0].description)
 
     def test_find_duplicate_mapping_targets(self):
         target = f'{TARGET_STRUCTURE_PREFIX}breaking_load'
@@ -1546,12 +1603,11 @@ class MaterialImportUITests(TestCase):
             (
                 row
                 for row in applied_b.context['field_mapping_rows']
-                if row['target'] == 'material.tags'
+                if row.get('is_tag') and row.get('column') and row['column'].label == 'Марка'
             ),
             None,
         )
-        if tags_field is not None:
-            self.assertFalse(tags_field.get('column'))
+        self.assertIsNone(tags_field)
 
     def test_sidebar_shows_import_link(self):
         response = self.client.get(reverse('materials:list'))
@@ -1584,9 +1640,10 @@ class MaterialImportUITests(TestCase):
 
         page = self.client.get(reverse('materials:import_review'))
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, 'Утвержден')
-        self.assertContains(page, 'Проверено')
-        self.assertNotContains(page, 'На проверке')
+        self.assertContains(page, 'На проверке')
+        self.assertContains(page, 'Учрежден')
+        self.assertNotContains(page, 'Утвержден')
+        self.assertNotContains(page, 'Проверено')
         self.assertContains(page, 'Review candidate')
 
         to_verified = self.client.post(
@@ -1596,15 +1653,21 @@ class MaterialImportUITests(TestCase):
                 'status': 'verified',
                 'material_id': str(material.pk),
             },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
-        self.assertEqual(to_verified.status_code, 302)
+        self.assertEqual(to_verified.status_code, 200)
+        payload = to_verified.json()
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['status'], 'verified')
+        self.assertIn('tags_html', payload)
+        self.assertIn('учрежден', payload['tags_html'])
         material.refresh_from_db()
         names = set(material.tags.values_list('name', flat=True))
         self.assertIn(IMPORT_STATUS_VERIFIED, names)
         self.assertNotIn(IMPORT_STATUS_APPROVED, names)
 
         board = self.client.get(reverse('materials:import_review'))
-        self.assertContains(board, 'Проверено')
+        self.assertContains(board, 'Учрежден')
         self.assertContains(board, 'Review candidate')
 
         back = self.client.post(
@@ -1718,6 +1781,35 @@ class MaterialImportUITests(TestCase):
         finally:
             path.unlink(missing_ok=True)
 
+    def test_build_import_layout_schema_trims_trailing_empty_rows_and_columns(self):
+        from openpyxl import Workbook
+        from tempfile import NamedTemporaryFile
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet['A1'] = 'Наименование'
+        sheet['B1'] = 'Марка'
+        sheet['A2'] = 'Мат-1'
+        sheet['B2'] = 'X'
+        sheet['A3'] = 'Мат-2'
+        sheet['B3'] = 'Y'
+        # Пустые хвосты, которые Excel часто держит в used range.
+        sheet['M1'] = None
+        sheet['A500'] = None
+        tmp = NamedTemporaryFile(suffix='.xlsx', delete=False)
+        tmp.close()
+        path = Path(tmp.name)
+        try:
+            workbook.save(path)
+            schema = build_import_layout_schema(path, header_row=1, group_row=0)
+            self.assertEqual(schema['cols_shown'], 2)
+            self.assertEqual(schema['cols_total'], 2)
+            self.assertEqual(schema['data_rows_shown'], 2)
+            self.assertEqual(len(schema['rows']), 3)
+            self.assertEqual(len(schema['rows'][0]['cells']), 2)
+        finally:
+            path.unlink(missing_ok=True)
+
     def test_refresh_layout_keeps_user_header_rows(self):
         from openpyxl import Workbook
         from tempfile import NamedTemporaryFile
@@ -1795,6 +1887,9 @@ class MaterialImportUITests(TestCase):
         self.assertContains(response, 'data-field-target="material.name"')
         self.assertContains(response, 'Из структуры')
         self.assertContains(response, 'Дополнительные свойства')
+        self.assertContains(response, 'import-map-section-tag')
+        self.assertContains(response, 'import-map-section__title">Теги</span>')
+        self.assertContains(response, 'значение/колонку из полей')
         self.assertContains(response, 'Справочники')
         self.assertContains(response, 'Поле материала')
         self.assertContains(response, 'Теги для всех материалов')
@@ -1959,6 +2054,52 @@ class MaterialImportUITests(TestCase):
         self.assertEqual(str(row[self.density_field.name]).rstrip('0').rstrip('.'), '260')
         self.assertTrue(material.tags.filter(name='марка::Е-стекло').exists())
 
+    def test_review_apply_persists_edited_material_name(self):
+        self._upload_and_configure_wide_sample()
+
+        preview = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'match_policy': MATCH_BY_NAME,
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+
+        edited_name = 'Стеклоткань переименована'
+        post_data = {
+            'action': 'review_resolve_manual',
+            'review_marker': '1',
+            'fix_material_0_name': edited_name,
+        }
+        for item in preview.context['review_editable_fields']:
+            input_name = item.get('input_name')
+            if not input_name or input_name == 'fix_material_0_name':
+                continue
+            post_data[input_name] = item.get('fix_value') or ''
+            skip_name = item.get('skip_name')
+            if skip_name and item.get('skip_checked'):
+                post_data[skip_name] = '1'
+
+        apply_response = self.client.post(reverse('materials:import'), post_data)
+        self.assertEqual(apply_response.status_code, 302)
+        self.assertTrue(
+            Material.objects.filter(name=edited_name, home_workspace=self.workspace).exists()
+        )
+        self.assertFalse(
+            Material.objects.filter(name='Стеклоткань демо', home_workspace=self.workspace).exists()
+        )
+
     def test_default_tags_applied_to_imported_materials(self):
         self._upload_and_configure_wide_sample()
         mapping = self.client.get(reverse('materials:import'), {'step': 'mapping'})
@@ -2062,6 +2203,39 @@ class MaterialImportUITests(TestCase):
         plain = Tag.objects.get(workspace=self.workspace, name='demo-color')
         self.assertEqual((scoped.color or '').upper(), '#AABBCC')
         self.assertEqual((plain.color or '').upper(), '#112233')
+
+    def test_save_template_validation_keeps_default_tags(self):
+        """При ошибке «пустое имя шаблона» теги из формы остаются на маппинге."""
+        self._upload_and_configure_wide_sample()
+        response = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'save_template',
+                'template_name': '',
+                'import_default_tags': 'партия::keep, demo-keep',
+                'import_default_tags_colors': '{"demo-keep":"#AABBCC"}',
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['step'], 'mapping')
+        config = get_import_config(self.client.session)
+        self.assertEqual(config.get('default_tags'), 'партия::keep, demo-keep')
+        self.assertEqual(
+            config.get('default_tag_colors'),
+            {'demo-keep': '#AABBCC'},
+        )
+        self.assertContains(response, 'партия::keep')
+        self.assertContains(response, 'demo-keep')
 
     def test_review_resolve_manual_persists_partial_fixes(self):
         """Успешные правки остаются после ошибки в другом поле (не откатываются)."""
@@ -2230,6 +2404,54 @@ class MaterialImportUITests(TestCase):
             Material.objects.filter(
                 home_workspace=self.workspace,
                 name='импорт-Стеклоткань демо',
+            ).exists()
+        )
+        self.assertEqual(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='Стеклоткань демо',
+            ).count(),
+            1,
+        )
+
+    def test_review_postfix_creates_new_material_on_name_collision(self):
+        Material.objects.create(
+            home_workspace=self.workspace,
+            code='EXIST-1',
+            name='Стеклоткань демо',
+        )
+        self._upload_and_configure_wide_sample()
+        self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': 'material.tags',
+                'parse_1': 'auto',
+                'map_2': f'structure:{self.density_field.name}',
+                'parse_2': 'auto',
+                'map_3': 'skip',
+                'parse_3': 'auto',
+                'map_4': 'skip',
+                'parse_4': 'auto',
+            },
+        )
+        apply_response = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'review_apply',
+                'review_marker': '1',
+                'duplicate_name_policy': 'postfix',
+                'duplicate_name_postfix': '-импорт',
+                'include_struct_0_0': '1',
+            },
+        )
+        self.assertEqual(apply_response.status_code, 302)
+        self.assertTrue(
+            Material.objects.filter(
+                home_workspace=self.workspace,
+                name='Стеклоткань демо-импорт',
             ).exists()
         )
         self.assertEqual(
@@ -2474,12 +2696,38 @@ class MaterialImportNameCollisionTests(TestCase):
         self.assertIsNone(prefixed[0].existing_pk)
         self.assertEqual(prefixed[1].name, 'Beta')
 
+        postfixed = apply_duplicate_name_policy(
+            [
+                DraftMaterial(
+                    source_row=2, name='Alpha', code='a1', description='', tags='', action='create',
+                ),
+                DraftMaterial(
+                    source_row=3, name='Beta', code='b1', description='', tags='', action='create',
+                ),
+            ],
+            collisions,
+            mode='postfix',
+            postfix='-imp',
+        )
+        self.assertEqual(postfixed[0].action, 'create')
+        self.assertEqual(postfixed[0].name, 'Alpha-imp')
+        self.assertIsNone(postfixed[0].existing_pk)
+        self.assertEqual(postfixed[1].name, 'Beta')
+
         with self.assertRaises(ValueError):
             apply_duplicate_name_policy(
                 drafts,
                 collisions,
                 mode='prefix',
                 prefix='',
+            )
+
+        with self.assertRaises(ValueError):
+            apply_duplicate_name_policy(
+                drafts,
+                collisions,
+                mode='postfix',
+                postfix='',
             )
 
     def test_merge_default_tags_into_drafts(self):
@@ -2989,12 +3237,75 @@ class MaterialImportUnrecognizedFieldTests(TestCase):
         self.assertEqual(bad['input_name'], 'fix_struct_0_1')
         good = grid['rows'][0]['cells']['struct:areal_density']
         self.assertFalse(good['is_unrecognized'])
+        self.assertTrue(good['is_editable'])
         self.assertEqual(good['display'], '300')
+        self.assertEqual(good['input_name'], 'fix_struct_0_0')
+        self.assertEqual(good['fix_value'], '300')
         self.assertEqual(grid['rows'][0]['cells']['material:code']['display'], 'fab-a')
+        self.assertEqual(grid['rows'][0]['cells']['material:code']['input_name'], 'fix_material_0_code')
+        self.assertEqual(grid['rows'][0]['name_cell']['input_name'], 'fix_material_0_name')
         self.assertEqual(grid['rows'][1]['cells']['struct:areal_density']['display'], '200')
         self.assertEqual(len(grid['rows'][0]['cell_list']), 4)
         self.assertEqual(grid['rows'][0]['cell_list'][2]['letter'], 'D')
 
+    def test_apply_manual_fixes_updates_ok_structure_and_name(self):
+        draft = DraftMaterial(
+            source_row=18,
+            name='Ткань A',
+            code='fab-a',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[
+                DraftStructureValue(
+                    field_name='areal_density',
+                    field_label='Плотность',
+                    column_label='Плотность пов',
+                    raw='300',
+                    value_kind='scalar',
+                    value='300',
+                    value_b='',
+                    confidence='ok',
+                    note='',
+                    include=True,
+                    recognition=RECOGNITION_OK,
+                ),
+            ],
+            properties=[],
+        )
+        updated, errors = apply_unrecognized_manual_fixes(
+            [draft],
+            {
+                'fix_material_0_name': 'Ткань A new',
+                'fix_material_0_code': 'fab-a2',
+                'fix_struct_0_0': '350',
+            },
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(updated[0].name, 'Ткань A new')
+        self.assertEqual(updated[0].code, 'fab-a2')
+        self.assertEqual(updated[0].structure_values[0].value, '350')
+        self.assertEqual(updated[0].structure_values[0].recognition, RECOGNITION_MANUAL)
+
+    def test_apply_manual_fixes_regenerates_code_when_name_changes(self):
+        draft = DraftMaterial(
+            source_row=3,
+            name='Ткань A',
+            code='tkan-a',
+            description='',
+            tags='',
+            action='create',
+            structure_values=[],
+            properties=[],
+        )
+        updated, errors = apply_unrecognized_manual_fixes(
+            [draft],
+            {'fix_material_0_name': 'Ткань B'},
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(updated[0].name, 'Ткань B')
+        self.assertNotEqual(updated[0].code, 'tkan-a')
+        self.assertTrue(updated[0].code)
 
 class MaterialImportDebugUndoTests(TestCase):
     def setUp(self):

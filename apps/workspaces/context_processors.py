@@ -1,5 +1,6 @@
 from django.urls import reverse
 
+from apps.core.bookmarks import sidebar_bookmark_items
 from apps.workspaces.permissions import (
     WorkspacePerm,
     can_manage_global_groups,
@@ -140,6 +141,21 @@ def workspace_navigation(request):
         )
     if workspace_items:
         nav_sections.append({'title': 'Пространство', 'items': workspace_items})
+
+    if active_workspace:
+        bookmark_items = sidebar_bookmark_items(
+            user=user,
+            workspace=active_workspace,
+            request_path=getattr(request, 'path', '') or '',
+        )
+        if bookmark_items:
+            nav_sections.insert(
+                0,
+                {
+                    'title': 'Закладки',
+                    'items': bookmark_items,
+                },
+            )
 
     admin_items = []
     if can_manage_global_users(user):

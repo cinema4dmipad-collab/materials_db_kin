@@ -203,6 +203,17 @@ class StructureTypeManageView(AppViewMixin, TemplateView):
             structure_type.is_created or SQLExecutor.table_exists(structure_type)
         )
         context['prompt_create_table'] = not structure_type.is_created
+        from apps.core.bookmarks import bookmark_context
+        from apps.core.models import BookmarkEntityType
+
+        context.update(
+            bookmark_context(
+                self.request,
+                entity_type=BookmarkEntityType.STRUCTURE_TYPE,
+                entity=structure_type,
+                context_slug=structure_type.code,
+            )
+        )
         return context
 
 

@@ -8,6 +8,8 @@
 
     var SKIP = 'skip';
     var TARGET_CODE = 'material.code';
+    var TARGET_TAGS = 'material.tags';
+    var TARGET_TAG_PREFIX = 'tag:';
     var TARGET_PROPERTY_PREFIX = 'property:';
     var DRAG_MIME = 'application/x-import-map-column';
 
@@ -41,6 +43,7 @@
     var tbodyPrimary = document.querySelector('#import-map-section-primary');
     var tbodyMaterial = document.querySelector('#import-map-section-material');
     var tbodyAddon = document.querySelector('#import-map-section-addon');
+    var tbodyTag = document.querySelector('#import-map-section-tag');
     var hiddenBox = document.getElementById('import-map-hidden-inputs');
     var addonDropdownEl = document.getElementById('import-map-addon-dropdown');
     var addonSearch = document.getElementById('import-map-addon-search');
@@ -92,17 +95,82 @@
         });
     }
 
+    function isTagRow(row) {
+        return row && row.getAttribute('data-map-section-kind') === 'tag';
+    }
+
+    function mappingTargetForRow(row) {
+        if (!row) {
+            return '';
+        }
+        var explicit = row.getAttribute('data-mapping-target');
+        if (explicit) {
+            return explicit;
+        }
+        var target = row.getAttribute('data-field-target') || '';
+        if (target.indexOf(TARGET_TAG_PREFIX) === 0) {
+            return TARGET_TAGS;
+        }
+        return target;
+    }
+
+    function tagScopeFromLabel(label) {
+        var text = String(label || '').replace(/\s*[\(,].*$/, '').trim().toLowerCase();
+        return text || 'тег';
+    }
+
+    function tagPreviewForColumn(index, sample) {
+        var label = columnLabel(index);
+        var scope = tagScopeFromLabel(label);
+        var value = String(sample || '').trim();
+        if (!value || value === '—') {
+            return scope + '::…';
+        }
+        return scope + '::' + value;
+    }
+
     function findRowByTarget(target) {
         return rows().find(function (row) {
             return row.getAttribute('data-field-target') === target;
         }) || null;
     }
 
-    function findRowByColumnIndex(index) {
+    function findRowByColumnIndex(index, options) {
+        options = options || {};
         var needle = String(index);
-        return rows().find(function (row) {
+        var matches = rows().filter(function (row) {
             return row.getAttribute('data-column-index') === needle;
-        }) || null;
+        });
+        if (options.tagOnly) {
+            return matches.find(function (row) { return isTagRow(row); }) || null;
+        }
+        if (options.preferNonTag) {
+            return matches.find(function (row) { return !isTagRow(row); }) || matches[0] || null;
+        }
+        return matches[0] || null;
+    }
+
+    function canAssignTagColumn(columnIndex, options) {
+        options = options || {};
+        if (columnIndex == null || columnIndex === '') {
+            return true;
+        }
+        var needle = String(columnIndex);
+        if (options.ignoreTagRow) {
+            var ignoreInput = columnInput(options.ignoreTagRow);
+            if (ignoreInput && String(ignoreInput.value) === needle) {
+                return true;
+            }
+        }
+        return !rows().some(function (other) {
+            if (!isTagRow(other)) {
+                return false;
+            }
+            if (options.ignoreTagRow && other === options.ignoreTagRow) {
+                return false;
+            }
+            return other.getAttribute('data-column-index') === needle;
+        });
     }
 
     function columnInput(row) {
@@ -165,7 +233,9 @@
             slot.setAttribute('draggable', isEmpty ? 'false' : 'true');
             slot.title = isEmpty
                 ? 'Перетащите колонку сюда или выберите строку и кликните колонку справа'
-                : 'Перетащите в другое поле или обратно в каталог';
+                : (isTagRow(row)
+                    ? 'Перетащите в другое поле, в «Теги» или обратно в каталог'
+                    : 'Перетащите в другое поле, в «Теги» или обратно в каталог');
         }
         var labelEl = rowLabelEl(row);
         if (labelEl) {
@@ -173,12 +243,36 @@
         }
         var sampleEl = row.querySelector('.import-map-row__sample-live');
         if (sampleEl) {
-            var sample = isEmpty ? '—' : (input.getAttribute('data-sample') || columnSample(index));
+            var sample;
+            if (isEmpty) {
+                sample = '—';
+            } else if (isTagRow(row)) {
+                sample = tagPreviewForColumn(
+                    index,
+                    input.getAttribute('data-sample') || columnSample(index)
+                );
+            } else {
+                sample = input.getAttribute('data-sample') || columnSample(index);
+            }
             sampleEl.textContent = sample;
             sampleEl.title = sample;
         }
+        var sampleDrag = row.querySelector('.import-map-row__sample');
+        if (sampleDrag) {
+            sampleDrag.classList.toggle('is-draggable-source', !isEmpty);
+            sampleDrag.setAttribute('draggable', isEmpty ? 'false' : 'true');
+            sampleDrag.title = isEmpty
+                ? ''
+                : 'Перетащите значение в «Теги» или в другое поле';
+        }
+        var titleEl = row.querySelector('.import-map-row__title');
+        if (titleEl && isTagRow(row)) {
+            titleEl.textContent = isEmpty
+                ? 'Тег'
+                : (row.getAttribute('data-field-label') || columnLabel(index));
+        }
         var parse = parseSelect(row);
-        if (parse) {
+        if (parse && !parse.classList.contains('import-map-parse--tag')) {
             parse.disabled = isEmpty;
         }
     }
@@ -196,6 +290,12 @@
         } else {
             input.setAttribute('data-label', label || columnLabel(index));
             input.setAttribute('data-sample', sample || columnSample(index));
+        }
+        if (isTagRow(row)) {
+            if (index) {
+                row.setAttribute('data-field-target', TARGET_TAG_PREFIX + index);
+                row.setAttribute('data-field-label', label || columnLabel(index));
+            }
         }
         syncRowExpressionUi(row);
         refreshState();
@@ -220,6 +320,9 @@
             if (other === row) {
                 return false;
             }
+            if (isTagRow(other)) {
+                return false;
+            }
             if (ignoreField && other.getAttribute('data-field-target') === ignoreField) {
                 return false;
             }
@@ -236,7 +339,10 @@
             byIndex[String(col.index)] = { target: SKIP, parse: 'auto' };
         });
         rows().forEach(function (row) {
-            var target = row.getAttribute('data-field-target');
+            if (isTagRow(row)) {
+                return;
+            }
+            var target = mappingTargetForRow(row);
             var input = columnInput(row);
             var parse = parseSelect(row);
             if (!target || !input || !input.value) {
@@ -257,6 +363,25 @@
                 parseInput.value = byIndex[index].parse;
             }
         });
+
+        var tagBox = document.getElementById('import-map-tag-columns');
+        if (tagBox) {
+            tagBox.innerHTML = '';
+            rows().forEach(function (row) {
+                if (!isTagRow(row)) {
+                    return;
+                }
+                var input = columnInput(row);
+                if (!input || !input.value) {
+                    return;
+                }
+                var hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'tag_col';
+                hidden.value = input.value;
+                tagBox.appendChild(hidden);
+            });
+        }
     }
 
     function refreshCatalogState() {
@@ -277,7 +402,7 @@
             btn.disabled = false;
             btn.setAttribute('draggable', isUsed ? 'false' : 'true');
             btn.title = isUsed
-                ? 'Уже назначена — клик выделит поле'
+                ? 'Уже в поле — клик выделит; можно также перетащить в «Теги»'
                 : 'Клик или перетащите в «Колонка файла»';
         });
     }
@@ -318,6 +443,46 @@
         }
     }
 
+    function rowAllowsDrop(row, payload) {
+        if (!row || !payload || payload.columnIndex == null || payload.columnIndex === '') {
+            return false;
+        }
+        if (isTagRow(row)) {
+            return canAssignTagColumn(payload.columnIndex, { ignoreTagRow: row });
+        }
+        return canAssignColumn(row, payload.columnIndex, {
+            ignoreFieldTarget: payload.source === 'row' ? payload.fieldTarget : null,
+        });
+    }
+
+    function dropEffectFor(row, payload, allowed) {
+        if (!allowed) {
+            return 'none';
+        }
+        if (isTagRow(row)) {
+            return 'copy';
+        }
+        return payload.source === 'row' ? 'move' : 'copy';
+    }
+
+    function writeRowDragPayload(event, row) {
+        var input = columnInput(row);
+        if (!input || !input.value) {
+            event.preventDefault();
+            return false;
+        }
+        event.stopPropagation();
+        writeDragPayload(event, {
+            source: 'row',
+            fieldTarget: row.getAttribute('data-field-target'),
+            columnIndex: input.value,
+            label: input.getAttribute('data-label') || columnLabel(input.value),
+            sample: input.getAttribute('data-sample') || columnSample(input.value),
+        });
+        selectRow(row);
+        return true;
+    }
+
     function writeDragPayload(event, payload) {
         dragPayload = payload;
         var raw = JSON.stringify(payload);
@@ -327,7 +492,7 @@
             /* older browsers */
         }
         event.dataTransfer.setData('text/plain', raw);
-        event.dataTransfer.effectAllowed = payload.source === 'row' ? 'move' : 'copy';
+        event.dataTransfer.effectAllowed = payload.source === 'row' ? 'copyMove' : 'copy';
         form.classList.add('is-dragging');
         form.classList.toggle('is-dragging-from-row', payload.source === 'row');
     }
@@ -357,9 +522,11 @@
         ) {
             return;
         }
-        var allowed = canAssignColumn(row, payload.columnIndex, {
-            ignoreFieldTarget: payload.source === 'row' ? payload.fieldTarget : null,
-        });
+        var allowed = isTagRow(row)
+            ? canAssignTagColumn(payload.columnIndex, { ignoreTagRow: row })
+            : canAssignColumn(row, payload.columnIndex, {
+                ignoreFieldTarget: payload.source === 'row' ? payload.fieldTarget : null,
+            });
         slot.classList.toggle('is-drop-hover', allowed);
         slot.classList.toggle('is-drop-blocked', !allowed);
         row.classList.toggle('is-drop-over', true);
@@ -373,7 +540,22 @@
         selectRow(row);
         var input = columnInput(row);
         if (!options.fromDrag && input && String(input.value) === String(columnIndex)) {
-            clearRowExpression(row);
+            if (isTagRow(row)) {
+                removeFieldRow(row);
+            } else {
+                clearRowExpression(row);
+            }
+            return;
+        }
+        if (isTagRow(row)) {
+            if (!canAssignTagColumn(columnIndex, { ignoreTagRow: row })) {
+                return;
+            }
+            var existingTagRow = findRowByColumnIndex(columnIndex, { tagOnly: true });
+            if (existingTagRow && existingTagRow !== row) {
+                removeFieldRow(existingTagRow);
+            }
+            assignColumn(row, columnIndex, label, sample);
             return;
         }
         if (!canAssignColumn(row, columnIndex, {
@@ -383,15 +565,15 @@
         })) {
             return;
         }
-        // Free column from other field if needed
         var owner = findRowByColumnIndex(columnIndex);
         if (owner && owner !== row) {
-            clearRowExpression(owner);
+            if (isTagRow(owner)) {
+                removeFieldRow(owner);
+            } else {
+                clearRowExpression(owner);
+            }
         }
         assignColumn(row, columnIndex, label, sample);
-        if (options.clearSourceRow && options.clearSourceRow !== row) {
-            // Already swapped or cleared in drop handler
-        }
     }
 
     function dropPayloadOnRow(row, payload) {
@@ -402,6 +584,17 @@
             ? findRowByTarget(payload.fieldTarget)
             : null;
         if (sourceRow === row) {
+            return;
+        }
+        if (isTagRow(row)) {
+            if (!canAssignTagColumn(payload.columnIndex, { ignoreTagRow: row })) {
+                return;
+            }
+            assignColumn(row, payload.columnIndex, payload.label, payload.sample);
+            if (sourceRow && isTagRow(sourceRow) && sourceRow !== row) {
+                removeFieldRow(sourceRow);
+            }
+            selectRow(row);
             return;
         }
         if (sourceRow) {
@@ -417,6 +610,8 @@
             assignColumn(row, payload.columnIndex, payload.label, payload.sample);
             if (destIndex) {
                 assignColumn(sourceRow, destIndex, destLabel, destSample);
+            } else if (isTagRow(sourceRow)) {
+                removeFieldRow(sourceRow);
             } else {
                 clearRowExpression(sourceRow);
             }
@@ -483,15 +678,19 @@
             }
             var idx = String(input.value);
             if (colOwners[idx]) {
-                duplicates.push({
-                    column: input.getAttribute('data-label') || columnLabel(idx),
-                    targets: [
-                        colOwners[idx].getAttribute('data-field-label') || '',
-                        row.getAttribute('data-field-label') || '',
-                    ],
-                });
-                row.classList.add('is-duplicate');
-                colOwners[idx].classList.add('is-duplicate');
+                var ownerRow = colOwners[idx];
+                var fieldAndTagPair = isTagRow(ownerRow) !== isTagRow(row);
+                if (!fieldAndTagPair) {
+                    duplicates.push({
+                        column: input.getAttribute('data-label') || columnLabel(idx),
+                        targets: [
+                            ownerRow.getAttribute('data-field-label') || '',
+                            row.getAttribute('data-field-label') || '',
+                        ],
+                    });
+                    row.classList.add('is-duplicate');
+                    ownerRow.classList.add('is-duplicate');
+                }
             } else {
                 colOwners[idx] = row;
             }
@@ -644,6 +843,9 @@
         if (section === 'material') {
             return tbodyMaterial;
         }
+        if (section === 'tag') {
+            return tbodyTag;
+        }
         return tbodyAddon;
     }
 
@@ -651,6 +853,9 @@
         options = options || {};
         if (options.primary || options.section === 'primary') {
             return 'primary';
+        }
+        if (options.section === 'tag' || (target || '').indexOf(TARGET_TAG_PREFIX) === 0 || target === TARGET_TAGS) {
+            return 'tag';
         }
         if (options.section === 'material' || options.section === 'property') {
             return options.section;
@@ -737,6 +942,73 @@
         return tr;
     }
 
+    function addTagRow(columnIndex, label, sample) {
+        var index = columnIndex == null || columnIndex === '' ? '' : String(columnIndex);
+        if (!index) {
+            return null;
+        }
+        var existing = rows().find(function (row) {
+            return isTagRow(row) && row.getAttribute('data-column-index') === index;
+        });
+        if (existing) {
+            selectRow(existing);
+            return existing;
+        }
+        var targetBody = sectionBody('tag');
+        if (!targetBody) {
+            return null;
+        }
+        var tr = document.createElement('tr');
+        tr.className = 'import-map-row is-unmapped';
+        tr.setAttribute('data-import-map-row', '');
+        tr.setAttribute('data-field-target', TARGET_TAG_PREFIX + index);
+        tr.setAttribute('data-mapping-target', TARGET_TAGS);
+        tr.setAttribute('data-field-label', label || columnLabel(index));
+        tr.setAttribute('data-map-section-kind', 'tag');
+        tr.setAttribute('data-is-primary', '0');
+        tr.setAttribute('data-is-required', '0');
+        tr.tabIndex = 0;
+        tr.setAttribute('role', 'option');
+        tr.setAttribute('aria-selected', 'false');
+        tr.innerHTML = ''
+            + '<td class="import-map-row__file">'
+            + '<div class="import-map-row__head">'
+            + '<div class="import-map-row__title">' + escapeHtml(label || columnLabel(index)) + '</div>'
+            + '</div>'
+            + '<div class="import-map-row__sample import-map-row__sample-live">—</div>'
+            + '</td>'
+            + '<td class="import-map-row__expr">'
+            + '<span class="import-map-expr-slot is-empty" data-drop-slot draggable="false"'
+            + ' title="Перетащите колонку сюда или выберите строку и кликните колонку справа">'
+            + '<span class="import-map-expr-label"></span></span>'
+            + '<input type="hidden" class="import-map-column-value" value="">'
+            + '</td>'
+            + '<td class="import-map-row__parse import-map-row__parse--tag">'
+            + '<span class="text-muted" aria-hidden="true">—</span>'
+            + '</td>'
+            + '<td class="import-map-row__actions">'
+            + '<button type="button" class="btn btn-link btn-sm text-danger import-map-remove-field p-0" title="Убрать тег">×</button>'
+            + '</td>';
+        var emptyEl = targetBody.querySelector('[data-map-section-empty]');
+        if (emptyEl) {
+            targetBody.insertBefore(tr, emptyEl);
+        } else {
+            targetBody.appendChild(tr);
+        }
+        if (targetBody.classList.contains('is-collapsed')) {
+            targetBody.classList.remove('is-collapsed');
+            var toggle = targetBody.querySelector('[data-map-section-toggle]');
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', 'true');
+            }
+        }
+        bindRow(tr);
+        assignColumn(tr, index, label || columnLabel(index), sample || columnSample(index));
+        selectRow(tr);
+        refreshState();
+        return tr;
+    }
+
     function removeFieldRow(row) {
         if (!row || row.getAttribute('data-is-primary') === '1') {
             return;
@@ -759,7 +1031,7 @@
                 return;
             }
             var index = btn.getAttribute('data-column-index');
-            var owner = findRowByColumnIndex(index);
+            var owner = findRowByColumnIndex(index, { preferNonTag: true });
             if (owner && btn.classList.contains('is-locate-only')) {
                 selectRow(owner);
                 owner.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -769,6 +1041,18 @@
                 selectRow(rows()[0]);
             }
             if (!selectedRow) {
+                return;
+            }
+            if (isTagRow(selectedRow) && btn.classList.contains('is-used')) {
+                if (!canAssignTagColumn(index, { ignoreTagRow: selectedRow })) {
+                    return;
+                }
+                applyColumnToRow(
+                    selectedRow,
+                    index,
+                    btn.getAttribute('data-label'),
+                    btn.getAttribute('data-sample')
+                );
                 return;
             }
             applyColumnToRow(
@@ -837,24 +1121,26 @@
         var slot = rowSlotEl(row);
         if (slot) {
             slot.addEventListener('dragstart', function (event) {
-                var input = columnInput(row);
-                if (!input || !input.value) {
-                    event.preventDefault();
+                if (!writeRowDragPayload(event, row)) {
                     return;
                 }
-                event.stopPropagation();
-                writeDragPayload(event, {
-                    source: 'row',
-                    fieldTarget: row.getAttribute('data-field-target'),
-                    columnIndex: input.value,
-                    label: input.getAttribute('data-label') || columnLabel(input.value),
-                    sample: input.getAttribute('data-sample') || columnSample(input.value),
-                });
                 slot.classList.add('is-dragging');
-                selectRow(row);
             });
             slot.addEventListener('dragend', function () {
                 endDrag(slot);
+            });
+        }
+
+        var sampleDrag = row.querySelector('.import-map-row__sample');
+        if (sampleDrag) {
+            sampleDrag.addEventListener('dragstart', function (event) {
+                if (!writeRowDragPayload(event, row)) {
+                    return;
+                }
+                sampleDrag.classList.add('is-dragging');
+            });
+            sampleDrag.addEventListener('dragend', function () {
+                endDrag(sampleDrag);
             });
         }
 
@@ -878,12 +1164,8 @@
                     return;
                 }
                 event.preventDefault();
-                var allowed = canAssignColumn(row, payload.columnIndex, {
-                    ignoreFieldTarget: payload.source === 'row' ? payload.fieldTarget : null,
-                });
-                event.dataTransfer.dropEffect = allowed
-                    ? (payload.source === 'row' ? 'move' : 'copy')
-                    : 'none';
+                var allowed = rowAllowsDrop(row, payload);
+                event.dataTransfer.dropEffect = dropEffectFor(row, payload, allowed);
                 clearDropHover();
                 setSlotDropState(row, payload);
             });
@@ -906,6 +1188,63 @@
                 clearDropHover();
                 dropPayloadOnRow(row, payload);
             });
+        });
+    }
+
+    function bindTagSectionDrop() {
+        if (!tbodyTag) {
+            return;
+        }
+        tbodyTag.addEventListener('dragenter', function (event) {
+            if (!readDragPayload(event) && !dragPayload) {
+                return;
+            }
+            event.preventDefault();
+        });
+        tbodyTag.addEventListener('dragover', function (event) {
+            var payload = readDragPayload(event);
+            if (!payload || payload.columnIndex == null || payload.columnIndex === '') {
+                return;
+            }
+            event.preventDefault();
+            var allowed = canAssignTagColumn(payload.columnIndex, {
+                ignoreTagRow: payload.source === 'row' && payload.fieldTarget
+                    ? (function () {
+                        var sourceRow = findRowByTarget(payload.fieldTarget);
+                        return sourceRow && isTagRow(sourceRow) ? sourceRow : null;
+                    })()
+                    : null,
+            });
+            event.dataTransfer.dropEffect = allowed
+                ? 'copy'
+                : 'none';
+            tbodyTag.classList.toggle('is-drop-hover', allowed);
+            tbodyTag.classList.toggle('is-drop-blocked', !allowed);
+        });
+        tbodyTag.addEventListener('dragleave', function (event) {
+            if (!tbodyTag.contains(event.relatedTarget)) {
+                tbodyTag.classList.remove('is-drop-hover', 'is-drop-blocked');
+            }
+        });
+        tbodyTag.addEventListener('drop', function (event) {
+            var payload = readDragPayload(event);
+            if (!payload || payload.columnIndex == null || payload.columnIndex === '') {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            clearDropHover();
+            tbodyTag.classList.remove('is-drop-hover', 'is-drop-blocked');
+            if (!canAssignTagColumn(payload.columnIndex)) {
+                return;
+            }
+            var sourceRow = payload.source === 'row' && payload.fieldTarget
+                ? findRowByTarget(payload.fieldTarget)
+                : null;
+            addTagRow(payload.columnIndex, payload.label, payload.sample);
+            if (sourceRow && isTagRow(sourceRow) && sourceRow !== findRowByColumnIndex(payload.columnIndex, { tagOnly: true })) {
+                removeFieldRow(sourceRow);
+            }
         });
     }
 
@@ -991,8 +1330,12 @@
             if (!window.confirm('Сбросить все сопоставления? Колонки будут сняты со всех полей.')) {
                 return;
             }
-            rows().forEach(function (row) {
-                clearRowExpression(row);
+            rows().slice().forEach(function (row) {
+                if (isTagRow(row)) {
+                    removeFieldRow(row);
+                } else {
+                    clearRowExpression(row);
+                }
             });
         });
     }
@@ -1064,10 +1407,13 @@
 
     collectParseModes();
     bindSectionToggles();
+    bindTagSectionDrop();
     catalogItems().forEach(bindCatalogItem);
     rows().forEach(bindRow);
     rows().forEach(function (row) {
-        hideAddonItem(row.getAttribute('data-field-target'));
+        if (!isTagRow(row)) {
+            hideAddonItem(row.getAttribute('data-field-target'));
+        }
     });
     syncRequiredFromPolicy();
     if (rows().length) {

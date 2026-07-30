@@ -1,0 +1,24 @@
+<form method="post"
+      action="{% url 'core:bookmark_toggle' %}"
+      class="table-action-form d-inline bookmark-toggle-form">
+    {% csrf_token %}
+    <input type="hidden" name="entity_type" value="{{ bookmark_entity_type }}">
+    <input type="hidden" name="entity_id" value="{{ bookmark_entity_id }}">
+    {% if bookmark_parent_id %}
+    <input type="hidden" name="parent_id" value="{{ bookmark_parent_id }}">
+    {% endif %}
+    {% if bookmark_context_slug %}
+    <input type="hidden" name="context_slug" value="{{ bookmark_context_slug }}">
+    {% endif %}
+    <input type="hidden" name="next" value="{{ bookmark_next_url|default:request.get_full_path }}">
+    <button type="submit"
+            class="btn btn-sm bookmark-toggle-btn btn-action-bookmark{% if is_bookmarked %} is-bookmarked{% endif %}{% if bookmark_toggle_style == 'button' %} btn-outline-secondary{% else %} table-action-btn{% endif %}"
+            title="{% if is_bookmarked %}Убрать из закладок{% else %}Добавить в закладки{% endif %}"
+            aria-label="{% if is_bookmarked %}Убрать из закладок{% else %}Добавить в закладки{% endif %}"
+            aria-pressed="{% if is_bookmarked %}true{% else %}false{% endif %}">
+        {% include 'includes/table_action_icon_svg.html' with action='bookmark' filled=is_bookmarked %}
+        {% if bookmark_toggle_style == 'button' %}
+        <span class="ms-1">{% if is_bookmarked %}В закладках{% else %}В закладки{% endif %}</span>
+        {% endif %}
+    </button>
+</form>

@@ -6,6 +6,8 @@
 media/
 staticfiles/
 db.sqlite3
+# Локальные рабочие Excel-файлы (не фикстуры)
+/Сводная*.xlsx
 .venv/
 logs/
 test_out*.txt

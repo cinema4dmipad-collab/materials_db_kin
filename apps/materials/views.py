@@ -103,7 +103,7 @@ from apps.materials.imports.staging import (
     drafts_from_session,
     drafts_to_session,
     has_unresolved_unrecognized,
-    iter_unrecognized_fields,
+    iter_review_editable_fields,
     merge_default_tags_into_drafts,
     name_collisions_for_drafts,
 )
@@ -853,6 +853,16 @@ class MaterialDetailView(AppViewMixin, DetailView):
         )
         context['layer_diagram'] = self.get_layer_diagram(context['composite_layers'])
         context.update(get_material_structure_context(self.object))
+        from apps.core.bookmarks import bookmark_context
+        from apps.core.models import BookmarkEntityType
+
+        context.update(
+            bookmark_context(
+                self.request,
+                entity_type=BookmarkEntityType.MATERIAL,
+                entity=self.object,
+            )
+        )
         return context
 
     def get_layer_diagram(self, composite_layers):
@@ -1177,7 +1187,7 @@ def _import_debug_context(request):
 
 
 class MaterialImportReviewView(AppViewMixin, PermissionRequiredMixin, View):
-    """Канбан: утвержден (inbox) ↔ проверено."""
+    """Канбан: на проверке (inbox) ↔ учрежден."""
 
     permission_codename = WorkspacePerm.MATERIAL_EDIT
     template_name = 'materials/material_import_review.html'
@@ -1185,8 +1195,9 @@ class MaterialImportReviewView(AppViewMixin, PermissionRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         from apps.core.tag_utils import coalesce_tags_for_display
         from apps.materials.imports.review_status import (
-            IMPORT_STATUS_APPROVED,
-            IMPORT_STATUS_VERIFIED,
+            IMPORT_REVIEW_COLUMN_LABELS,
+            IMPORT_STATUS_PENDING,
+            IMPORT_STATUS_ESTABLISHED,
             materials_approved_import_review,
             materials_verified_import_review,
         )
@@ -1204,8 +1215,10 @@ class MaterialImportReviewView(AppViewMixin, PermissionRequiredMixin, View):
                 'verified_materials': verified,
                 'approved_count': len(approved),
                 'verified_count': len(verified),
-                'status_approved': IMPORT_STATUS_APPROVED,
-                'status_verified': IMPORT_STATUS_VERIFIED,
+                'status_approved': IMPORT_STATUS_PENDING,
+                'status_verified': IMPORT_STATUS_ESTABLISHED,
+                'column_label_pending': IMPORT_REVIEW_COLUMN_LABELS['approved'],
+                'column_label_established': IMPORT_REVIEW_COLUMN_LABELS['verified'],
             },
         )
 
@@ -1242,11 +1255,23 @@ class MaterialImportReviewView(AppViewMixin, PermissionRequiredMixin, View):
             material, workspace=workspace, column=column,
         )
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from apps.core.tag_utils import coalesce_tags_for_display
+            from django.template.loader import render_to_string
+
+            material.refresh_from_db()
+            tags_html = render_to_string(
+                'includes/tag_badges.html',
+                {
+                    'tags': coalesce_tags_for_display(list(material.tags.all())),
+                },
+                request=request,
+            )
             return JsonResponse({
                 'ok': True,
                 'material_id': str(material.pk),
                 'status': column,
                 'tag': tag_name,
+                'tags_html': tags_html,
             })
         messages.success(request, f'«{material.name}» — {tag_name}.')
         return redirect('materials:import_review')
@@ -1368,8 +1393,11 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['name_collisions'] = name_collisions
         context['name_collision_count'] = len(name_collisions)
         post = self.request.POST if self.request.method == 'POST' else None
-        context['unrecognized_fields'] = iter_unrecognized_fields(draft_rows, post=post)
         context['review_fix_grid'] = build_review_fix_grid(draft_rows, post=post)
+        context['review_editable_fields'] = iter_review_editable_fields(draft_rows, post=post)
+        context['unrecognized_fields'] = [
+            item for item in context['review_editable_fields'] if item.get('is_unrecognized')
+        ]
         context['has_unrecognized'] = bool(context['unrecognized_fields'])
         context['unrecognized_count'] = len(context['unrecognized_fields'])
         has_validation_errors = bool(
@@ -1379,12 +1407,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         # Обратная совместимость шаблонов/тестов
         context['import_has_errors'] = has_validation_errors
         context['import_needs_field_review'] = context['has_unrecognized']
-        # Ошибки валидации и нераспознанные поля блокируют запись по разным причинам.
-        context['can_apply'] = (
-            bool(draft_rows)
-            and not has_validation_errors
-            and not context['has_unrecognized']
-        )
+        # Нераспознанные правятся в таблице на этом же шаге — запись не блокируем кнопкой.
+        context['can_apply'] = bool(draft_rows) and not has_validation_errors
         context['layout_hint'] = getattr(self, 'layout_hint', '')
         context['detected_layout'] = getattr(self, 'detected_layout', None)
         context['show_header_layout_fields'] = getattr(self, 'show_header_layout_fields', True)
@@ -1725,12 +1749,21 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         )
         return mark_safe(widget.render('import_default_tags', value or '', attrs=widget.attrs))
 
+    def _tag_columns_from_post(self, request) -> list[str]:
+        return [
+            str(item).strip()
+            for item in request.POST.getlist('tag_col')
+            if str(item or '').strip()
+        ]
+
     def _save_mapping_from_post(self, request, path):
         """Сохраняет маппинг из POST. Возвращает path-response при ошибке, иначе None."""
         mapping = self._mapping_from_post(request)
+        tag_columns = self._tag_columns_from_post(request)
         set_import_config(
             request.session,
             mapping=mapping,
+            tag_columns=tag_columns,
             match_policy=MATCH_ALWAYS_CREATE,
             default_tags=self._default_tags_from_post(request),
             default_tag_colors=self._default_tag_colors_from_post(request),
@@ -1856,6 +1889,14 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         path, drafts, structure_type, early = self._load_review_drafts(request)
         if early is not None:
             return early
+        drafts, errors = apply_unrecognized_manual_fixes(drafts, request.POST)
+        set_import_config(request.session, draft=drafts_to_session(drafts))
+        if errors:
+            for error in errors[:8]:
+                messages.error(request, error)
+            if len(errors) > 8:
+                messages.error(request, f'… и ещё {len(errors) - 8} полей без корректного значения.')
+            return self._render_review(request, path)
         drafts = apply_unrecognized_ignore_all(drafts)
         set_import_config(request.session, draft=drafts_to_session(drafts))
         return self._apply_import_drafts(
@@ -1883,17 +1924,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         return self._apply_import_drafts(request, path, drafts, structure_type)
 
     def _handle_review_apply(self, request):
-        path, drafts, structure_type, early = self._load_review_drafts(request)
-        if early is not None:
-            return early
-        if has_unresolved_unrecognized(drafts):
-            messages.warning(
-                request,
-                'Сначала исправьте или пропустите нераспознанные поля — '
-                'это не ошибка черновика, а значения, которые система не разобрала автоматически.',
-            )
-            return self._render_review(request, path)
-        return self._apply_import_drafts(request, path, drafts, structure_type)
+        # Единый путь с таблицей правок: сначала применяем правки ячеек.
+        return self._handle_review_resolve_manual(request)
 
     def _apply_duplicate_name_choice(self, request, drafts):
         """Применяет выбор оператора по совпадениям названий. Возвращает (drafts, error_message)."""
@@ -1902,12 +1934,14 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             return drafts, None
         mode = (request.POST.get('duplicate_name_policy') or DUPLICATE_NAME_SKIP).strip()
         prefix = (request.POST.get('duplicate_name_prefix') or '').strip()
+        postfix = (request.POST.get('duplicate_name_postfix') or '').strip()
         try:
             drafts = apply_duplicate_name_policy(
                 drafts,
                 collisions,
                 mode=mode,
                 prefix=prefix,
+                postfix=postfix,
             )
         except ValueError as exc:
             return drafts, str(exc)
@@ -1999,6 +2033,25 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         if not drafts:
             messages.error(request, 'Нет черновика — сначала выполните проверку маппинга.')
             return redirect('materials:import')
+        drafts, errors = apply_unrecognized_manual_fixes(drafts, request.POST)
+        set_import_config(request.session, draft=drafts_to_session(drafts))
+        if errors:
+            for error in errors[:8]:
+                messages.error(request, error)
+            if len(errors) > 8:
+                messages.error(
+                    request,
+                    f'… и ещё {len(errors) - 8} полей без корректного значения.',
+                )
+            self.draft_rows = drafts
+            return self._render_review(request, path)
+        if has_unresolved_unrecognized(drafts):
+            messages.warning(
+                request,
+                'Сначала исправьте или пропустите нераспознанные поля в таблице.',
+            )
+            self.draft_rows = drafts
+            return self._render_review(request, path)
         drafts = apply_review_post(drafts, request.POST)
         drafts, dup_error = self._apply_duplicate_name_choice(request, drafts)
         if dup_error:
@@ -2207,6 +2260,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         path = get_import_session_path(request.session)
         if path is None:
             return redirect('materials:import')
+        # Сначала сохраняем маппинг и теги из формы: иначе при ошибке
+        # валидации (пустое имя, нет структуры) виджет тегов сбрасывается.
+        self._persist_mapping_form_state(request)
         name = (
             request.POST.get('template_name')
             or request.POST.get('profile_name')
@@ -2229,26 +2285,14 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 'Тип структуры из сессии недоступен. Выберите тип заново.',
             )
             return self._render_mapping(request, path)
-        # Берём маппинг из POST (текущий UI). Сессия — только запасной вариант
-        # для старых клиентов / тестов без map_*.
-        mapping = self._mapping_from_post(request)
-        if mapping:
-            set_import_config(
-                request.session,
-                mapping=mapping,
-                match_policy=MATCH_ALWAYS_CREATE,
-                default_tags=self._default_tags_from_post(request),
-                default_tag_colors=self._default_tag_colors_from_post(request),
-            )
-            config = get_import_config(request.session)
-        else:
-            mapping = dict(config.get('mapping') or {})
-            # Даже без map_* сохраняем теги из POST, если пришли.
-            if 'import_default_tags' in request.POST:
+        mapping = dict(config.get('mapping') or {})
+        if not mapping:
+            mapping = self._mapping_from_post(request)
+            if mapping:
                 set_import_config(
                     request.session,
-                    default_tags=self._default_tags_from_post(request),
-                    default_tag_colors=self._default_tag_colors_from_post(request),
+                    mapping=mapping,
+                    match_policy=MATCH_ALWAYS_CREATE,
                 )
                 config = get_import_config(request.session)
         table = self._load_table(path, config)
@@ -2282,6 +2326,18 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         request.session.modified = True
         messages.success(request, f'Шаблон «{name}» сохранён.')
         return self._render_mapping(request, path)
+
+    def _persist_mapping_form_state(self, request) -> None:
+        """Пишет маппинг и общие теги из POST в сессию (без валидации «можно ли писать»)."""
+        mapping = self._mapping_from_post(request)
+        kwargs = {
+            'default_tags': self._default_tags_from_post(request),
+            'default_tag_colors': self._default_tag_colors_from_post(request),
+        }
+        if mapping:
+            kwargs['mapping'] = mapping
+            kwargs['match_policy'] = MATCH_ALWAYS_CREATE
+        set_import_config(request.session, **kwargs)
 
     def _handle_load_template(self, request):
         path = get_import_session_path(request.session)
@@ -2382,6 +2438,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             workspace=request.active_workspace,
             match_policy=MATCH_ALWAYS_CREATE,
             structure_type_id=str(structure_type.pk),
+            tag_columns=config.get('tag_columns') or [],
         )
         drafts = merge_default_tags_into_drafts(
             drafts,
@@ -2445,8 +2502,6 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 sheet_name=sheet or None,
                 header_row=schema_header,
                 group_row=schema_group,
-                max_cols=14,
-                max_data_rows=8,
             )
             self.layout_form_header_row = schema_header
             self.layout_form_group_row = schema_group
@@ -2560,6 +2615,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             match_policy=match_policy,
             target_labels=target_labels,
             sample_row=sample,
+            tag_columns=config.get('tag_columns') or [],
         )
         self.unused_columns = unused_columns_from_mapping(
             list(self.wide_table.columns),

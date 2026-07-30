@@ -44,6 +44,40 @@ def list_sheet_names(path: Path | str) -> list[str]:
         workbook.close()
 
 
+def _cell_has_value(value) -> bool:
+    if value is None:
+        return False
+    return str(value).replace('\u00a0', ' ').strip() != ''
+
+
+def _matrix_used_bounds(matrix: list[list]) -> tuple[int, int]:
+    """Последние используемые индексы строки/колонки (включительно)."""
+    last_row = -1
+    last_col = -1
+    for row_index, row in enumerate(matrix):
+        for col_index, cell in enumerate(row):
+            if _cell_has_value(cell):
+                last_row = row_index
+                last_col = max(last_col, col_index)
+    return last_row, last_col
+
+
+def _trim_matrix_to_used_bounds(matrix: list[list]) -> list[list]:
+    """Обрезает хвост пустых строк и колонок."""
+    last_row, last_col = _matrix_used_bounds(matrix)
+    if last_row < 0:
+        return []
+    trimmed: list[list] = []
+    for row in matrix[: last_row + 1]:
+        cells = list(row)
+        if len(cells) <= last_col:
+            cells.extend([None] * (last_col + 1 - len(cells)))
+        else:
+            cells = cells[: last_col + 1]
+        trimmed.append(cells)
+    return trimmed
+
+
 def _cell_preview(value, *, max_len: int = 18) -> str:
     if value is None:
         return ''
@@ -59,8 +93,8 @@ def build_import_layout_schema(
     sheet_name: str | None = None,
     header_row: int = 1,
     group_row: int = 0,
-    max_cols: int = 12,
-    max_data_rows: int = 6,
+    max_cols: int | None = None,
+    max_data_rows: int | None = None,
 ) -> dict:
     """
     Схема шапки Excel/CSV для шага настройки импорта.
@@ -69,7 +103,10 @@ def build_import_layout_schema(
     file_path = Path(path)
     header_row = max(1, int(header_row or 1))
     group_row = max(0, int(group_row or 0))
-    peek_rows = max(header_row + max_data_rows, group_row + max_data_rows, 8)
+    if max_data_rows is not None and max_data_rows > 0:
+        peek_rows = max(header_row + max_data_rows, group_row + max_data_rows, 8)
+    else:
+        peek_rows = None
     matrix = _peek_sheet_matrix(file_path, sheet_name=sheet_name, max_rows=peek_rows)
     if not matrix:
         return {
@@ -83,8 +120,14 @@ def build_import_layout_schema(
         }
 
     width = max((len(row) for row in matrix), default=0)
-    cols_shown = min(max_cols, width) if width else 0
-    end_row = min(len(matrix), header_row + max_data_rows)
+    if max_cols is not None and max_cols > 0:
+        cols_shown = min(max_cols, width) if width else 0
+    else:
+        cols_shown = width
+    if max_data_rows is not None and max_data_rows > 0:
+        end_row = min(len(matrix), header_row + max_data_rows)
+    else:
+        end_row = len(matrix)
     # Показываем с 1-й строки, чтобы были видны группы выше заголовка.
     rows_out: list[dict] = []
     for index in range(0, end_row):
@@ -125,16 +168,19 @@ def _peek_sheet_matrix(
     path: Path,
     *,
     sheet_name: str | None,
-    max_rows: int,
+    max_rows: int | None,
 ) -> list[list]:
     suffix = path.suffix.lower()
     if suffix == '.csv':
         with path.open('r', encoding='utf-8-sig', newline='') as handle:
             reader = list(csv.reader(handle))
-        return [list(row) for row in reader[:max_rows]]
+        rows = [list(row) for row in reader]
+        rows = rows if max_rows is None else rows[:max_rows]
+        return _trim_matrix_to_used_bounds(rows)
     if suffix not in {'.xlsx', '.xlsm'}:
         return []
     from openpyxl import load_workbook
+    from openpyxl.utils.cell import range_boundaries
 
     workbook = load_workbook(path, read_only=False, data_only=True)
     try:
@@ -142,14 +188,21 @@ def _peek_sheet_matrix(
             sheet = workbook[sheet_name]
         else:
             sheet = workbook[workbook.sheetnames[0]]
+        read_limit = max_rows
+        if read_limit is None:
+            dimension = sheet.calculate_dimension()
+            if dimension:
+                _, _, _, read_limit = range_boundaries(dimension)
+            else:
+                read_limit = sheet.max_row or 1
         matrix: list[list] = []
-        for index, row in enumerate(sheet.iter_rows(values_only=True)):
+        for index, row in enumerate(sheet.iter_rows(min_row=1, max_row=read_limit, values_only=True)):
             matrix.append(list(row))
-            if index + 1 >= max_rows:
+            if max_rows is not None and index + 1 >= max_rows:
                 break
         # Не разворачиваем merged на весь лист — только заполняем в пределах превью.
         _expand_merged_cells_limited(sheet, matrix)
-        return matrix
+        return _trim_matrix_to_used_bounds(matrix)
     finally:
         workbook.close()
 

@@ -38,6 +38,19 @@ def material_label(material: Material) -> str:
     return f'{material.code} - {material.name}'
 
 
+MATERIAL_LINK_MISSING_LABEL = 'Материал не найден'
+
+
+def material_link_display(value, *, missing_label: str = MATERIAL_LINK_MISSING_LABEL) -> str:
+    """Человекочитаемая подпись для MaterialLink; без сырого UUID."""
+    if value in (None, ''):
+        return '—'
+    material = material_from_value(value)
+    if material is not None:
+        return material_label(material)
+    return missing_label
+
+
 def material_from_value(value):
     if value in (None, ''):
         return None

@@ -212,6 +212,17 @@ class ScanDetailView(AppViewMixin, SampleScanMixin, DetailView):
                     fallback=active_ws,
                 ),
             )
+        from apps.core.bookmarks import bookmark_context
+        from apps.core.models import BookmarkEntityType
+
+        context.update(
+            bookmark_context(
+                self.request,
+                entity_type=BookmarkEntityType.SCAN,
+                entity=self.object,
+                parent_id=self.sample.pk,
+            )
+        )
         return context
 
 

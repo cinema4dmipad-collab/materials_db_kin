@@ -324,6 +324,15 @@ body.import-busy-lock {
     white-space: nowrap;
 }
 
+.import-map-row__sample.is-draggable-source {
+    cursor: grab;
+}
+
+.import-map-row__sample.is-draggable-source.is-dragging {
+    cursor: grabbing;
+    opacity: 0.55;
+}
+
 .import-map-addon-menu {
     --bs-dropdown-min-width: 18rem;
     max-width: min(22rem, 92vw);
@@ -1391,6 +1400,17 @@ button.import-map-catalog-item:disabled {
     }
 }
 
+/* Tag section drop target (same section chrome as other mapping groups) */
+.import-map-section[data-map-section="tag"].is-drop-hover .import-map-section__header th {
+    background: rgba(13, 110, 253, 0.08);
+    box-shadow: inset 0 0 0 2px rgba(13, 110, 253, 0.35);
+}
+
+.import-map-section[data-map-section="tag"].is-drop-blocked .import-map-section__header th {
+    background: rgba(220, 53, 69, 0.06);
+    box-shadow: inset 0 0 0 2px rgba(220, 53, 69, 0.35);
+}
+
 /* Wizard back / forward navigation */
 .import-wizard-nav {
     display: flex;
@@ -1525,6 +1545,10 @@ button.import-map-catalog-item:disabled {
     --fix-fixed-bg-strong: #d4efe3;
     --fix-fixed-text: #0b6b45;
     --fix-fixed-border: #2f9e6b;
+    --fix-edited-bg: #e8f1ff;
+    --fix-edited-bg-strong: #d4e4ff;
+    --fix-edited-text: #1d4ed8;
+    --fix-edited-border: #3b82f6;
     border: 1px solid var(--kx-border-strong, #c9d2d2);
     border-radius: 0.5rem;
     background: var(--kx-surface, #fff);
@@ -1604,6 +1628,16 @@ button.import-map-catalog-item:disabled {
     color: var(--kx-text, #111);
 }
 
+.import-fix-cell[data-fix-cell] {
+    cursor: pointer;
+}
+
+.import-fix-cell[data-fix-cell]:hover,
+.import-fix-cell[data-fix-cell]:focus-visible {
+    background: var(--kx-surface-muted, #f8fafc);
+    outline: none;
+}
+
 .import-fix-cell__empty {
     color: transparent;
 }
@@ -1633,6 +1667,20 @@ button.import-map-catalog-item:disabled {
 .import-fix-cell.is-fixed:hover,
 .import-fix-cell.is-fixed:focus-visible {
     background: var(--fix-fixed-bg-strong);
+    outline: none;
+}
+
+.import-fix-cell.is-edited {
+    background: var(--fix-edited-bg);
+    box-shadow: inset 0 0 0 1px var(--fix-edited-border);
+    color: var(--fix-edited-text);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.import-fix-cell.is-edited:hover,
+.import-fix-cell.is-edited:focus-visible {
+    background: var(--fix-edited-bg-strong);
     outline: none;
 }
 

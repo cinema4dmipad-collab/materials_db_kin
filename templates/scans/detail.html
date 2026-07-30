@@ -15,7 +15,8 @@
                 · <span class="file-badge file-badge--hdf5">HDF5</span>
             </p>
         </div>
-        <div class="text-nowrap">
+        <div class="text-nowrap d-inline-flex align-items-center gap-1">
+            {% include 'includes/bookmark_toggle.html' %}
             <a href="{% url 'scans:download' sample.pk scan.pk %}" class="btn btn-outline-secondary btn-sm file-download-link" data-download-name="{{ scan.filename }}">Скачать</a>
             {% if scan_is_editable %}
             <a href="{% url 'scans:edit' sample.pk scan.pk %}" class="btn btn-primary btn-sm">Изменить</a>

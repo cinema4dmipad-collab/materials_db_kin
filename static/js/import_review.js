@@ -14,12 +14,12 @@
     var COLUMN_META = {
         approved: {
             emptyAttr: 'data-empty-approved',
-            emptyText: 'Нет материалов со статусом «утвержден».',
+            emptyText: 'Нет материалов со статусом «на проверке».',
             countId: 'import-review-approved-count',
         },
         verified: {
             emptyAttr: 'data-empty-verified',
-            emptyText: 'Перетащите сюда проверенные материалы.',
+            emptyText: 'Перетащите сюда учреждённые материалы.',
             countId: 'import-review-verified-count',
         },
     };
@@ -85,6 +85,22 @@
         card.setAttribute('data-status', column);
     }
 
+    function updateCardTags(card, tagsHtml) {
+        var tagsWrap = card.querySelector('.import-review-card__tags');
+        if (!tagsHtml || !String(tagsHtml).trim()) {
+            if (tagsWrap) {
+                tagsWrap.remove();
+            }
+            return;
+        }
+        if (!tagsWrap) {
+            tagsWrap = document.createElement('div');
+            tagsWrap.className = 'import-review-card__tags mt-1';
+            card.appendChild(tagsWrap);
+        }
+        tagsWrap.innerHTML = tagsHtml;
+    }
+
     function moveCard(card, column) {
         var zone = columnBody(column);
         if (!zone || !card) {
@@ -127,6 +143,7 @@
             if (!payload || !payload.ok || !payload.status) {
                 throw new Error('payload');
             }
+            updateCardTags(card, payload.tags_html || '');
             moveCard(card, payload.status);
         }).catch(function () {
             window.alert('Не удалось обновить статус. Обновите страницу и попробуйте снова.');

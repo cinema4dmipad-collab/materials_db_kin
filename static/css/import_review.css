@@ -81,19 +81,39 @@
 }
 
 .import-review-card__top {
-    align-items: flex-start;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem 0.6rem;
-    justify-content: space-between;
+    align-items: start;
+    display: grid;
+    gap: 0.35rem 0.75rem;
+    grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .import-review-card__title {
     color: var(--kx-text, #111);
     font-weight: 650;
+    grid-column: 1;
+    min-width: 0;
     text-decoration: none;
     -webkit-user-drag: none;
     user-select: none;
+    word-break: break-word;
+}
+
+.import-review-card__type {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    white-space: nowrap;
+}
+
+.import-review-card__type .type-pill {
+    max-width: 100%;
+}
+
+.import-review-card__type .type-pill__label {
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .import-review-card a {

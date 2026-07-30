@@ -10,21 +10,7 @@ from apps.samples.models import Sample
 from .models import Material, MaterialAttachment, MaterialProperty
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
-
-
-STRUCTURE_SERVICE_FIELDS = {'id', 'created_at', 'updated_at', 'created_by'}
-
-
-def structure_instance_label(instance: dict) -> str:
-    record_id = str(instance.get('id') or '')
-    code = instance.get('code')
-    if code:
-        return str(code)
-
-    for field_name, value in instance.items():
-        if field_name not in STRUCTURE_SERVICE_FIELDS and value not in (None, ''):
-            return str(value)
-    return record_id[:8]
+from apps.structures.table_storage import structure_record_label
 
 
 class MaterialForm(forms.ModelForm):
@@ -72,7 +58,13 @@ class MaterialForm(forms.ModelForm):
             if selected_instance:
                 instances.append(selected_instance)
 
-        choices.extend((str(instance['id']), structure_instance_label(instance)) for instance in instances)
+        choices.extend(
+            (
+                str(instance['id']),
+                structure_record_label(instance, structure_type),
+            )
+            for instance in instances
+        )
         return choices
 
     def _selected_structure_props_id(self):
@@ -185,7 +177,10 @@ class MaterialAdmin(admin.ModelAdmin):
             return JsonResponse({'instances': []})
 
         instances = [
-            {'id': str(instance['id']), 'name': structure_instance_label(instance)}
+            {
+                'id': str(instance['id']),
+                'name': structure_record_label(instance, structure_type),
+            }
             for instance in SQLExecutor.get_structure_instances(structure_type, limit=100)
         ]
         return JsonResponse({'instances': instances})

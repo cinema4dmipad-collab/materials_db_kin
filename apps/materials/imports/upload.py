@@ -23,6 +23,7 @@ SESSION_STRUCTURE_TYPE_ID = 'material_import_structure_type_id'
 SESSION_ACTIVE_TEMPLATE_ID = 'material_import_active_template_id'
 SESSION_DEFAULT_TAGS = 'material_import_default_tags'
 SESSION_DEFAULT_TAG_COLORS = 'material_import_default_tag_colors'
+SESSION_TAG_COLUMNS = 'material_import_tag_columns'
 
 
 def save_uploaded_import_file(uploaded: UploadedFile) -> Path:
@@ -78,6 +79,7 @@ def get_import_config(session) -> dict:
         'active_template_id': session.get(SESSION_ACTIVE_TEMPLATE_ID) or '',
         'default_tags': session.get(SESSION_DEFAULT_TAGS) or '',
         'default_tag_colors': dict(session.get(SESSION_DEFAULT_TAG_COLORS) or {}),
+        'tag_columns': list(session.get(SESSION_TAG_COLUMNS) or []),
     }
 
 
@@ -95,6 +97,7 @@ def set_import_config(
     structure_type_id: str | None = None,
     default_tags: str | None = None,
     default_tag_colors: dict | None = None,
+    tag_columns: list[str] | None = None,
     clear_draft: bool = False,
 ) -> None:
     if sheet is not None:
@@ -128,6 +131,12 @@ def set_import_config(
             if key and value:
                 cleaned[key] = value
         session[SESSION_DEFAULT_TAG_COLORS] = cleaned
+    if tag_columns is not None:
+        session[SESSION_TAG_COLUMNS] = [
+            str(item).strip()
+            for item in tag_columns
+            if str(item or '').strip()
+        ]
     if clear_draft:
         session.pop(SESSION_DRAFT, None)
     session.modified = True

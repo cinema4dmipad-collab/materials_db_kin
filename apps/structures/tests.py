@@ -410,6 +410,101 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
         self.assertIsNotNone(SQLExecutor.get_structure_instance(self.structure_type, row_id))
 
+    def test_detail_shows_material_expand_for_material_link(self):
+        material = Material.objects.create(code='MAT-EXPAND', name='Expandable material')
+        link_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='linked_material',
+            label='Linked material',
+            field_type=MATERIAL_LINK_FIELD_TYPE,
+            foreign_key_model='materials.Material',
+            sort_order=3,
+        )
+
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {
+                'title': 'Panel with link',
+                'thickness': '3.00',
+                'linked_material': material,
+            },
+        )['id']
+
+        response = self.client.get(
+            reverse('structures:detail', args=[self.structure_type.code, row_id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Expandable material')
+        self.assertContains(response, 'structure-material-expand')
+        self.assertContains(response, 'Развернуть')
+        self.assertContains(response, f'data-material-id="{material.pk}"')
+        self.assertContains(response, f'id="structure-material-preview-{link_field.pk}"')
+        self.assertContains(response, 'structure_material_expand.js')
+        self.assertContains(
+            response,
+            reverse(
+                'materials:properties_json',
+                kwargs={'pk': '00000000-0000-0000-0000-000000000000'},
+            ),
+        )
+
+    def test_structure_record_display_label_prefers_linked_material_name(self):
+        from apps.structures.table_storage import structure_record_display_label
+
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Panel A', 'thickness': '78.00'},
+        )['id']
+        material = Material.objects.create(
+            code='MAT-DISPLAY-LABEL',
+            name='Полотно',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+
+        self.assertEqual(
+            structure_record_display_label(record, self.structure_type),
+            'Полотно',
+        )
+        self.assertEqual(
+            structure_record_display_label(
+                record,
+                self.structure_type,
+                linked_materials=[{'pk': material.pk, 'code': material.code, 'name': material.name}],
+            ),
+            'Полотно',
+        )
+
+    def test_list_shows_material_expand_for_linked_material(self):
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Linked panel', 'thickness': '4.00'},
+        )['id']
+        material = Material.objects.create(
+            code='MAT-LIST-EXPAND',
+            name='List expandable material',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.get(
+            reverse('structures:list', args=[self.structure_type.code])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'List expandable material')
+        self.assertNotContains(response, '>Linked panel<')
+        self.assertContains(response, 'structure-material-expand')
+        self.assertContains(response, 'Развернуть')
+        self.assertContains(response, f'data-material-id="{material.pk}"')
+        self.assertContains(
+            response,
+            f'id="structure-list-material-preview-{row_id}-{material.pk}"',
+        )
+        self.assertContains(response, 'structure_material_expand.js')
+
     def test_routes_require_created_table(self):
         draft_type = StructureType.objects.create(
             name='Draft Panel',
@@ -1226,6 +1321,63 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertTrue(blank_insert['success'], blank_insert.get('error'))
         blank_row = SQLExecutor.get_by_id(self.structure_type, blank_insert['id'])
         self.assertIsNone(blank_row['record']['skin_material'])
+
+    def test_structure_record_label_resolves_material_link_and_skips_broken(self):
+        from apps.structures.forms import MATERIAL_LINK_MISSING_LABEL, material_link_display
+        from apps.structures.table_storage import structure_record_label
+
+        material = Material.objects.create(code='MAT-LABEL-001', name='Label material')
+        link_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='skin_material',
+            label='Skin material',
+            field_type='MaterialLink',
+            sort_order=0,
+        )
+        title_field = self.structure_type.fields.get(name='title')
+        title_field.sort_order = 1
+        title_field.save(update_fields=['sort_order'])
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+
+        resolved_id = table_storage.insert_row(
+            self.structure_type,
+            'resolved-row',
+            {'skin_material': material.pk, 'title': 'Fallback title'},
+        )
+        fallback_id = table_storage.insert_row(
+            self.structure_type,
+            'fallback-row',
+            {'title': 'Visible title'},
+        )
+
+        resolved = table_storage.get_row(self.structure_type, resolved_id)
+        fallback = table_storage.get_row(self.structure_type, fallback_id)
+
+        self.assertEqual(
+            structure_record_label(resolved, self.structure_type),
+            'MAT-LABEL-001 - Label material',
+        )
+        self.assertEqual(
+            structure_record_label(fallback, self.structure_type),
+            'Visible title',
+        )
+        empty_record_id = uuid.uuid4()
+        self.assertEqual(
+            structure_record_label({'id': empty_record_id}, self.structure_type),
+            f'Запись {str(empty_record_id)[:8]}…',
+        )
+
+        missing_id = uuid.uuid4()
+        link_display = table_storage.DisplayValue(link_field, missing_id)
+        self.assertEqual(link_display.get_value(), MATERIAL_LINK_MISSING_LABEL)
+        self.assertEqual(material_link_display(missing_id), MATERIAL_LINK_MISSING_LABEL)
+        self.assertIsNone(link_display.material_pk)
+
+        resolved_display = next(
+            item for item in table_storage.get_display_values(self.structure_type, resolved_id)
+            if item.field.name == link_field.name
+        )
+        self.assertEqual(resolved_display.material_pk, str(material.pk))
 
     def test_material_link_dynamic_table_form_uses_material_choice_and_initial_object(self):
         material = Material.objects.create(code='MAT-FORM-001', name='Form material')
