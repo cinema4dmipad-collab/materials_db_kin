@@ -65,15 +65,12 @@ class BackupRestoreForm(forms.Form):
         label='Файл на сервере (/backups)',
         required=False,
         widget=forms.Select(attrs=_BOOTSTRAP_INPUT),
-        help_text='Предпочтительно: дамп уже лежит на сервере — без загрузки через браузер.',
+        help_text='Дамп, уже сохранённый на сервере.',
     )
     dump_file = forms.FileField(
         label='Или загрузить .dump с компьютера',
         required=False,
-        help_text=(
-            'Если Chrome пишет ERR_UPLOAD_FILE_CHANGED — скопируйте файл на рабочий стол '
-            'и выберите копию (не из Downloads, пока идёт/висела загрузка).'
-        ),
+        help_text='Файл дампа с вашего компьютера.',
         widget=forms.FileInput(attrs={**_BOOTSTRAP_INPUT, 'accept': '.dump,application/octet-stream'}),
     )
     confirm = forms.BooleanField(

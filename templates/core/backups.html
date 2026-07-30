@@ -93,19 +93,8 @@
     <div class="card-body">
         <div class="alert alert-warning">
             Текущие данные PostgreSQL будут <strong>заменены</strong> содержимым дампа.
-            Файлы SeaweedFS / сканы этим действием не восстанавливаются.
+            Файлы из хранилища файлов скана этим действием не восстанавливаются.
         </div>
-        <div class="alert alert-info">
-            <strong>Рекомендуемый способ:</strong> сначала сделайте дамп на этом же сервере
-            («Сделать дамп сейчас»), затем выберите его в списке «Файл на сервере» —
-            без загрузки через браузер. Так не будет ошибки
-            <code>ERR_UPLOAD_FILE_CHANGED</code>.
-        </div>
-        <p class="text-muted small">
-            <code>ERR_UPLOAD_FILE_CHANGED</code> — это ошибка Chrome <em>до</em> отправки на сервер:
-            файл изменился после выбора (часто Downloads / оборванное скачивание / OneDrive).
-            Скопируйте <code>.dump</code> на рабочий стол и выберите копию, либо используйте список на сервере.
-        </p>
         <form method="post"
               action="{% url 'administration:backup_restore' %}"
               enctype="multipart/form-data"
