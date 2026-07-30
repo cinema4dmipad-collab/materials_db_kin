@@ -21,8 +21,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# PostgreSQL 16 client (server in compose is postgres:16-*; stock bookworm client is 15).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq5 libpq-dev gcc curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg libpq5 libpq-dev gcc \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY deploy/ci/pip_mirror_env.sh /tmp/pip_mirror_env.sh
@@ -51,6 +58,9 @@ RUN chmod +x /app/deploy/ci/finalize_app_image.sh \
        DOKPLOY_COMMIT_HASH="${DOKPLOY_COMMIT_HASH}" \
        SOURCE_COMMIT="${SOURCE_COMMIT}" \
        sh /app/deploy/ci/finalize_app_image.sh
+
+RUN mkdir -p /backups /backups/tmp \
+    && chown -R appuser:appuser /backups
 
 USER appuser
 

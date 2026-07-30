@@ -16,6 +16,14 @@ Copy from [`.env.example`](../../.env.example) or [`.env.prod.example`](../../.e
 | `DB_PORT` | `5432` | Port |
 | `DB_WAIT_TIMEOUT` | `60` | Seconds to wait for DB in entrypoint |
 
+## Backups
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BACKUP_DIR` | `<BASE_DIR>/backups` / `/backups` in Docker | Directory for scheduled Postgres dumps |
+
+See [`deploy/BACKUP.md`](../../deploy/BACKUP.md). Only PostgreSQL is backed up; SeaweedFS is not.
+
 ## Django
 
 | Variable | Default | Description |

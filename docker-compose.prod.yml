@@ -37,10 +37,40 @@ services:
     env_file: .env
     environment:
       DB_ENGINE: postgresql
+      BACKUP_DIR: /backups
     volumes:
       - staticfiles:/app/staticfiles
+      - backups:/backups
     expose:
       - '8000'
+    restart: unless-stopped
+
+  backup-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim-bookworm}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
+        PIP_MIRROR_URLS: ${PIP_MIRROR_URLS:-}
+        GIT_COMMIT: ${GIT_COMMIT:-}
+        CI_COMMIT_SHORT_SHA: ${CI_COMMIT_SHORT_SHA:-}
+        DOKPLOY_COMMIT_HASH: ${DOKPLOY_COMMIT_HASH:-}
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-1}
+    image: ${WEB_IMAGE:-materials-db-web:prod}
+    pull_policy: build
+    env_file: .env
+    environment:
+      DB_ENGINE: postgresql
+      BACKUP_DIR: /backups
+    volumes:
+      - backups:/backups
+    depends_on:
+      - web
+    entrypoint: ['/bin/sh', '-c']
+    command: ['while true; do python manage.py run_scheduled_backup || true; sleep 60; done']
     restart: unless-stopped
 
   nginx:
@@ -59,6 +89,7 @@ services:
 
 volumes:
   staticfiles:
+  backups:
 
 networks:
   default:

@@ -23,6 +23,9 @@ def env_str(name: str, default: str = '') -> str:
     return value.strip().strip('"').strip("'")
 
 
+BACKUP_DIR = Path(env_str('BACKUP_DIR', str(BASE_DIR / 'backups')))
+
+
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None:

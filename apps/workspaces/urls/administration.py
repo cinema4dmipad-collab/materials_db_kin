@@ -1,10 +1,18 @@
 from django.urls import path
 
+from apps.core import backup_views
 from apps.workspaces import views
 
 app_name = 'administration'
 
 urlpatterns = [
+    path('backups/', backup_views.BackupSettingsView.as_view(), name='backups'),
+    path('backups/manual/', backup_views.BackupManualView.as_view(), name='backup_manual'),
+    path(
+        'backups/<int:pk>/download/',
+        backup_views.BackupDownloadView.as_view(),
+        name='backup_download',
+    ),
     path('workspaces/', views.AdminWorkspaceListView.as_view(), name='admin_workspaces'),
     path('workspaces/create/', views.WorkspaceCreateView.as_view(), name='admin_workspace_create'),
     path('workspaces/<uuid:pk>/edit/', views.AdminWorkspaceUpdateView.as_view(), name='admin_workspace_edit'),

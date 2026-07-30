@@ -33,6 +33,9 @@ _EXEMPT_URL_NAMES = frozenset(
         'workspaces:switch',
         'core:debug',
         'core:help',
+        'administration:backups',
+        'administration:backup_manual',
+        'administration:backup_download',
     }
 )
 _EXEMPT_PATH_PREFIXES = ('/admin/',)
