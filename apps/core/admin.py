@@ -18,6 +18,7 @@ class BackupSettingsAdmin(admin.ModelAdmin):
         'enabled',
         'schedule_hour',
         'schedule_minute',
+        'interval_days',
         'retention_count',
         'updated_at',
         'updated_by',

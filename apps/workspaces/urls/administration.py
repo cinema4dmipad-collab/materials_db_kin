@@ -15,6 +15,11 @@ urlpatterns = [
         name='backup_cancel_running',
     ),
     path(
+        'backups/delete-dump/',
+        backup_views.BackupDeleteDumpView.as_view(),
+        name='backup_delete_dump',
+    ),
+    path(
         'backups/<int:pk>/download/',
         backup_views.BackupDownloadView.as_view(),
         name='backup_download',

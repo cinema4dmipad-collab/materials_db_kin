@@ -75,6 +75,15 @@ def resolve_server_dump(filename: str) -> Path:
     return path
 
 
+def delete_server_dump(filename: str) -> str:
+    """Удаляет .dump с тома и отвязывает его от записей BackupRun."""
+    path = resolve_server_dump(filename)
+    name = path.name
+    path.unlink()
+    BackupRun.objects.filter(filename=name).update(filename='')
+    return name
+
+
 def assert_pg_custom_dump(path: Path) -> None:
     """Проверяет сигнатуру custom-format pg_dump (PGDMP)."""
     try:
@@ -364,12 +373,25 @@ def _fail_run(run: BackupRun, error: Exception, output_path: Path) -> BackupRun:
     return run
 
 
-def _has_successful_scheduled_today(local_now: datetime) -> bool:
-    return BackupRun.objects.filter(
-        trigger=BackupRun.Trigger.SCHEDULED,
-        status=BackupRun.Status.SUCCESS,
-        started_at__date=local_now.date(),
-    ).exists()
+def _last_successful_scheduled() -> BackupRun | None:
+    return (
+        BackupRun.objects.filter(
+            trigger=BackupRun.Trigger.SCHEDULED,
+            status=BackupRun.Status.SUCCESS,
+        )
+        .order_by('-started_at')
+        .first()
+    )
+
+
+def _schedule_interval_elapsed(local_now: datetime, interval_days: int) -> bool:
+    """True, если с последнего успешного scheduled-дампа прошло >= interval_days."""
+    last = _last_successful_scheduled()
+    if last is None:
+        return True
+    last_local = timezone.localtime(last.started_at)
+    days_since = (local_now.date() - last_local.date()).days
+    return days_since >= max(int(interval_days), 1)
 
 
 SCHEDULE_GRACE = timedelta(minutes=15)
@@ -381,28 +403,30 @@ def should_run_scheduled(now: datetime | None = None) -> bool:
         return False
 
     local_now = timezone.localtime(now or timezone.now())
-    if _has_successful_scheduled_today(local_now):
-        return False
-
     scheduled = local_now.replace(
         hour=backup_settings.schedule_hour,
         minute=backup_settings.schedule_minute,
         second=0,
         microsecond=0,
     )
-    return scheduled <= local_now < scheduled + SCHEDULE_GRACE
+    if not (scheduled <= local_now < scheduled + SCHEDULE_GRACE):
+        return False
+
+    return _schedule_interval_elapsed(local_now, backup_settings.interval_days)
 
 
 def create_volume_dump(*, trigger: str, user=None, enforce_daily_once: bool = False) -> BackupRun | None:
     """Создаёт дамп в BACKUP_DIR и применяет retention.
 
-    При enforce_daily_once=True и уже существующем успешном scheduled-дампе за сегодня
+    При enforce_daily_once=True повторный scheduled-дамп в пределах interval_days
     возвращает None (без ошибки) — удобно для cron при гонке двух вызовов.
     """
     with backup_lock():
         local_now = timezone.localtime()
-        if enforce_daily_once and _has_successful_scheduled_today(local_now):
-            return None
+        if enforce_daily_once:
+            interval_days = BackupSettings.get_solo().interval_days
+            if not _schedule_interval_elapsed(local_now, interval_days):
+                return None
 
         timestamp = local_now.strftime('%Y%m%d_%H%M%S')
         output_path = get_backup_dir() / f'materials_db_{timestamp}.dump'

@@ -13,6 +13,7 @@ from apps.core.backup import (
     BackupError,
     cancel_running_backups,
     create_manual_volume_dump,
+    delete_server_dump,
     get_backup_dir,
     get_running_backup,
     get_temp_dir,
@@ -47,6 +48,7 @@ class BackupSettingsView(SystemAdminRequiredMixin, FormView):
         )
         context['running_backup'] = get_running_backup()
         context['server_dumps_count'] = len(server_choices)
+        context['server_dumps'] = server_choices
         return context
 
     def form_valid(self, form):
@@ -170,6 +172,26 @@ class BackupCancelRunningView(SystemAdminRequiredMixin, View):
             )
         else:
             messages.info(request, 'Активных запусков не найдено.')
+        return redirect('administration:backups')
+
+    def get(self, request, *args, **kwargs):
+        return HttpResponseNotAllowed(['POST'])
+
+
+class BackupDeleteDumpView(SystemAdminRequiredMixin, View):
+    http_method_names = ['post']
+
+    def post(self, request, *args, **kwargs):
+        filename = (request.POST.get('filename') or '').strip()
+        if not filename:
+            messages.error(request, 'Не указан файл для удаления.')
+            return redirect('administration:backups')
+        try:
+            deleted = delete_server_dump(filename)
+        except BackupError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, f'Файл удалён с сервера: {deleted}')
         return redirect('administration:backups')
 
     def get(self, request, *args, **kwargs):

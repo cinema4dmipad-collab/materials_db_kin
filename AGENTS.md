@@ -29,7 +29,7 @@ docker compose exec web python manage.py seed_data
 - **Structures** are dynamic: `StructureType` + `StructureField` → raw SQL tables via `SQLExecutor`. Query via raw SQL, not ORM. `material.struct_type` + `material.struct_props_id` links materials to dynamic table rows.
 - **S3 storage** is conditional (`USE_S3` env var); uses `django-storages` + `boto3`. Falls back to local `media/`.
 - **DB**: PostgreSQL (prod) or SQLite (dev/CI). Set `DB_ENGINE=postgresql` to switch.
-- **Backups**: PostgreSQL only (`pg_dump -Fc`); schedule via `backup-cron` + `/administration/backups/`. See `deploy/BACKUP.md`. SeaweedFS is not backed up by this feature.
+- **Backups**: PostgreSQL only (`pg_dump -Fc`); schedule via `backup-cron` + `/administration/backups/` (time + interval in days). See `deploy/BACKUP.md`. SeaweedFS is not backed up by this feature.
 - **Version**: `pyproject.toml [project].version` + git commit hash from `BUILD_COMMIT` file or CI env.
 
 ## Key conventions

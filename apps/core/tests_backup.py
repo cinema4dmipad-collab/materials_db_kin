@@ -14,6 +14,7 @@ from apps.core.backup import (
     BackupError,
     create_volume_dump,
     run_pg_dump,
+    should_run_scheduled,
 )
 from apps.core.models import BackupRun, BackupSettings
 from apps.workspaces.test_utils import AuthenticatedWorkspaceTestCase, DEFAULT_TEST_PASSWORD
@@ -54,6 +55,7 @@ class BackupAdministrationTests(TestCase):
             {
                 'enabled': 'on',
                 'schedule_time': '14:30',
+                'interval_days': 3,
                 'retention_count': 12,
             },
         )
@@ -63,8 +65,27 @@ class BackupAdministrationTests(TestCase):
         self.assertTrue(settings.enabled)
         self.assertEqual(settings.schedule_hour, 14)
         self.assertEqual(settings.schedule_minute, 30)
+        self.assertEqual(settings.interval_days, 3)
         self.assertEqual(settings.retention_count, 12)
         self.assertEqual(settings.updated_by, self.superuser)
+
+    def test_superuser_can_delete_server_dump(self):
+        with TemporaryDirectory() as backup_dir, override_settings(BACKUP_DIR=backup_dir):
+            dump = Path(backup_dir) / 'materials_db_20260730_120000.dump'
+            dump.write_bytes(b'PGDUMP')
+            run = BackupRun.objects.create(
+                trigger=BackupRun.Trigger.MANUAL,
+                status=BackupRun.Status.SUCCESS,
+                filename=dump.name,
+            )
+            response = self.client.post(
+                reverse('administration:backup_delete_dump'),
+                {'filename': dump.name},
+            )
+            self.assertRedirects(response, reverse('administration:backups'))
+            self.assertFalse(dump.exists())
+            run.refresh_from_db()
+            self.assertEqual(run.filename, '')
 
     def test_manual_backup_redirects_to_download(self):
         with TemporaryDirectory() as backup_dir, override_settings(BACKUP_DIR=backup_dir):
@@ -103,6 +124,7 @@ class BackupSchedulingTests(TestCase):
         settings.enabled = True
         settings.schedule_hour = FIXED_NOW.hour
         settings.schedule_minute = FIXED_NOW.minute
+        settings.interval_days = 1
         settings.save()
 
         with TemporaryDirectory() as backup_dir, override_settings(BACKUP_DIR=backup_dir):
@@ -119,6 +141,41 @@ class BackupSchedulingTests(TestCase):
             self.assertEqual(successful_runs.count(), 1)
             self.assertEqual(len(dump_files), 1)
             self.assertEqual(dump_files[0].read_bytes(), b'PGDUMP')
+
+    def test_interval_days_skips_until_enough_days_passed(self):
+        settings = BackupSettings.get_solo()
+        settings.enabled = True
+        settings.schedule_hour = FIXED_NOW.hour
+        settings.schedule_minute = FIXED_NOW.minute
+        settings.interval_days = 3
+        settings.save()
+
+        run = BackupRun.objects.create(
+            trigger=BackupRun.Trigger.SCHEDULED,
+            status=BackupRun.Status.SUCCESS,
+            finished_at=FIXED_NOW - timedelta(days=2),
+        )
+        BackupRun.objects.filter(pk=run.pk).update(
+            started_at=FIXED_NOW - timedelta(days=2),
+            finished_at=FIXED_NOW - timedelta(days=2),
+        )
+
+        def localtime_at(fixed):
+            real_localtime = timezone.localtime
+
+            def _localtime(value=None):
+                if value is None:
+                    return fixed
+                return real_localtime(value)
+
+            return _localtime
+
+        with patch('apps.core.backup.timezone.localtime', side_effect=localtime_at(FIXED_NOW)):
+            self.assertFalse(should_run_scheduled(FIXED_NOW))
+
+        later = FIXED_NOW + timedelta(days=1)
+        with patch('apps.core.backup.timezone.localtime', side_effect=localtime_at(later)):
+            self.assertTrue(should_run_scheduled(later))
 
     def test_retention_removes_dumps_exceeding_configured_limit(self):
         retention_count = 2

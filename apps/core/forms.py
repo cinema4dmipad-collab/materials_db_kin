@@ -21,19 +21,24 @@ class BackupSettingsForm(forms.ModelForm):
         label='Время запуска',
         widget=forms.TimeInput(attrs={**_BOOTSTRAP_INPUT, 'type': 'time'}, format='%H:%M'),
         input_formats=['%H:%M', '%H:%M:%S'],
-        help_text='Ежедневный запуск по локальному времени сервера.',
+        help_text='Локальное время сервера в день запуска.',
     )
 
     class Meta:
         model = BackupSettings
-        fields = ['enabled', 'retention_count']
+        fields = ['enabled', 'interval_days', 'retention_count']
         widgets = {
             'enabled': forms.CheckboxInput(attrs=_BOOTSTRAP_CHECKBOX),
+            'interval_days': forms.NumberInput(attrs={**_BOOTSTRAP_INPUT, 'min': 1, 'max': 365}),
             'retention_count': forms.NumberInput(attrs={**_BOOTSTRAP_INPUT, 'min': 1}),
         }
         labels = {
             'enabled': 'Авто копирование',
+            'interval_days': 'Интервал, дней',
             'retention_count': 'Количество хранимых копий',
+        }
+        help_texts = {
+            'interval_days': '1 — каждый день, 7 — раз в неделю (максимум 365).',
         }
 
     def __init__(self, *args, **kwargs):
