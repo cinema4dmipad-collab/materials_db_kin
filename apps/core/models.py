@@ -160,6 +160,12 @@ class BackupSettings(models.Model):
         verbose_name='Минута запуска',
         help_text='От 0 до 59.',
     )
+    interval_days = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+        verbose_name='Интервал, дней',
+        help_text='1 — каждый день, 7 — раз в неделю, и т.д. (1–365).',
+    )
     retention_count = models.PositiveIntegerField(
         default=7,
         validators=[MinValueValidator(1)],

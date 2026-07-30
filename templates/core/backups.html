@@ -53,6 +53,9 @@
                             {% include 'includes/bootstrap_form_field.html' with field=form.schedule_time %}
                         </div>
                         <div class="mb-3">
+                            {% include 'includes/bootstrap_form_field.html' with field=form.interval_days %}
+                        </div>
+                        <div class="mb-3">
                             {% include 'includes/bootstrap_form_field.html' with field=form.retention_count %}
                         </div>
                     </div>
@@ -124,6 +127,47 @@
                 <i class="bi bi-upload me-1"></i>Восстановить
             </button>
         </form>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Файлы на сервере (/backups)</h2>
+    </div>
+    <div class="card-body p-0">
+        {% if server_dumps %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">Файл</th>
+                        <th scope="col" class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for filename, label in server_dumps %}
+                    <tr>
+                        <td><code>{{ filename }}</code></td>
+                        <td class="text-end">
+                            <form method="post"
+                                  action="{% url 'administration:backup_delete_dump' %}"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Удалить {{ filename }} с сервера?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="filename" value="{{ filename }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    Удалить
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0 p-3">На сервере пока нет файлов дампов.</p>
+        {% endif %}
     </div>
 </div>
 
