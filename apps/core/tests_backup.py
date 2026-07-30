@@ -66,7 +66,7 @@ class BackupAdministrationTests(TestCase):
         self.assertEqual(settings.retention_count, 12)
         self.assertEqual(settings.updated_by, self.superuser)
 
-    def test_manual_backup_returns_attachment_and_removes_temp_file(self):
+    def test_manual_backup_redirects_to_download(self):
         with TemporaryDirectory() as backup_dir, override_settings(BACKUP_DIR=backup_dir):
             with (
                 patch('apps.core.backup_views.is_postgresql', return_value=True),
@@ -74,18 +74,19 @@ class BackupAdministrationTests(TestCase):
             ):
                 response = self.client.post(reverse('administration:backup_manual'))
 
-            temporary_path = response.temporary_path
-            self.assertEqual(response.status_code, 200)
-            self.assertIn('attachment;', response['Content-Disposition'])
-            self.assertEqual(b''.join(response.streaming_content), b'PGDUMP')
-            response.close()
-
-            self.assertFalse(temporary_path.exists())
-            self.assertEqual(
-                BackupRun.objects.get().status,
-                BackupRun.Status.SUCCESS,
+            run = BackupRun.objects.get()
+            self.assertEqual(run.status, BackupRun.Status.SUCCESS)
+            self.assertTrue(run.filename)
+            self.assertRedirects(
+                response,
+                reverse('administration:backup_download', kwargs={'pk': run.pk}),
+                fetch_redirect_response=False,
             )
-            self.assertEqual(BackupRun.objects.get().filename, '')
+            download = self.client.get(reverse('administration:backup_download', kwargs={'pk': run.pk}))
+            self.assertEqual(download.status_code, 200)
+            self.assertIn('attachment;', download['Content-Disposition'])
+            self.assertEqual(b''.join(download.streaming_content), b'PGDUMP')
+            self.assertTrue((Path(backup_dir) / run.filename).exists())
 
     def test_manual_backup_redirects_when_postgresql_is_unavailable(self):
         with patch('apps.core.backup_views.is_postgresql', return_value=False):

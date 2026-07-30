@@ -68,9 +68,9 @@
             </div>
             <div class="card-body d-flex flex-column">
                 <p class="text-muted">
-                    Дамп сначала создаётся на сервере, затем скачивается.
-                    Пока идёт создание, страница может долго «крутиться» — дождитесь окончания,
-                    не выбирайте незавершённый файл из Downloads для восстановления.
+                    Дамп сохраняется на сервере, затем открывается скачивание.
+                    Если браузер покажет «Сайт недоступен» — обновите страницу бэкапов
+                    и нажмите «Скачать» у успешного запуска в таблице ниже.
                 </p>
                 <form method="post" action="{% url 'administration:backup_manual' %}" class="mt-auto">
                     {% csrf_token %}
@@ -154,7 +154,7 @@
                         <td>{% if run.size_bytes is not None %}{{ run.size_bytes|filesizeformat }}{% else %}—{% endif %}</td>
                         <td class="text-danger small">{{ run.error_message|default:"—" }}</td>
                         <td class="text-end">
-                            {% if run.trigger == 'scheduled' and run.status == 'success' and run.filename %}
+                            {% if run.status == 'success' and run.filename and run.trigger != 'restore' %}
                             <a class="btn btn-sm btn-outline-secondary" href="{% url 'administration:backup_download' run.pk %}">
                                 Скачать
                             </a>
