@@ -7,7 +7,7 @@
     <div>
         <p class="text-uppercase text-muted small fw-semibold mb-1">Администрирование</p>
         <h1 class="h2 mb-1">Бэкапы</h1>
-        <p class="text-muted mb-0">Настройка и загрузка резервных копий базы данных.</p>
+        <p class="text-muted mb-0">Настройка, выгрузка и загрузка резервных копий базы данных.</p>
     </div>
 </div>
 
@@ -63,6 +63,37 @@
     </div>
 </div>
 
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Восстановить из файла</h2>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            Текущие данные PostgreSQL будут <strong>заменены</strong> содержимым дампа.
+            Файлы SeaweedFS / сканы этим действием не восстанавливаются. Лучше делать restore,
+            когда никто активно не пишет в систему.
+        </div>
+        <form method="post"
+              action="{% url 'administration:backup_restore' %}"
+              enctype="multipart/form-data"
+              novalidate>
+            {% csrf_token %}
+            <div class="mb-3">
+                {% include 'includes/bootstrap_form_field.html' with field=restore_form.dump_file %}
+            </div>
+            <div class="mb-3">
+                {% include 'includes/bootstrap_form_field.html' with field=restore_form.confirm %}
+            </div>
+            <button type="submit"
+                    class="btn btn-danger"
+                    {% if not postgresql_available %}disabled{% endif %}
+                    onclick="return confirm('Восстановить БД из дампа? Текущие данные будут заменены.');">
+                <i class="bi bi-upload me-1"></i>Загрузить и восстановить
+            </button>
+        </form>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-header">
         <h2 class="h5 mb-0">Последние запуски</h2>
@@ -102,6 +133,8 @@
                             <a class="btn btn-sm btn-outline-secondary" href="{% url 'administration:backup_download' run.pk %}">
                                 Скачать
                             </a>
+                            {% elif run.trigger == 'restore' and run.filename %}
+                            <span class="text-muted small">{{ run.filename }}</span>
                             {% else %}
                             <span class="text-muted">—</span>
                             {% endif %}

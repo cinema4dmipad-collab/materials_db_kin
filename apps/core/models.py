@@ -193,6 +193,7 @@ class BackupRun(models.Model):
     class Trigger(models.TextChoices):
         MANUAL = 'manual', 'Вручную'
         SCHEDULED = 'scheduled', 'По расписанию'
+        RESTORE = 'restore', 'Восстановление'
 
     class Status(models.TextChoices):
         RUNNING = 'running', 'Выполняется'

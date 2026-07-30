@@ -122,6 +122,96 @@ def run_pg_dump(output_path: Path) -> None:
         raise BackupError(f'Не удалось запустить pg_dump: {exc}') from exc
 
 
+def ensure_pg_restore() -> str:
+    pg_restore_path = shutil.which('pg_restore')
+    if not pg_restore_path:
+        raise BackupError('Утилита pg_restore не найдена в PATH.')
+    return pg_restore_path
+
+
+def run_pg_restore(dump_path: Path) -> None:
+    """Восстанавливает custom-format dump (-Fc) в текущую БД."""
+    if not is_postgresql():
+        raise BackupError('Восстановление доступно только для PostgreSQL.')
+    if not dump_path.is_file():
+        raise BackupError('Файл дампа не найден.')
+
+    database = settings.DATABASES['default']
+    command = [
+        ensure_pg_restore(),
+        '--clean',
+        '--if-exists',
+        '--no-owner',
+        '--no-acl',
+        '-h',
+        database['HOST'],
+        '-p',
+        str(database['PORT']),
+        '-U',
+        database['USER'],
+        '-d',
+        database['NAME'],
+        str(dump_path),
+    ]
+    environment = os.environ.copy()
+    if password := database.get('PASSWORD'):
+        environment['PGPASSWORD'] = password
+
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+    except OSError as exc:
+        raise BackupError(f'Не удалось запустить pg_restore: {exc}') from exc
+
+    if completed.returncode == 0:
+        return
+
+    combined = '\n'.join(
+        part for part in ((completed.stderr or '').strip(), (completed.stdout or '').strip()) if part
+    )
+    # pg_restore often returns 1 for non-fatal warnings; fail on real errors.
+    if completed.returncode > 1 or 'error:' in combined.lower():
+        raise BackupError(f'pg_restore завершился с ошибкой: {combined or completed.returncode}')
+
+
+def restore_from_dump(*, dump_path: Path, original_name: str = '', user=None) -> BackupRun:
+    """Применяет дамп к БД. BackupRun пишется после restore (старая история затирается дампом)."""
+    size_bytes = dump_path.stat().st_size if dump_path.is_file() else None
+    display_name = (original_name or dump_path.name)[:255]
+
+    with backup_lock():
+        try:
+            run_pg_restore(dump_path)
+        except BackupError:
+            raise
+
+        from django.db import IntegrityError
+
+        try:
+            return BackupRun.objects.create(
+                trigger=BackupRun.Trigger.RESTORE,
+                status=BackupRun.Status.SUCCESS,
+                finished_at=timezone.now(),
+                filename=display_name,
+                size_bytes=size_bytes,
+                created_by=user,
+            )
+        except IntegrityError:
+            # Дамп с другого стенда может не содержать текущего пользователя.
+            return BackupRun.objects.create(
+                trigger=BackupRun.Trigger.RESTORE,
+                status=BackupRun.Status.SUCCESS,
+                finished_at=timezone.now(),
+                filename=display_name,
+                size_bytes=size_bytes,
+                created_by=None,
+            )
+
+
 def apply_retention(retention_count: int) -> None:
     """Удаляет только именованные scheduled-дампы, не трогая tmp/."""
     keep = max(int(retention_count), 1)
