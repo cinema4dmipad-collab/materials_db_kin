@@ -9,6 +9,7 @@ urlpatterns = [
     path('accounts/', include('apps.workspaces.urls.accounts')),
     path('workspaces/', include('apps.workspaces.urls.workspaces')),
     path('administration/', include('apps.workspaces.urls.administration')),
+    path('api/', include('apps.api.urls')),
     path('', include('apps.core.urls')),
     path('materials/', include('apps.materials.urls')),
     path('materials/<uuid:material_pk>/attachments/', include('apps.materials.attachment_urls')),

@@ -29,6 +29,11 @@ _EXEMPT_URL_NAMES = frozenset(
         'accounts:profile',
         'accounts:profile_edit',
         'accounts:password_change',
+        'accounts:token_create',
+        'accounts:token_update',
+        'accounts:token_rotate',
+        'accounts:token_revoke',
+        'accounts:token_dismiss_secret',
         'workspaces:select',
         'workspaces:switch',
         'core:debug',
@@ -41,7 +46,7 @@ _EXEMPT_URL_NAMES = frozenset(
         'administration:backup_download',
     }
 )
-_EXEMPT_PATH_PREFIXES = ('/admin/',)
+_EXEMPT_PATH_PREFIXES = ('/admin/', '/api/')
 
 
 def _is_exempt_request(request) -> bool:

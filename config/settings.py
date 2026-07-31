@@ -60,8 +60,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'dmr',
+    'dmr.security.token.app',
     'apps.workspaces.apps.WorkspacesConfig',
     'apps.core.apps.CoreConfig',
+    'apps.api.apps.ApiConfig',
     'apps.references',
     'apps.composites',
     'apps.materials',
@@ -268,6 +271,14 @@ if USE_S3_STORAGE:
     AWS_S3_FILE_OVERWRITE = False
     AWS_S3_VERIFY = env_bool('AWS_S3_VERIFY', default=AWS_S3_ENDPOINT_URL.startswith('https://'))
     AWS_S3_USE_SSL = AWS_S3_ENDPOINT_URL.startswith('https://') if AWS_S3_ENDPOINT_URL else True
+    # Fail fast when SeaweedFS/S3 is down (default boto timeouts hang for minutes).
+    from botocore.config import Config as BotoConfig
+
+    AWS_S3_CLIENT_CONFIG = BotoConfig(
+        connect_timeout=2,
+        read_timeout=10,
+        retries={'total_max_attempts': 1},
+    )
     STORAGES = {
         'default': {
             'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',

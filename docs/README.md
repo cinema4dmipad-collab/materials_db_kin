@@ -12,6 +12,7 @@ Project documentation for **materials_db_v1** — web database of composite mate
   * [Testing](architecture/testing.md) — Test suite structure and CI
   * [Export / analytics draft](architecture/analytics-draft.md) — Excel export first; analytics UI deferred (RU)
 * [Components](components/index.md) — Main application modules
+* [HTTP API v1](api/README.md) — PAT auth, workspaces/materials/samples/scans, Postman collection
 * [Configuration](configuration/index.md) — Setup and environment variables
   * [Environment Reference](configuration/environment.md) — `.env` variables and deployment profiles
 * [Examples](examples/index.md) — Usage and operations examples

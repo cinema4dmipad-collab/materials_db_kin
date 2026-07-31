@@ -150,6 +150,17 @@ class UserProfileView(LoginRequiredMixin, TemplateView):
 
         context['workspace_rows'] = workspace_rows
 
+        from dmr.security.token.app.models import Token
+
+        from apps.api.token_forms import ApiTokenCreateForm
+
+        context['api_tokens'] = Token.objects.filter(user=user).order_by('-created_at')
+        context['api_token_form'] = ApiTokenCreateForm()
+        # Секрет держим в сессии, пока пользователь не закроет модалку («Готово»).
+        context['api_token_plaintext'] = self.request.session.get('api_token_plaintext')
+        context['api_token_name'] = self.request.session.get('api_token_name')
+        context['api_token_id'] = self.request.session.get('api_token_id')
+
         return context
 
 
