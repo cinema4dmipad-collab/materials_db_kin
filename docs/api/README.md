@@ -31,7 +31,8 @@ X-Workspace-Id: <uuid>
 | GET | `/api/v1/scans/{id}/download/` | `scan.view` (stream HDF5; **503** if S3/SeaweedFS unreachable) |
 | POST | `/api/v1/samples/{id}/scans/` | `scan.create` (multipart: `file`, optional `title`/`method`/`description`) |
 
-Пагинация: `limit` (1–200, default 50), `offset`. Фильтры: `material_id` у samples, `sample_id` у scans.
+Пагинация: `limit` (1–200, default 50), `offset`.  
+Фильтры: `material_id` у samples, `sample_id` у scans, `search` у samples (подстрока по `code` / `name`, без учёта регистра).
 
 ## Postman
 

@@ -880,6 +880,8 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'изменённые вручную')
         self.assertContains(response, 'Развернуть')
         self.assertContains(response, 'Администрирование → Бэкапы')
+        self.assertContains(response, 'токен API')
+        self.assertContains(response, 'Authorization: Bearer')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):
