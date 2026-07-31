@@ -24,7 +24,8 @@ docker compose exec web python manage.py seed_data
 ## Architecture
 
 - Settings: `config/settings.py` (env via `dotenv`)
-- Apps under `apps/`: **core**, **materials**, **references**, **samples**, **scans**, **structures**, **composites**, **workspaces**, **analytics**
+- Apps under `apps/`: **core**, **api**, **materials**, **references**, **samples**, **scans**, **structures**, **composites**, **workspaces**, **analytics**
+- **API** (`/api/v1/`): django-modern-rest + PAT (`dmr.security.token.app`); see `docs/api/README.md`. Middleware exempts `/api/` from session workspace.
 - **Workspaces** is a cross-cutting multi-tenancy layer — `WorkspaceVisibilityMixin` on every major model, middleware enforces session-based active workspace
 - **Structures** are dynamic: `StructureType` + `StructureField` → raw SQL tables via `SQLExecutor`. Query via raw SQL, not ORM. `material.struct_type` + `material.struct_props_id` links materials to dynamic table rows.
 - **S3 storage** is conditional (`USE_S3` env var); uses `django-storages` + `boto3`. Falls back to local `media/`.

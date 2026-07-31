@@ -1,0 +1,552 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Materials DB API v1",
+    "description": "Materials DB HTTP API v1.\n\nSetup:\n1. Create PAT in web UI: Profile -> API Tokens.\n2. Open collection Variables and set apiToken (and optionally workspaceId).\n3. Collection Runner -> Persist responses -> Run.\n\nAuth header is injected by collection Pre-request (not stored as Postman Auth secret).\n\nErrors: 401 auth, 400 bad X-Workspace-Id, 404 not found/no access, 422 validation.\nFolders: happy_path, bad_requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://127.0.0.1:8000", "type": "string"},
+    {"key": "apiToken", "value": "", "type": "string"},
+    {"key": "workspaceId", "value": "", "type": "string"},
+    {"key": "materialId", "value": "", "type": "string"},
+    {"key": "sampleId", "value": "", "type": "string"},
+    {"key": "scanId", "value": "", "type": "string"}
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {"key": "token", "value": "{{apiToken}}", "type": "string"}
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const authType = pm.request.auth ? pm.request.auth.type : null;",
+          "if (authType === 'noauth') {",
+          "  return;",
+          "}",
+          "const apiToken = String(",
+          "  pm.collectionVariables.get('apiToken') ||",
+          "  pm.variables.get('apiToken') ||",
+          "  ''",
+          ").trim();",
+          "console.log('apiToken length:', apiToken.length);",
+          "if (!apiToken) {",
+          "  console.warn('apiToken is empty. Collection -> Variables -> Current value.');",
+          "  return;",
+          "}",
+          "pm.request.headers.remove('Authorization');",
+          "pm.request.headers.add({",
+          "  key: 'Authorization',",
+          "  value: 'Bearer ' + apiToken",
+          "});"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.response.code >= 400) {",
+          "  console.log('HTTP ' + pm.response.code + ' ' + pm.request.url);",
+          "  console.log((pm.response.text() || '').slice(0, 500));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "happy_path",
+      "item": [
+        {
+          "name": "01 Workspaces",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 200', function () {",
+                  "  pm.expect(pm.response.code, 'Valid apiToken should return 200 for GET /api/v1/workspaces/').to.eql(200);",
+                  "});",
+                  "pm.test('Workspaces list is a non-empty array', function () {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data).to.be.an('array');",
+                  "  pm.expect(data.length).to.be.above(0);",
+                  "  const first = data[0];",
+                  "  pm.expect(first).to.include.keys('id', 'slug', 'name');",
+                  "  if (!(pm.collectionVariables.get('workspaceId') || '').trim()) {",
+                  "    pm.collectionVariables.set('workspaceId', first.id);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/workspaces/"
+          }
+        },
+        {
+          "name": "02 Materials list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 200', function () {",
+                  "  pm.expect(pm.response.code, 'Need apiToken + X-Workspace-Id; see Console for error body').to.eql(200);",
+                  "});",
+                  "pm.test('Response has meta and results', function () {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data).to.have.property('meta');",
+                  "  pm.expect(data).to.have.property('results').that.is.an('array');",
+                  "  pm.expect(data.meta).to.include.keys('count', 'limit', 'offset');",
+                  "  if (data.results.length) {",
+                  "    pm.collectionVariables.set('materialId', data.results[0].id);",
+                  "  } else {",
+                  "    console.warn('No materials in workspace; detail steps may fail.');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "url": "{{baseUrl}}/api/v1/materials/?limit=50&offset=0"
+          }
+        },
+        {
+          "name": "03 Material detail",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!(pm.collectionVariables.get('materialId') || '').trim()) {",
+                  "  console.warn('materialId is empty: run 02 Materials list first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = (pm.collectionVariables.get('materialId') || '').trim();",
+                  "if (!id) {",
+                  "  pm.test('Skipped: materialId missing', function () {",
+                  "    throw new Error('Set materialId or fix 02 Materials list');",
+                  "  });",
+                  "  return;",
+                  "}",
+                  "pm.test('Status code should be 200', function () {",
+                  "  pm.expect(pm.response.code, 'Empty materialId makes URL .../materials// and returns 404').to.eql(200);",
+                  "});",
+                  "pm.test('Material has properties and structure', function () {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data).to.include.keys('id', 'code', 'properties', 'structure');",
+                  "  pm.expect(data.properties).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "url": "{{baseUrl}}/api/v1/materials/{{materialId}}/"
+          }
+        },
+        {
+          "name": "04 Samples list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 200', function () {",
+                  "  pm.expect(pm.response.code, 'Need sample.view in workspace').to.eql(200);",
+                  "});",
+                  "pm.test('Response has results', function () {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data.results).to.be.an('array');",
+                  "  if (data.results.length) {",
+                  "    pm.collectionVariables.set('sampleId', data.results[0].id);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "url": "{{baseUrl}}/api/v1/samples/?limit=15&offset=0&search="
+          }
+        },
+        {
+          "name": "05 Sample detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = (pm.collectionVariables.get('sampleId') || '').trim();",
+                  "if (!id) {",
+                  "  pm.test('Skipped: sampleId missing', function () {",
+                  "    throw new Error('Run 04 Samples list or set sampleId');",
+                  "  });",
+                  "  return;",
+                  "}",
+                  "pm.test('Status code should be 200', function () {",
+                  "  pm.expect(pm.response.code).to.eql(200);",
+                  "});",
+                  "pm.test('Sample has material_id and properties', function () {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data).to.include.keys('id', 'material_id', 'properties');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "url": "{{baseUrl}}/api/v1/samples/{{sampleId}}/"
+          }
+        },
+        {
+          "name": "06 Scans list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 200', function () {",
+                  "  pm.expect(pm.response.code).to.eql(200);",
+                  "});",
+                  "pm.test('List items have download_url', function () {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data.results).to.be.an('array');",
+                  "  if (data.results.length) {",
+                  "    const first = data.results[0];",
+                  "    pm.collectionVariables.set('scanId', first.id);",
+                  "    pm.expect(first.download_url).to.include('/download/');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "url": "{{baseUrl}}/api/v1/scans/?limit=50&offset=0"
+          }
+        },
+        {
+          "name": "07 Scan detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = (pm.collectionVariables.get('scanId') || '').trim();",
+                  "if (!id) {",
+                  "  pm.test('Skipped: scanId missing', function () {",
+                  "    throw new Error('Run 06 Scans list or set scanId');",
+                  "  });",
+                  "  return;",
+                  "}",
+                  "pm.test('Status code should be 200', function () {",
+                  "  pm.expect(pm.response.code).to.eql(200);",
+                  "});",
+                  "pm.test('Scan has sample_id and download_url', function () {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data).to.include.keys('id', 'sample_id', 'download_url');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "url": "{{baseUrl}}/api/v1/scans/{{scanId}}/"
+          }
+        },
+        {
+          "name": "08 Scan download",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = (pm.collectionVariables.get('scanId') || '').trim();",
+                  "if (!id) {",
+                  "  pm.test('Skipped: scanId missing', function () {",
+                  "    throw new Error('Run 06 Scans list or set scanId');",
+                  "  });",
+                  "  return;",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "  pm.test('Storage unavailable (SeaweedFS/S3 down) — OK for local without docker storage', function () {",
+                  "    pm.expect(pm.response.code).to.eql(503);",
+                  "  });",
+                  "  return;",
+                  "}",
+                  "pm.test('Status code should be 200', function () {",
+                  "  pm.expect(",
+                  "    pm.response.code,",
+                  "    'Download needs working S3/SeaweedFS; otherwise API returns 503'",
+                  "  ).to.eql(200);",
+                  "});",
+                  "pm.test('File is returned as attachment', function () {",
+                  "  const cd = pm.response.headers.get('Content-Disposition') || '';",
+                  "  pm.expect(cd.toLowerCase()).to.include('attachment');",
+                  "  pm.expect(pm.response.responseSize).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "url": "{{baseUrl}}/api/v1/scans/{{scanId}}/download/"
+          }
+        },
+        {
+          "name": "09 Create scan for sample (optional)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 400 || pm.response.code === 422) {",
+                  "  pm.test('No file: validation error is OK for Runner', function () {",
+                  "    pm.expect([400, 422]).to.include(pm.response.code);",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Status code should be 201', function () {",
+                  "    pm.expect(pm.response.code).to.eql(201);",
+                  "  });",
+                  "  pm.test('Created scan has download_url', function () {",
+                  "    const data = pm.response.json();",
+                  "    pm.expect(data).to.include.keys('id', 'sample_id', 'download_url');",
+                  "    pm.collectionVariables.set('scanId', data.id);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {"key": "file", "type": "file", "src": []},
+                {"key": "title", "type": "text", "value": "From Postman"},
+                {"key": "method", "type": "text", "value": "echo"},
+                {"key": "description", "type": "text", "value": "API smoke"}
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/samples/{{sampleId}}/scans/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "bad_requests",
+      "item": [
+        {
+          "name": "workspaces without token 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 401', function () {",
+                  "  pm.expect(pm.response.code, 'Without Authorization header API must return 401').to.eql(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/workspaces/"
+          }
+        },
+        {
+          "name": "workspaces with invalid token 401",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.upsert({",
+                  "  key: 'Authorization',",
+                  "  value: 'Bearer invalid-' + Date.now() + '-pat'",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 401', function () {",
+                  "  pm.expect(pm.response.code, 'Invalid token must return 401, not 500').to.eql(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/workspaces/"
+          }
+        },
+        {
+          "name": "materials without workspace header 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 400', function () {",
+                  "  pm.expect(pm.response.code, 'Without X-Workspace-Id materials list must return 400').to.eql(400);",
+                  "});",
+                  "pm.test('Body mentions X-Workspace-Id', function () {",
+                  "  pm.expect(pm.response.text() || '').to.include('X-Workspace-Id');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/materials/"
+          }
+        },
+        {
+          "name": "materials invalid workspace header 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 400', function () {",
+                  "  pm.expect(pm.response.code, 'Invalid UUID in X-Workspace-Id must return 400').to.eql(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "not-a-uuid"}
+            ],
+            "url": "{{baseUrl}}/api/v1/materials/"
+          }
+        },
+        {
+          "name": "materials unknown workspace 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 404', function () {",
+                  "  pm.expect(pm.response.code, 'Unknown/inaccessible workspace must return 404 (not 403)').to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "00000000-0000-0000-0000-000000000000"}
+            ],
+            "url": "{{baseUrl}}/api/v1/materials/"
+          }
+        },
+        {
+          "name": "material detail not found 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code should be 404', function () {",
+                  "  pm.expect(pm.response.code, 'Missing material id must return 404').to.eql(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+            ],
+            "url": "{{baseUrl}}/api/v1/materials/00000000-0000-0000-0000-000000000000/"
+          }
+        }
+      ]
+    }
+  ]
+}
