@@ -30,6 +30,10 @@ Tag forms use `sample.workspace` / `scan.workspace` for suggestions and assignme
 
 Download links use `.file-download-link` with progress indicator (`file_transfer_progress.js`).
 
+**Открыть в KeenetiX** — deep link `keenetix://lab/scan/<scan_uuid>?workspace=<workspace_uuid>`
+(кнопка на карточке скана и иконка в списках). Требует установленный KeenetiX Pro с настроенным Lab PAT;
+скачивание файла идёт через API на стороне десктопа (нужен доступный S3/SeaweedFS).
+
 ## Upload Progress
 
 Multipart uploads with `input[type=file]` go through XHR with `upload.onprogress`; bottom panel shows transfer status.

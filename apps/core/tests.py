@@ -882,6 +882,7 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Администрирование → Бэкапы')
         self.assertContains(response, 'токен API')
         self.assertContains(response, 'Authorization: Bearer')
+        self.assertContains(response, 'Открыть в KeenetiX')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):

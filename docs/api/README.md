@@ -48,6 +48,9 @@ X-Workspace-Id: <uuid>
 Для агентов/разработки в репозитории KeenetiX:  
 `KeenetiX/docs/integrations/materials-db-api.md` + правило `.cursor/rules/materials-db-api.mdc`.
 
+Deep link с сайта: `keenetix://lab/scan/<scan_uuid>?workspace=<workspace_uuid>` —
+кнопка «Открыть в KeenetiX» на карточке/в списках сканов.
+
 ## OpenAPI / Redoc
 
 Сейчас **не подключены**. django-modern-rest умеет OpenAPI + Redoc/Swagger из коробки — имеет смысл включить, когда контракт v1 стабилен и нужна браузерная документация для людей/внешних интеграторов.  
