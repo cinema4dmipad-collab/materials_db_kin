@@ -203,14 +203,19 @@ class ScanDetailView(AppViewMixin, SampleScanMixin, DetailView):
         context = super().get_context_data(**kwargs)
         active_ws = self.request.active_workspace
         context['scan_is_editable'] = scan_is_editable_in_workspace(self.object, active_ws)
+        tag_ws = scan_tag_workspace(
+            scan=self.object,
+            sample=self.sample,
+            fallback=active_ws,
+        )
+        # Explicit id for keenetix:// deep link (scan/sample workspace may be null).
+        context['keenetix_workspace_id'] = getattr(tag_ws, 'pk', None) or getattr(
+            active_ws, 'pk', None
+        )
         if context['scan_is_editable']:
             context['tags_form'] = ScanTagsForm(
                 instance=self.object,
-                workspace=scan_tag_workspace(
-                    scan=self.object,
-                    sample=self.sample,
-                    fallback=active_ws,
-                ),
+                workspace=tag_ws,
             )
         from apps.core.bookmarks import bookmark_context
         from apps.core.models import BookmarkEntityType
