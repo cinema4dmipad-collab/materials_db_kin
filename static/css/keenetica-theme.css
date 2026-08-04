@@ -101,8 +101,8 @@ a:hover {
 .navbar-keenetica .brand-logo {
     display: block;
     width: auto;
-    max-height: 3rem;
-    height: auto;
+    max-height: 32px;
+    height: 32px;
 }
 
 .navbar-keenetica .brand-subtitle {
@@ -200,7 +200,8 @@ a:hover {
 
 @media (min-width: 992px) and (max-width: 1399.98px) {
     .navbar-keenetica .brand-logo {
-        max-height: 2.5rem;
+        max-height: 32px;
+        height: 32px;
     }
 
     .navbar-keenetica .nav-link {
