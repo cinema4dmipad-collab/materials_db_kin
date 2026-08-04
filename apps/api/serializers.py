@@ -172,6 +172,12 @@ def _scan_size(scan: ScanRecord) -> int | None:
 
 
 def serialize_scan(scan: ScanRecord) -> ScanOut:
+    tag_names = []
+    # Prefetch-friendly: tags may already be cached on the instance.
+    try:
+        tag_names = [tag.name for tag in scan.tags.all()]
+    except Exception:
+        tag_names = []
     return ScanOut(
         id=scan.pk,
         sample_id=scan.sample_id,
@@ -183,4 +189,5 @@ def serialize_scan(scan: ScanRecord) -> ScanOut:
         size_bytes=_scan_size(scan),
         uploaded_at=scan.uploaded_at,
         download_url=reverse('api:scan_download', kwargs={'scan_id': scan.pk}),
+        tags=tag_names,
     )

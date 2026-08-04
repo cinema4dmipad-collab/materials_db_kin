@@ -378,7 +378,8 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"}
+              {"key": "X-Workspace-Id", "value": "{{workspaceId}}"},
+              {"key": "X-Client", "value": "KeenetiX", "disabled": true}
             ],
             "body": {
               "mode": "formdata",
@@ -386,7 +387,8 @@
                 {"key": "file", "type": "file", "src": []},
                 {"key": "title", "type": "text", "value": "From Postman"},
                 {"key": "method", "type": "text", "value": "echo"},
-                {"key": "description", "type": "text", "value": "API smoke"}
+                {"key": "description", "type": "text", "value": "Загружено из KeenetiX"},
+                {"key": "tag_names", "type": "text", "value": "источник::KeenetiX"}
               ]
             },
             "url": "{{baseUrl}}/api/v1/samples/{{sampleId}}/scans/"

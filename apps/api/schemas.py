@@ -91,6 +91,7 @@ class ScanOut(BaseModel):
     size_bytes: int | None = None
     uploaded_at: datetime
     download_url: str
+    tags: list[str] = Field(default_factory=list)
 
 
 class ScanListResponse(BaseModel):
@@ -104,6 +105,8 @@ class ScanCreateBody(BaseModel):
     title: str | None = None
     description: str = ''
     method: str = 'echo'
+    # Comma-separated tag names (same convention as web UI tag_names).
+    tag_names: str = ''
 
 
 class ScanFileMeta(BaseModel):
