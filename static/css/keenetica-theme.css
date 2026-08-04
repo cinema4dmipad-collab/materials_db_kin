@@ -775,7 +775,8 @@ a:hover {
 
 .btn-action-sample,
 .btn-action-create,
-.btn-action-members {
+.btn-action-members,
+.btn-action-rotate {
     --bs-btn-color: var(--kx-brand);
     --bs-btn-border-color: rgba(0, 118, 121, 0.35);
     --bs-btn-hover-bg: var(--kx-brand-soft);
@@ -1340,9 +1341,29 @@ a.entity-tag.tone-neutral:hover {
     color: var(--tone-green-text);
 }
 
+.badge-ready::before {
+    background: var(--tone-green-dot);
+    border-color: var(--tone-green-dot);
+}
+
 .badge-pending {
     background: var(--tone-amber-bg);
     color: var(--tone-amber-text);
+}
+
+.badge-pending::before {
+    background: var(--tone-amber-dot);
+    border-color: var(--tone-amber-dot);
+}
+
+.badge-revoked {
+    background: var(--tone-slate-bg);
+    color: var(--tone-slate-text);
+}
+
+.badge-revoked::before {
+    background: var(--tone-slate-dot);
+    border-color: var(--tone-slate-dot);
 }
 
 .text-lusid {

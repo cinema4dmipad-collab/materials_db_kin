@@ -156,10 +156,11 @@ class UserProfileView(LoginRequiredMixin, TemplateView):
 
         context['api_tokens'] = Token.objects.filter(user=user).order_by('-created_at')
         context['api_token_form'] = ApiTokenCreateForm()
-        # Секрет держим в сессии, пока пользователь не закроет модалку («Готово»).
-        context['api_token_plaintext'] = self.request.session.get('api_token_plaintext')
-        context['api_token_name'] = self.request.session.get('api_token_name')
-        context['api_token_id'] = self.request.session.get('api_token_id')
+        # Одноразовый flash: отдаём секрет в этот ответ и сразу убираем из сессии,
+        # иначе модалка снова открывается при каждом возврате в профиль.
+        context['api_token_plaintext'] = self.request.session.pop('api_token_plaintext', None)
+        context['api_token_name'] = self.request.session.pop('api_token_name', None)
+        context['api_token_id'] = self.request.session.pop('api_token_id', None)
 
         return context
 

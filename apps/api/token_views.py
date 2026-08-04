@@ -31,7 +31,7 @@ class TokenCreateView(LoginRequiredMixin, View):
         request.session['api_token_id'] = token.pk
         messages.success(
             request,
-            'Токен создан. Откройте его в списке и скопируйте секрет — позже показать будет нельзя.',
+            'Токен создан. Скопируйте секрет сейчас — повторно показать его нельзя.',
         )
         return redirect('accounts:profile')
 
@@ -82,7 +82,7 @@ class TokenRotateView(LoginRequiredMixin, View):
         request.session['api_token_id'] = new_token.pk
         messages.success(
             request,
-            'Секрет обновлён. Откройте токен в списке и скопируйте новый секрет.',
+            'Секрет обновлён. Скопируйте его сейчас — повторно показать нельзя.',
         )
         return redirect('accounts:profile')
 
