@@ -168,14 +168,28 @@ class ApiV1Tests(TestCase):
                 'file': make_hdf5_upload('from-keenetix.h5'),
                 'title': 'From KeenetiX',
                 'method': 'echo',
-                'description': 'uploaded via API',
+                'description': 'Загружено из KeenetiX',
+                'tag_names': 'метод::ут',
             },
-            **self._headers(),
+            **{
+                **self._headers(),
+                'HTTP_X_CLIENT': 'KeenetiX',
+            },
         )
         self.assertEqual(response.status_code, 201, response.content)
         body = response.json()
         self.assertEqual(body['title'], 'From KeenetiX')
         self.assertEqual(body['sample_id'], str(self.sample.pk))
+        self.assertEqual(body['description'], 'Загружено из KeenetiX')
+        self.assertIn('метод::ут', body.get('tags') or [])
+        self.assertIn('источник::KeenetiX', body.get('tags') or [])
+        from apps.scans.models import ScanRecord
+
+        scan = ScanRecord.objects.get(pk=body['id'])
+        self.assertEqual(
+            set(scan.tags.values_list('name', flat=True)),
+            {'метод::ут', 'источник::KeenetiX'},
+        )
 
     def test_token_create_on_profile(self):
         self.client.login(username=self.user.username, password=self.password)

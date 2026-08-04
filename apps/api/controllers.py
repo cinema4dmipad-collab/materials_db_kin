@@ -151,7 +151,7 @@ class ScanListController(BaseApiController):
     def get(self, parsed_query: Query[ScanListQuery]) -> ScanListResponse:
         workspace = require_workspace(self.request)
         require_perm(self.request.user, workspace, WorkspacePerm.SCAN_VIEW)
-        queryset = scans_qs(workspace).order_by('-uploaded_at')
+        queryset = scans_qs(workspace).prefetch_related('tags').order_by('-uploaded_at')
         if parsed_query.sample_id is not None:
             queryset = queryset.filter(sample_id=parsed_query.sample_id)
         meta, items = _paginate(
@@ -169,7 +169,12 @@ class ScanDetailController(BaseApiController):
     def get(self, parsed_path: Path[ScanPath]) -> ScanOut:
         workspace = require_workspace(self.request)
         require_perm(self.request.user, workspace, WorkspacePerm.SCAN_VIEW)
-        scan = scans_qs(workspace).filter(pk=parsed_path.scan_id).first()
+        scan = (
+            scans_qs(workspace)
+            .prefetch_related('tags')
+            .filter(pk=parsed_path.scan_id)
+            .first()
+        )
         if scan is None:
             raise api_error('Не найдено.', HTTPStatus.NOT_FOUND)
         return serialize_scan(scan)
@@ -219,6 +224,23 @@ class ScanCreateController(BaseApiController):
         )
         scan.file = uploaded
         scan.save()
+
+        from apps.api.scan_meta import (
+            KEENETIX_CLIENT_HEADER,
+            KEENETIX_CLIENT_VALUE,
+            KEENETIX_SOURCE_TAG,
+            parse_tag_names,
+        )
+        from apps.core.tag_utils import assign_tags
+
+        tag_names = parse_tag_names(parsed_body.tag_names)
+        client = (self.request.headers.get(KEENETIX_CLIENT_HEADER) or '').strip()
+        if client.casefold() == KEENETIX_CLIENT_VALUE.casefold():
+            if KEENETIX_SOURCE_TAG.casefold() not in {n.casefold() for n in tag_names}:
+                tag_names.append(KEENETIX_SOURCE_TAG)
+        if tag_names:
+            assign_tags(scan, tag_names, workspace=sample.workspace or workspace)
+
         return serialize_scan(scan)
 
 
