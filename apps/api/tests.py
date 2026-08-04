@@ -189,3 +189,7 @@ class ApiV1Tests(TestCase):
         self.assertContains(response, 'api-token-secret-modal')
         self.assertContains(response, 'data-token-secret=')
         self.assertContains(response, 'Скопировать')
+        # Flash once: повторный заход в профиль не должен снова открывать секрет.
+        again = self.client.get(reverse('accounts:profile'))
+        self.assertNotContains(again, 'data-token-secret=')
+        self.assertIsNone(self.client.session.get('api_token_plaintext'))
