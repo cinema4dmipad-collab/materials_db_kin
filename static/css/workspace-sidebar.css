@@ -1,7 +1,7 @@
 /* Jira-like app shell layout (KeenetiCA colors unchanged) */
 
 :root {
-    --app-topbar-height: 3.5rem;
+    --app-topbar-height: 3.75rem;
 }
 
 .app-body--shell {
@@ -17,7 +17,7 @@
     position: sticky;
     top: 0;
     z-index: 1040;
-    min-height: 3.5rem !important;
+    min-height: var(--app-topbar-height) !important;
     padding-top: 0.35rem !important;
     padding-bottom: 0.35rem !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -63,7 +63,13 @@
 }
 
 .app-topbar__brand .brand-logo {
-    max-height: 2.25rem;
+    display: block;
+    /* tightly cropped master — keep glyphs modest vs header chrome */
+    height: 32px;
+    width: auto;
+    max-height: 32px;
+    max-width: min(22rem, 58vw);
+    object-fit: contain;
 }
 
 .app-topbar__workspace-picker {

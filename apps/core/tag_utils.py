@@ -10,7 +10,7 @@ from apps.core.models import Tag
 TAG_NAME_MAX_LENGTH = 50
 SCOPED_TAG_SEPARATOR = '::'
 HEX_COLOR_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
-# Дефолт для scoped-тегов без цвета (Keenetica brand) — solid left + белый текст
+# Дефолт для scoped-тегов без цвета (Keenetica Lab brand) — solid left + белый текст
 SCOPED_TAG_DEFAULT_COLOR = '#007679'
 
 

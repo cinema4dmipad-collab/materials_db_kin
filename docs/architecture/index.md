@@ -71,7 +71,7 @@ Large HDF5 uploads stream to disk (`FILE_UPLOAD_MAX_MEMORY_SIZE` = 10 MB); Gunic
 
 ## UI Patterns
 
-* **Bootstrap 5** + KeenetiCA theme (`static/css/keenetica-theme.css`)
+* **Bootstrap 5** + Keenetica Lab theme (`static/css/keenetica-theme.css`)
 * **Formsets** — material properties, composite layers, structure fields
 * **Property picker** — modal selection from reference catalog (`reference_properties_picker.js`)
 * **List filter bar** — shared template `includes/list_filter_bar.html` and client filter JS
