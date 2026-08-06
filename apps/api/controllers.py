@@ -22,7 +22,13 @@ from apps.api.access import (
     user_workspaces_qs,
 )
 from apps.api.auth import API_TOKEN_AUTH
+from apps.api.desktop import claim_commands, connect_desktop, heartbeat_desktop
 from apps.api.schemas import (
+    DesktopCommandOut,
+    DesktopCommandsOut,
+    DesktopCommandsQuery,
+    DesktopConnectBody,
+    DesktopConnectOut,
     MaterialDetail,
     MaterialListQuery,
     MaterialListResponse,
@@ -80,6 +86,38 @@ class WorkspaceListController(BaseApiController):
     def get(self) -> list[WorkspaceOut]:
         workspaces = user_workspaces_qs(self.request.user)
         return [serialize_workspace(item) for item in workspaces]
+
+
+class DesktopConnectController(BaseApiController):
+    """KeenetiX registers as active desktop for the PAT owner (last connect wins)."""
+
+    def post(self, parsed_body: Body[DesktopConnectBody]) -> DesktopConnectOut:
+        try:
+            session = connect_desktop(self.request.user, parsed_body.device_id)
+        except ValueError as exc:
+            raise api_error(str(exc), HTTPStatus.BAD_REQUEST) from exc
+        return DesktopConnectOut(device_id=session.device_id, active=session.is_active)
+
+
+class DesktopCommandsController(BaseApiController):
+    """Poll pending desktop commands; only the active device receives them."""
+
+    def get(self, parsed_query: Query[DesktopCommandsQuery]) -> DesktopCommandsOut:
+        device_id = parsed_query.device_id.strip()
+        active = heartbeat_desktop(self.request.user, device_id)
+        if not active:
+            return DesktopCommandsOut(active=False, commands=[])
+        raw = claim_commands(self.request.user, device_id)
+        commands = [
+            DesktopCommandOut(
+                id=item['id'],  # UUID string from desktop.claim_commands
+                command=item['command'],
+                payload=item['payload'],
+                created_at=item['created_at'],
+            )
+            for item in raw
+        ]
+        return DesktopCommandsOut(active=True, commands=commands)
 
 
 class MaterialListController(BaseApiController):

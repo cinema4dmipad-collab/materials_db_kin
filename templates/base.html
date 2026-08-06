@@ -14,7 +14,7 @@
     <link href="{% static 'css/keenetica-theme.css' %}?v={{ app_version }}-lab7" rel="stylesheet">
     <link href="{% static 'css/search-ui.css' %}?v={{ app_version }}-tagpick6" rel="stylesheet">
     <link href="{% static 'css/file_transfer_progress.css' %}" rel="stylesheet">
-    <link href="{% static 'css/workspace-sidebar.css' %}?v={{ app_version }}-lab7" rel="stylesheet">
+    <link href="{% static 'css/workspace-sidebar.css' %}?v={{ app_version }}-bridge2" rel="stylesheet">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="{% if user.is_authenticated %}app-body--shell{% endif %}">
@@ -43,6 +43,7 @@
             <div class="app-topbar__actions ms-auto">
                 <ul class="navbar-nav flex-row align-items-center gap-1">
                     {% if user.is_authenticated %}
+                    {% include 'includes/keenetix_bridge_presence.html' %}
                     <li class="nav-item d-none d-sm-block">
                         <a href="{% url 'accounts:profile' %}"
                            class="app-topbar__user-btn"
@@ -119,6 +120,7 @@
     {% if user.is_authenticated %}
     <script src="{% static 'js/app-shell.js' %}"></script>
     <script src="{% static 'js/confirm_delete.js' %}?v={{ app_version }}-delmodal1"></script>
+    <script src="{% static 'js/keenetix_bridge.js' %}?v={{ app_version }}-desktop3"></script>
     {% endif %}
     {% block extra_scripts %}{% endblock %}
 </body>

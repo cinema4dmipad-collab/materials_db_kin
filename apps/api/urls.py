@@ -1,11 +1,32 @@
 from django.urls import path
 
 from apps.api import controllers
+from apps.api import desktop_views
 
 app_name = 'api'
 
 urlpatterns = [
     path('v1/workspaces/', controllers.WorkspaceListController.as_view(), name='workspaces'),
+    path(
+        'v1/desktop/connect/',
+        controllers.DesktopConnectController.as_view(),
+        name='desktop_connect',
+    ),
+    path(
+        'v1/desktop/commands/',
+        controllers.DesktopCommandsController.as_view(),
+        name='desktop_commands',
+    ),
+    path(
+        'v1/desktop/status/',
+        desktop_views.desktop_status_view,
+        name='desktop_status',
+    ),
+    path(
+        'v1/desktop/open-scan/',
+        desktop_views.desktop_open_scan_view,
+        name='desktop_open_scan',
+    ),
     path('v1/materials/', controllers.MaterialListController.as_view(), name='materials'),
     path(
         'v1/materials/<uuid:material_id>/',

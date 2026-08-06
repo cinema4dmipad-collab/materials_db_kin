@@ -312,7 +312,7 @@ class ScanViewsTests(TestCase):
         self.assertIn('tags_form', response.context)
         self.assertContains(response, 'entity-detail-tags-form')
 
-    def test_scan_detail_has_keenetix_deep_link(self):
+    def test_scan_detail_has_keenetix_open_button(self):
         scan = ScanRecord.objects.create(
             sample=self.sample,
             workspace=self.legacy_workspace,
@@ -325,10 +325,9 @@ class ScanViewsTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Открыть в KeenetiX')
-        self.assertRegex(
-            response.content.decode(),
-            rf'keenetix://lab/scan/{scan.pk}\?workspace=[0-9a-f-]{{36}}',
-        )
+        self.assertContains(response, 'data-keenetix-open-scan')
+        self.assertContains(response, f'data-scan-id="{scan.pk}"')
+        self.assertNotContains(response, 'keenetix://')
 
     def test_scan_tags_update_view(self):
         scan = ScanRecord.objects.create(

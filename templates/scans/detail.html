@@ -17,9 +17,12 @@
         </div>
         <div class="text-nowrap d-inline-flex align-items-center gap-1">
             {% include 'includes/bookmark_toggle.html' %}
-            <a href="keenetix://lab/scan/{{ scan.pk }}?workspace={% firstof keenetix_workspace_id scan.workspace_id sample.workspace_id active_workspace.pk %}"
-               class="btn btn-outline-primary btn-sm"
-               title="Требуется KeenetiX Pro (один раз запустите приложение — зарегистрируется протокол keenetix://)">Открыть в KeenetiX</a>
+            <button type="button"
+                    class="btn btn-outline-primary btn-sm"
+                    data-keenetix-open-scan
+                    data-scan-id="{{ scan.pk }}"
+                    data-workspace-id="{% firstof keenetix_workspace_id scan.workspace_id sample.workspace_id active_workspace.pk %}"
+                    title="Откроет скан в запущенном KeenetiX (тот же пользователь / токен API)">Открыть в KeenetiX</button>
             <a href="{% url 'scans:download' sample.pk scan.pk %}" class="btn btn-outline-secondary btn-sm file-download-link" data-download-name="{{ scan.filename }}">Скачать</a>
             {% if scan_is_editable %}
             <a href="{% url 'scans:edit' sample.pk scan.pk %}" class="btn btn-primary btn-sm">Изменить</a>
