@@ -12,7 +12,9 @@
 .structure-materials-grid-wrap {
     background: var(--kx-surface, #fff);
     max-height: min(70vh, 36rem);
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .structure-materials-grid {
@@ -20,6 +22,8 @@
     border-collapse: separate;
     border-spacing: 0;
     font-size: 0.8125rem;
+    /* Wider than the viewport when there are many columns — enables overflow-x */
+    width: max-content;
     min-width: 100%;
 }
 
@@ -28,7 +32,10 @@
     border-bottom: 1px solid var(--smg-line);
     border-right: 1px solid var(--smg-line);
     box-sizing: border-box;
+    /* Prevent the table algorithm from shrinking cells to fit the card */
+    min-width: 9rem;
     max-width: 14rem;
+    width: 10rem;
     overflow: hidden;
     padding: 0.4rem 0.55rem;
     text-overflow: ellipsis;
@@ -50,13 +57,13 @@
 
 .structure-materials-grid__name {
     font-weight: 600;
-    min-width: 11rem;
+    min-width: 12rem;
     max-width: 16rem;
     width: 12rem;
 }
 
 .structure-materials-grid__code {
-    min-width: 7rem;
+    min-width: 8rem;
     max-width: 10rem;
     width: 8rem;
 }
