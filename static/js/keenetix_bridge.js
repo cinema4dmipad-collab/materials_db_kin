@@ -42,23 +42,12 @@
         });
     }
 
-    function toast(message, kind) {
-        var host = document.getElementById('keenetix-bridge-toast-host');
-        if (!host) {
-            host = document.createElement('div');
-            host.id = 'keenetix-bridge-toast-host';
-            host.className = 'keenetix-bridge-toast-host';
-            document.body.appendChild(host);
+    function flash(message, kind) {
+        if (window.AppFlash && typeof window.AppFlash.show === 'function') {
+            window.AppFlash.show(message, kind);
+            return;
         }
-        var el = document.createElement('div');
-        el.className = 'keenetix-bridge-toast keenetix-bridge-toast--' + (kind || 'info');
-        el.setAttribute('role', 'status');
-        el.textContent = message;
-        host.appendChild(el);
-        setTimeout(function () {
-            el.classList.add('keenetix-bridge-toast--hide');
-            setTimeout(function () { el.remove(); }, 300);
-        }, 4200);
+        window.alert(message);
     }
 
     function progressApi() {
@@ -136,7 +125,7 @@
                 if (progress) {
                     progress.hide();
                 }
-                toast('KeenetiX не подключён. Запустите KeenetiX Pro с токеном этого пользователя.', 'warn');
+                flash('KeenetiX не подключён. Запустите KeenetiX Pro с токеном этого пользователя.', 'warning');
                 return;
             }
             if (progress) {
@@ -147,24 +136,24 @@
                     progress.setBusyPercent(100, 'Команда отправлена — скачивание в KeenetiX');
                     progress.finish();
                 }
-                toast('Скан отправлен в KeenetiX', 'ok');
+                flash('Скан отправлен в KeenetiX', 'success');
                 a.classList.add('keenetix-bridge-open--ok');
             }).catch(function (err) {
                 if (progress) {
                     progress.hide();
                 }
                 if (String(err && err.message) === 'desktop_offline') {
-                    toast('KeenetiX отключился. Запустите приложение снова.', 'warn');
+                    flash('KeenetiX отключился. Запустите приложение снова.', 'warning');
                     setPresence(false);
                     return;
                 }
-                toast('Не удалось открыть скан в KeenetiX', 'warn');
+                flash('Не удалось открыть скан в KeenetiX', 'danger');
             });
         }).catch(function () {
             if (progress) {
                 progress.hide();
             }
-            toast('Не удалось открыть скан в KeenetiX', 'warn');
+            flash('Не удалось открыть скан в KeenetiX', 'danger');
         }).finally(function () {
             delete a.dataset.keenetixBusy;
         });
@@ -190,9 +179,9 @@
         el.addEventListener('click', function () {
             refreshStatus().then(function () {
                 if (lastOnline) {
-                    toast('KeenetiX онлайн', 'ok');
+                    flash('KeenetiX онлайн', 'success');
                 } else {
-                    toast('Запустите KeenetiX Pro с токеном этого пользователя', 'warn');
+                    flash('Запустите KeenetiX Pro с токеном этого пользователя', 'warning');
                 }
             });
         });

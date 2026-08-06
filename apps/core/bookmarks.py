@@ -1,11 +1,11 @@
-"""Закладки пользователя на материалы, образцы, сканы, записи и типы структур."""
+"""Закладки пользователя на материалы, образцы, сканы, записи, типы структур и произвольные URL."""
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, urlunparse
 
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
@@ -16,6 +16,7 @@ from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm
 
 SIDEBAR_BOOKMARK_LIMIT = 10
 STRUCTURE_TYPE_BOOKMARK_NAMESPACE = uuid.UUID('6b8c9f2a-4d1e-4a5b-9c3d-2e1f0a9b8c7d')
+PAGE_BOOKMARK_NAMESPACE = uuid.UUID('a1b2c3d4-e5f6-7890-abcd-ef1234567890')
 
 ENTITY_VIEW_PERM = {
     BookmarkEntityType.MATERIAL: WorkspacePerm.MATERIAL_VIEW,
@@ -31,7 +32,25 @@ ENTITY_ICONS = {
     BookmarkEntityType.SCAN: 'bi-hdd-stack',
     BookmarkEntityType.STRUCTURE_RECORD: 'bi-diagram-3',
     BookmarkEntityType.STRUCTURE_TYPE: 'bi-diagram-3',
+    BookmarkEntityType.PAGE: 'bi-bookmark',
 }
+
+# Curated Bootstrap Icons for page bookmarks (no free-form classes).
+PAGE_BOOKMARK_ICONS = (
+    'bi-bookmark',
+    'bi-star',
+    'bi-house',
+    'bi-question-circle',
+    'bi-journal-text',
+    'bi-list-ul',
+    'bi-box-seam',
+    'bi-collection',
+    'bi-hdd-stack',
+    'bi-diagram-3',
+    'bi-gear',
+    'bi-link-45deg',
+)
+DEFAULT_PAGE_BOOKMARK_ICON = 'bi-bookmark'
 
 
 @dataclass(frozen=True)
@@ -58,6 +77,123 @@ def _require_view_perm(user, workspace, entity_type: str) -> None:
 
 def structure_type_bookmark_entity_id(code: str) -> uuid.UUID:
     return uuid.uuid5(STRUCTURE_TYPE_BOOKMARK_NAMESPACE, f'structure-type:{code}')
+
+
+def normalize_page_bookmark_url(raw_url: str) -> str:
+    """
+    Accept only same-site relative URLs (path + optional query).
+    Drop fragment; collapse trailing slash so /help and /help/ are the same bookmark.
+    """
+    text = (raw_url or '').strip()
+    if not text or text.startswith('//'):
+        raise ValueError('Укажите относительный путь страницы, например /help/.')
+    parsed = urlparse(text)
+    if parsed.scheme or parsed.netloc:
+        raise ValueError('В закладку можно сохранить только путь этого сайта.')
+    path = parsed.path or '/'
+    if not path.startswith('/'):
+        path = '/' + path
+    if len(path) > 1:
+        path = path.rstrip('/')
+    if len(path) > 1800:
+        raise ValueError('Слишком длинный адрес страницы.')
+    # Fragment ignored — otherwise the same page bookmarks twice (#section).
+    normalized = urlunparse(('', '', path, '', parsed.query, ''))
+    if len(normalized) > 2000:
+        raise ValueError('Слишком длинный адрес страницы.')
+    return normalized
+
+
+def page_bookmark_entity_id(url: str) -> uuid.UUID:
+    return uuid.uuid5(PAGE_BOOKMARK_NAMESPACE, f'page:{url}')
+
+
+def _page_bookmarks_matching_url(*, user, workspace, normalized_url: str) -> list[UserBookmark]:
+    """Find page bookmarks that canonicalize to the same URL (incl. legacy slash variants)."""
+    matches: list[UserBookmark] = []
+    canonical_id = page_bookmark_entity_id(normalized_url)
+    for bookmark in UserBookmark.objects.filter(
+        user=user,
+        workspace=workspace,
+        entity_type=BookmarkEntityType.PAGE,
+    ):
+        if bookmark.entity_id == canonical_id:
+            matches.append(bookmark)
+            continue
+        try:
+            if normalize_page_bookmark_url(bookmark.url or '') == normalized_url:
+                matches.append(bookmark)
+        except ValueError:
+            continue
+    return matches
+
+
+@dataclass(frozen=True)
+class PageBookmarkSaveResult:
+    bookmark: UserBookmark
+    created: bool
+    updated: bool
+
+
+def normalize_page_bookmark_icon(raw_icon: str | None) -> str:
+    icon = (raw_icon or '').strip()
+    if not icon:
+        return DEFAULT_PAGE_BOOKMARK_ICON
+    if icon not in PAGE_BOOKMARK_ICONS:
+        raise ValueError('Выберите иконку из списка.')
+    return icon
+
+
+def save_page_bookmark(
+    *,
+    user,
+    workspace,
+    url: str,
+    label: str,
+    icon: str = '',
+) -> PageBookmarkSaveResult:
+    if workspace is None:
+        raise ValueError('Пространство не выбрано.')
+    normalized_url = normalize_page_bookmark_url(url)
+    name = (label or '').strip()
+    if not name:
+        raise ValueError('Укажите название закладки.')
+    if len(name) > 300:
+        raise ValueError('Название закладки слишком длинное.')
+    chosen_icon = normalize_page_bookmark_icon(icon)
+    entity_id = page_bookmark_entity_id(normalized_url)
+    matches = _page_bookmarks_matching_url(
+        user=user,
+        workspace=workspace,
+        normalized_url=normalized_url,
+    )
+    if matches:
+        # Keep newest; drop slash/# duplicates of the same page.
+        matches.sort(key=lambda row: row.created_at, reverse=True)
+        existing = matches[0]
+        stale_ids = [row.pk for row in matches[1:]]
+        if stale_ids:
+            UserBookmark.objects.filter(pk__in=stale_ids).delete()
+        existing.label = name
+        existing.url = normalized_url
+        existing.icon = chosen_icon
+        # Rebuild entity_id if an older slash-variant row was kept.
+        update_fields = ['label', 'url', 'icon']
+        if existing.entity_id != entity_id:
+            existing.entity_id = entity_id
+            update_fields.append('entity_id')
+        existing.save(update_fields=update_fields)
+        return PageBookmarkSaveResult(bookmark=existing, created=False, updated=True)
+    bookmark = UserBookmark.objects.create(
+        user=user,
+        workspace=workspace,
+        entity_type=BookmarkEntityType.PAGE,
+        entity_id=entity_id,
+        url=normalized_url,
+        icon=chosen_icon,
+        label=name,
+    )
+    return PageBookmarkSaveResult(bookmark=bookmark, created=True, updated=False)
 
 
 def _load_structure_record(*, workspace, entity_id, context_slug: str | None):
@@ -311,6 +447,21 @@ def toggle_bookmark(
 
 
 def resolve_bookmark(bookmark: UserBookmark, *, workspace) -> ResolvedBookmark | None:
+    if bookmark.entity_type == BookmarkEntityType.PAGE:
+        try:
+            url = normalize_page_bookmark_url(bookmark.url or '')
+        except ValueError:
+            return None
+        icon = bookmark.icon if bookmark.icon in PAGE_BOOKMARK_ICONS else DEFAULT_PAGE_BOOKMARK_ICON
+        return ResolvedBookmark(
+            bookmark=bookmark,
+            label=(bookmark.label or url).strip() or url,
+            url=url,
+            icon=icon,
+            entity_type_label=bookmark.get_entity_type_display(),
+            subtitle=url,
+        )
+
     entity = _load_entity(
         workspace=workspace,
         entity_type=bookmark.entity_type,
@@ -340,7 +491,18 @@ def list_resolved_bookmarks(*, user, workspace) -> list[ResolvedBookmark]:
     bookmarks = UserBookmark.objects.filter(user=user, workspace=workspace)
     resolved: list[ResolvedBookmark] = []
     stale_ids: list = []
+    seen_page_urls: set[str] = set()
     for bookmark in bookmarks:
+        if bookmark.entity_type == BookmarkEntityType.PAGE:
+            try:
+                page_key = normalize_page_bookmark_url(bookmark.url or '')
+            except ValueError:
+                stale_ids.append(bookmark.pk)
+                continue
+            if page_key in seen_page_urls:
+                stale_ids.append(bookmark.pk)
+                continue
+            seen_page_urls.add(page_key)
         item = resolve_bookmark(bookmark, workspace=workspace)
         if item is None:
             stale_ids.append(bookmark.pk)
@@ -376,6 +538,10 @@ def sidebar_bookmark_items(
                 'visible': True,
                 'active': _path_is_active(request_path=request_path, target_url=resolved.url),
                 'subtitle': resolved.subtitle,
+                'remove_url': reverse(
+                    'core:bookmark_remove',
+                    kwargs={'pk': resolved.bookmark.pk},
+                ),
             }
         )
     return items

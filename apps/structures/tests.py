@@ -339,9 +339,10 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Public Panel')
-        self.assertContains(response, 'Public UI type')
         self.assertContains(response, reverse('structures:list', args=[self.structure_type.code]))
         self.assertContains(response, reverse('structures:type_manage', args=[self.structure_type.code]))
+        self.assertContains(response, 'bi-gear')
+        self.assertNotContains(response, 'structures_public_panel')
 
     def test_create_list_detail_edit_delete_flow(self):
         create_url = reverse('structures:create', args=[self.structure_type.code])
@@ -354,14 +355,23 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
         self.assertEqual(create_response.status_code, 302)
 
-        list_response = self.client.get(
-            reverse('structures:list', args=[self.structure_type.code])
-        )
-        self.assertContains(list_response, 'Panel A')
-
         records = SQLExecutor.get_structure_instances(self.structure_type)
         self.assertEqual(len(records), 1)
         row_id = records[0]['id']
+
+        material = Material.objects.create(
+            code='MAT-PANEL-A',
+            name='Panel A material',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        list_response = self.client.get(
+            reverse('structures:list', args=[self.structure_type.code])
+        )
+        self.assertContains(list_response, 'Panel A material')
+        self.assertContains(list_response, 'MAT-PANEL-A')
+        self.assertContains(list_response, 'structure-materials-grid')
+        self.assertContains(list_response, '12,50')
 
         detail_response = self.client.get(
             reverse('structures:detail', args=[self.structure_type.code, row_id])
@@ -380,6 +390,7 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         updated = SQLExecutor.get_structure_instance(self.structure_type, row_id)
         self.assertEqual(updated['title'], 'Panel B')
 
+        material.delete()
         delete_response = self.client.post(
             reverse('structures:delete', args=[self.structure_type.code, row_id])
         )
@@ -477,7 +488,7 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
             'Полотно',
         )
 
-    def test_list_shows_material_expand_for_linked_material(self):
+    def test_list_shows_materials_structure_grid(self):
         row_id = SQLExecutor.insert(
             self.structure_type,
             {'title': 'Linked panel', 'thickness': '4.00'},
@@ -495,17 +506,15 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'List expandable material')
-        self.assertNotContains(response, '>Linked panel<')
-        self.assertContains(response, 'structure-material-expand')
-        self.assertContains(response, 'Развернуть')
-        self.assertContains(response, f'data-material-id="{material.pk}"')
-        self.assertContains(
-            response,
-            f'id="structure-list-material-preview-{row_id}-{material.pk}"',
-        )
-        self.assertContains(response, 'structure_material_expand.js')
+        self.assertContains(response, 'MAT-LIST-EXPAND')
+        self.assertContains(response, 'structure-materials-grid')
+        self.assertContains(response, 'Linked panel')
+        self.assertContains(response, '4,00')
+        self.assertContains(response, reverse('materials:detail', args=[material.pk]))
+        self.assertNotContains(response, 'structure-material-expand')
+        self.assertNotContains(response, 'structure_material_expand.js')
 
-    def test_routes_require_created_table(self):
+    def test_list_allows_type_without_created_table(self):
         draft_type = StructureType.objects.create(
             name='Draft Panel',
             code='draft_panel',
@@ -521,6 +530,26 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
 
         response = self.client.get(reverse('structures:list', args=[draft_type.code]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ещё не создана')
+        self.assertContains(response, reverse('structures:type_manage', args=[draft_type.code]))
+
+    def test_create_requires_created_table(self):
+        draft_type = StructureType.objects.create(
+            name='Draft Panel Create',
+            code='draft_panel_create',
+            table_name='structures_draft_panel_create',
+            is_active=True,
+        )
+        StructureField.objects.create(
+            structure_type=draft_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            sort_order=1,
+        )
+
+        response = self.client.get(reverse('structures:create', args=[draft_type.code]))
         self.assertRedirects(
             response,
             reverse('structures:type_manage', args=[draft_type.code]),

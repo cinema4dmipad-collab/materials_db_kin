@@ -1,6 +1,10 @@
 from django.urls import reverse
 
-from apps.core.bookmarks import sidebar_bookmark_items
+from apps.core.bookmarks import (
+    DEFAULT_PAGE_BOOKMARK_ICON,
+    PAGE_BOOKMARK_ICONS,
+    sidebar_bookmark_items,
+)
 from apps.workspaces.permissions import (
     WorkspacePerm,
     can_manage_global_groups,
@@ -222,4 +226,6 @@ def workspace_navigation(request):
         'can_manage_global_users': can_manage_global_users(user),
         'can_manage_global_workspaces': can_manage_global_workspaces(user),
         'is_system_admin': is_system_admin(user),
+        'page_bookmark_icons': PAGE_BOOKMARK_ICONS,
+        'default_page_bookmark_icon': DEFAULT_PAGE_BOOKMARK_ICON,
     }

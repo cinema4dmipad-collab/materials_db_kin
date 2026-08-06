@@ -259,6 +259,85 @@
     font-size: 0.8125rem;
 }
 
+.app-topbar__bookmark-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: calc(1.35rem + 0.56rem);
+    padding: 0.28rem 0.7rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.bookmark-icon-picker {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.bookmark-icon-picker__option {
+    margin: 0;
+    cursor: pointer;
+}
+
+.bookmark-icon-picker__option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.bookmark-icon-picker__face {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1;
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    border-radius: 0.45rem;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 1.15rem;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bookmark-icon-picker__option:hover .bookmark-icon-picker__face {
+    border-color: var(--kx-brand, #007679);
+    color: var(--kx-brand-dark, #005f61);
+}
+
+.bookmark-icon-picker__option input:checked + .bookmark-icon-picker__face,
+.bookmark-icon-picker__option input:focus-visible + .bookmark-icon-picker__face {
+    border-color: var(--kx-brand, #007679);
+    background: rgba(0, 118, 121, 0.1);
+    color: var(--kx-brand-dark, #005f61);
+    box-shadow: 0 0 0 2px rgba(0, 118, 121, 0.18);
+}
+
+.app-topbar__bookmark-btn:hover,
+.app-topbar__bookmark-btn:focus {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #fff;
+}
+
+.app-topbar__bookmark-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.45);
+    outline-offset: 2px;
+}
+
+.app-topbar__bookmark-btn .bi {
+    font-size: 1rem;
+    line-height: 1;
+}
+
 /* Match .app-topbar__user-btn size/shape in the header (text-only). */
 .keenetix-bridge-presence {
     display: inline-flex;
@@ -581,6 +660,14 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding-bottom: 0.5rem;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* legacy Edge */
+}
+
+.workspace-sidebar__nav::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none; /* Chromium / Safari */
 }
 
 .workspace-sidebar__section {
@@ -600,6 +687,79 @@
     list-style: none;
     margin: 0;
     padding: 0;
+}
+
+.workspace-sidebar__item--bookmark {
+    display: flex;
+    align-items: center;
+    position: relative;
+    min-height: 2.125rem;
+}
+
+.workspace-sidebar__link--bookmark {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    padding-right: 0.25rem;
+    overflow: hidden;
+}
+
+.workspace-sidebar__link--bookmark .workspace-sidebar__link-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-sidebar__bookmark-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    align-self: center;
+    margin: 0;
+    padding: 0 0.35rem 0 0;
+}
+
+.workspace-sidebar__bookmark-remove-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: var(--kx-text-subtle);
+    opacity: 0;
+    pointer-events: none;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.workspace-sidebar__item--bookmark:hover .workspace-sidebar__bookmark-remove-btn,
+.workspace-sidebar__item--bookmark:focus-within .workspace-sidebar__bookmark-remove-btn {
+    opacity: 0.75;
+    pointer-events: auto;
+    color: #b91c1c;
+}
+
+.workspace-sidebar__bookmark-remove-btn:hover,
+.workspace-sidebar__bookmark-remove-btn:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    color: #991b1b;
+    background: rgba(185, 28, 28, 0.14);
+}
+
+.workspace-sidebar__bookmark-remove-btn .bi {
+    font-size: 0.75rem;
+    line-height: 1;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__bookmark-remove {
+    display: none;
 }
 
 .workspace-sidebar__link {

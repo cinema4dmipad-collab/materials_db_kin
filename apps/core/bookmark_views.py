@@ -6,8 +6,10 @@ from django.urls import reverse
 from django.views import View
 
 from apps.core.bookmarks import (
+    PAGE_BOOKMARK_ICONS,
     bookmark_context,
     list_resolved_bookmarks,
+    save_page_bookmark,
     sidebar_bookmark_items,
     toggle_bookmark,
 )
@@ -80,6 +82,35 @@ class BookmarkListView(AppViewMixin, View):
             self.template_name,
             {'bookmarks': bookmarks},
         )
+
+
+class BookmarkPageSaveView(AppViewMixin, View):
+    """Save an arbitrary same-site URL under a user-chosen name."""
+
+    http_method_names = ['post']
+
+    def post(self, request):
+        next_url = _safe_next_url(request)
+        label = (request.POST.get('label') or '').strip()
+        url = (request.POST.get('url') or '').strip()
+        icon = (request.POST.get('icon') or '').strip()
+        try:
+            result = save_page_bookmark(
+                user=request.user,
+                workspace=request.active_workspace,
+                url=url,
+                label=label,
+                icon=icon,
+            )
+        except (ValidationError, ValueError) as exc:
+            messages.error(request, str(exc))
+            return redirect(next_url)
+
+        if result.created:
+            messages.success(request, 'Страница добавлена в закладки.')
+        else:
+            messages.success(request, 'Закладка обновлена.')
+        return redirect(next_url)
 
 
 class BookmarkRemoveView(AppViewMixin, View):

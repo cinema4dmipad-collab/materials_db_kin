@@ -1,0 +1,100 @@
+.structure-materials-sheet {
+    --smg-line: rgba(15, 23, 42, 0.1);
+    --smg-header-bg: #f1f5f5;
+    --smg-header-text: #334155;
+    border: 1px solid var(--kx-border-strong, #c9d2d2);
+    border-radius: 0.5rem;
+    background: var(--kx-surface, #fff);
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+    overflow: hidden;
+}
+
+.structure-materials-grid-wrap {
+    background: var(--kx-surface, #fff);
+    max-height: min(70vh, 36rem);
+    overflow: auto;
+}
+
+.structure-materials-grid {
+    background: var(--kx-surface, #fff);
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.8125rem;
+    min-width: 100%;
+}
+
+.structure-materials-grid th,
+.structure-materials-grid td {
+    border-bottom: 1px solid var(--smg-line);
+    border-right: 1px solid var(--smg-line);
+    box-sizing: border-box;
+    max-width: 14rem;
+    overflow: hidden;
+    padding: 0.4rem 0.55rem;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.structure-materials-grid thead th {
+    background: var(--smg-header-bg);
+    box-shadow: inset 0 -1px 0 var(--kx-border-strong, #c9d2d2);
+    color: var(--smg-header-text);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.structure-materials-grid__name,
+.structure-materials-grid__code {
+    position: sticky;
+    background: var(--kx-surface, #fff);
+    z-index: 3;
+}
+
+.structure-materials-grid thead .structure-materials-grid__name,
+.structure-materials-grid thead .structure-materials-grid__code {
+    background: var(--smg-header-bg);
+    z-index: 6;
+}
+
+.structure-materials-grid__name {
+    left: 0;
+    font-weight: 600;
+    min-width: 11rem;
+    max-width: 16rem;
+    width: 12rem;
+    box-shadow: 2px 0 0 var(--smg-line);
+}
+
+.structure-materials-grid__code {
+    left: 12rem;
+    min-width: 7rem;
+    max-width: 10rem;
+    width: 8rem;
+    box-shadow: 2px 0 0 var(--smg-line);
+}
+
+.structure-materials-grid__name a,
+.structure-materials-grid__code a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.structure-materials-grid__name a:hover,
+.structure-materials-grid__code a:hover {
+    color: var(--kx-brand-dark, #005f61);
+    text-decoration: underline;
+}
+
+.structure-materials-grid__cell {
+    background: var(--kx-surface, #fff);
+    color: var(--kx-text, #111);
+}
+
+.structure-materials-grid__cell.is-empty {
+    color: #94a3b8;
+}

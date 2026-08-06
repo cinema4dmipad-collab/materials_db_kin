@@ -97,98 +97,71 @@ class StructureTypeSelectView(AppViewMixin, QuerySetFilterMixin, ListView):
         return context
 
 
-class StructureRecordListView(AppViewMixin, CreatedTableRequiredMixin, QuerySetFilterMixin, TemplateView):
+class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMixin, TemplateView):
     template_name = 'structures/list.html'
-    search_fields = ('label',)
+    search_fields = ('name', 'code')
     search_scopes = (
-        (ALL_SEARCH_SCOPE, 'Везде', ('label',)),
-        ('label', 'Название', ('label',)),
+        (ALL_SEARCH_SCOPE, 'Везде', ('name', 'code')),
+        ('name', 'Название', ('name',)),
+        ('code', 'Код', ('code',)),
     )
-    search_placeholder = 'Введите текст для поиска...'
+    search_placeholder = 'Название или код материала...'
 
-    def _build_records(self, raw_records):
-        workspace = self.request.active_workspace
-        records = []
-        for record in raw_records:
-            linked_materials = linked_materials_for_record(
-                self.structure_type,
-                record['id'],
-                workspace=workspace,
-            )
-            records.append(
-                {
-                    'id': record['id'],
-                    'created_at': record.get('created_at'),
-                    'created_by': record.get('created_by') or '',
-                    'label': linked_materials_display_label(linked_materials) or structure_record_label(
-                        record,
-                        self.structure_type,
-                    ),
-                    'linked_materials': linked_materials,
-                }
-            )
-        return records
+    def _materials_queryset(self):
+        from apps.workspaces.services import materials_visible_in
 
-    def _filter_records(self, records, query, active_scopes):
-        if not query:
-            return records
-        if active_scopes and 'label' not in active_scopes:
-            return records
-        query_lower = query.lower()
-        return [
-            record for record in records
-            if query_lower in record['label'].lower()
-        ]
+        return self.filter_queryset(
+            materials_visible_in(self.request.active_workspace)
+            .filter(struct_type=self.structure_type)
+            .order_by('code', 'name')
+        )
 
     def get_context_data(self, **kwargs):
+        from apps.structures.materials_grid import build_structure_materials_grid
+
         context = super().get_context_data(**kwargs)
-        search_query = self.request.GET.get(self.search_param, '').strip()
-        active_scopes = self._get_active_search_scope_values()
         page_number = self.request.GET.get('page', 1)
         try:
             page_number = max(int(page_number), 1)
         except (TypeError, ValueError):
             page_number = 1
 
-        if search_query:
-            result = SQLExecutor.get_all(self.structure_type, limit=None, offset=0)
-            raw_records = result.get('records', []) if result.get('success') else []
-            records = self._build_records(raw_records)
-            records = self._filter_records(records, search_query, active_scopes)
-            total = len(records)
-            offset = (page_number - 1) * self.paginate_by
-            records = records[offset:offset + self.paginate_by]
+        materials_qs = self._materials_queryset()
+        total = materials_qs.count()
+        offset = (page_number - 1) * self.paginate_by
+        page_materials = list(materials_qs[offset:offset + self.paginate_by])
+        if self.structure_type.is_created:
+            grid = build_structure_materials_grid(self.structure_type, page_materials)
         else:
-            offset = (page_number - 1) * self.paginate_by
-            result = SQLExecutor.get_all(
-                self.structure_type,
-                limit=self.paginate_by,
-                offset=offset,
-            )
-            records = self._build_records(result.get('records', []) if result.get('success') else [])
-            total = result.get('total', 0) if result.get('success') else 0
+            from apps.structures.materials_grid import structure_data_fields, structure_field_headers
+
+            fields = structure_data_fields(self.structure_type)
+            grid = {
+                'columns': structure_field_headers(fields),
+                'rows': [
+                    {
+                        'material': material,
+                        'structure_record_id': material.struct_props_id,
+                        'cells': ['—'] * len(fields),
+                    }
+                    for material in page_materials
+                ],
+                'fields': fields,
+            }
 
         num_pages = max((total + self.paginate_by - 1) // self.paginate_by, 1)
 
-        context['records'] = records
+        context['materials_grid'] = grid
         context['page_number'] = page_number
         context['num_pages'] = num_pages
         context['total'] = total
         context['has_previous'] = page_number > 1
         context['has_next'] = page_number < num_pages
+        context['table_not_created'] = not self.structure_type.is_created
         context.update(self.get_filter_context())
-        from apps.core.bookmarks import bookmark_context, bookmarked_entity_ids
+        from apps.core.bookmarks import bookmark_context
         from apps.core.models import BookmarkEntityType
 
-        bookmarked_ids = bookmarked_entity_ids(
-            user=self.request.user,
-            workspace=self.request.active_workspace,
-            entity_type=BookmarkEntityType.STRUCTURE_RECORD,
-        )
-        context['structure_bookmark_entity_type'] = BookmarkEntityType.STRUCTURE_RECORD
-        context['structure_bookmark_context_slug'] = self.structure_type.code
-        for record in records:
-            record['is_bookmarked'] = str(record['id']) in bookmarked_ids
         context.update(
             bookmark_context(
                 self.request,

@@ -10,7 +10,7 @@ Cross-cutting features: landing page, in-app help, tag management, list filterin
 |-----|------|
 | `/` | Dashboard |
 | `/help/` | Help page (Russian user guide) |
-| `/bookmarks/` | User bookmarks list (materials, samples, scans, structure records, structure types) |
+| `/bookmarks/` | User bookmarks list (materials, samples, scans, structure records, structure types, pages) |
 | `/tags/` | Tag list — tabs **Пространство** / **Общие**, filter **Активные** / **Архив** |
 | `/accounts/profile/` | Current user profile (via `apps/workspaces`) |
 
@@ -44,9 +44,11 @@ Templates: `includes/list_filter_bar.html`, `includes/client_filter_bar.html`, `
 
 ## Bookmarks
 
-* Model: `UserBookmark` — per-user pins for materials, samples, scans, structure records, structure types (`apps/core/bookmarks.py`)
-* UI: `includes/bookmark_toggle.html` on detail/list pages; sidebar section + `/bookmarks/` list
-* Structure type bookmark opens material create with `struct_type` pre-selected
+* Model: `UserBookmark` — per-user pins for materials, samples, scans, structure records, structure types, and **pages** (`url` + optional Bootstrap Icons `icon`)
+* Resolve/create: `apps/core/bookmarks.py`, views in `bookmark_views.py`
+* UI: header button «В закладки» + modal (`includes/bookmark_page_button.html`, `bookmark_page_modal.html`); sidebar section + `/bookmarks/` list
+* Page bookmarks store the current path (query kept; fragment ignored); duplicate URLs are normalized/merged
+* Legacy structure-type bookmarks still open material create with `struct_type` pre-selected when present
 
 ## Forms and Helpers
 

@@ -90,6 +90,7 @@ class BookmarkEntityType(models.TextChoices):
     SCAN = 'scan', 'Скан'
     STRUCTURE_RECORD = 'structure_record', 'Запись структуры'
     STRUCTURE_TYPE = 'structure_type', 'Тип структуры'
+    PAGE = 'page', 'Страница'
 
 
 class UserBookmark(models.Model):
@@ -125,6 +126,18 @@ class UserBookmark(models.Model):
         blank=True,
         verbose_name='Контекст (slug)',
         help_text='Для записей структуры — code типа структуры.',
+    )
+    url = models.CharField(
+        max_length=2000,
+        blank=True,
+        verbose_name='URL',
+        help_text='Для закладок типа «Страница» — относительный путь (с query).',
+    )
+    icon = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name='Иконка',
+        help_text='Класс Bootstrap Icons, например bi-bookmark.',
     )
     label = models.CharField(max_length=300, blank=True, verbose_name='Подпись')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создана')

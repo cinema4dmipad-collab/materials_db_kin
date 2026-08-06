@@ -28,12 +28,12 @@ Table names **must** start with `structures_`, snake_case latin, max 100 chars, 
 
 ## Public UI Flow
 
-1. **Select type** — `/structures/` — list of types
+1. **Select type** — `/structures/` — card grid of types; click name/card → records; gear → manage
 2. **Create type** — `/structures/types/create/` — name, description, color, layers flag, **SQL table name**, field formset
 3. **Manage type** — `/structures/types/<code>/manage/` — color, fields, create/drop SQL table
-4. **Records** — `/structures/<code>/` — CRUD on SQL-backed instances (when table created)
+4. **Records** — `/structures/<code>/` — materials matrix for this type (name, code, structure fields only); horizontal scroll with sticky name/code; create/edit SQL row still via «Создать запись» / detail
 
-List/detail show linked material names for `MaterialLink` fields; **Развернуть** loads material properties via `structure_material_expand.js`. Bookmark toggles on list, detail, and type pages.
+Detail page for a SQL row still shows linked materials; **Развернуть** loads material properties via `structure_material_expand.js`. Page bookmarks (header «В закладки») cover the current URL; entity toggles on structure pages were removed.
 
 After save, modal prompts to create SQL table. Manage page shows table name input before **Create**.
 
@@ -48,8 +48,9 @@ Once `is_created=True`:
 * `type_forms.py` — `StructureTypeForm`, `StructureFieldInlineFormSet`
 * `type_views.py` — create, edit, manage, create-table, drop-table
 * `forms.py` / `views.py` — dynamic instance forms and lists
+* `materials_grid.py` — materials × structure-fields table for the records list
 
-Templates: `templates/structures/type_form.html`, `type_manage.html`, `includes/table_name_field.html`.
+Templates: `templates/structures/type_form.html`, `type_manage.html`, `list.html`, `includes/table_name_field.html`.
 
 ## Admin
 
