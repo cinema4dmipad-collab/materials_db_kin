@@ -264,3 +264,16 @@ class ApiV1Tests(TestCase):
         status = self.client.get(reverse('api:desktop_status'))
         self.assertEqual(status.status_code, 200)
         self.assertTrue(status.json().get('online'))
+
+        # Explicit disconnect clears presence immediately (no TTL wait).
+        disc = self.client.post(
+            reverse('api:desktop_disconnect'),
+            data='{"device_id":"device-b"}',
+            content_type='application/json',
+            **self._headers(),
+        )
+        self.assertIn(disc.status_code, (200, 201))
+        self.assertFalse(disc.json().get('active'))
+        status_off = self.client.get(reverse('api:desktop_status'))
+        self.assertEqual(status_off.status_code, 200)
+        self.assertFalse(status_off.json().get('online'))

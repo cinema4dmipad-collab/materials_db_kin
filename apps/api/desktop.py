@@ -12,9 +12,10 @@ from django.utils import timezone
 
 from apps.api.models import KeenetiXDesktopCommand, KeenetiXDesktopSession
 
-# Desktop is "online" if it heartbeated within this window.
-# Must cover poll interval (~10s) plus jitter; else status flickers offline.
-ONLINE_TTL = timedelta(seconds=35)
+# Desktop is "online" only while is_active and heartbeated within this window.
+# Poll interval is ~10s; keep a small grace for jitter. Explicit disconnect
+# clears is_active immediately (no need to wait for TTL).
+ONLINE_TTL = timedelta(seconds=20)
 
 
 def connect_desktop(user: AbstractBaseUser, device_id: str) -> KeenetiXDesktopSession:
@@ -47,6 +48,19 @@ def heartbeat_desktop(user: AbstractBaseUser, device_id: str) -> bool:
         device_id=device_id,
         is_active=True,
     ).update(last_seen_at=timezone.now())
+    return bool(updated)
+
+
+def disconnect_desktop(user: AbstractBaseUser, device_id: str) -> bool:
+    """Mark this device offline immediately. Returns True if a row was updated."""
+    device_id = (device_id or '').strip()
+    if not device_id or len(device_id) > 64:
+        raise ValueError('invalid_device_id')
+    updated = KeenetiXDesktopSession.objects.filter(
+        user=user,
+        device_id=device_id,
+        is_active=True,
+    ).update(is_active=False, last_seen_at=timezone.now())
     return bool(updated)
 
 

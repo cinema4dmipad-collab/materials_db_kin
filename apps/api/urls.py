@@ -13,6 +13,11 @@ urlpatterns = [
         name='desktop_connect',
     ),
     path(
+        'v1/desktop/disconnect/',
+        controllers.DesktopDisconnectController.as_view(),
+        name='desktop_disconnect',
+    ),
+    path(
         'v1/desktop/commands/',
         controllers.DesktopCommandsController.as_view(),
         name='desktop_commands',

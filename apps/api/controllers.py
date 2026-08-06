@@ -22,13 +22,20 @@ from apps.api.access import (
     user_workspaces_qs,
 )
 from apps.api.auth import API_TOKEN_AUTH
-from apps.api.desktop import claim_commands, connect_desktop, heartbeat_desktop
+from apps.api.desktop import (
+    claim_commands,
+    connect_desktop,
+    disconnect_desktop,
+    heartbeat_desktop,
+)
 from apps.api.schemas import (
     DesktopCommandOut,
     DesktopCommandsOut,
     DesktopCommandsQuery,
     DesktopConnectBody,
     DesktopConnectOut,
+    DesktopDisconnectBody,
+    DesktopDisconnectOut,
     MaterialDetail,
     MaterialListQuery,
     MaterialListResponse,
@@ -97,6 +104,17 @@ class DesktopConnectController(BaseApiController):
         except ValueError as exc:
             raise api_error(str(exc), HTTPStatus.BAD_REQUEST) from exc
         return DesktopConnectOut(device_id=session.device_id, active=session.is_active)
+
+
+class DesktopDisconnectController(BaseApiController):
+    """KeenetiX releases the active desktop role (Lab status goes offline immediately)."""
+
+    def post(self, parsed_body: Body[DesktopDisconnectBody]) -> DesktopDisconnectOut:
+        try:
+            disconnect_desktop(self.request.user, parsed_body.device_id)
+        except ValueError as exc:
+            raise api_error(str(exc), HTTPStatus.BAD_REQUEST) from exc
+        return DesktopDisconnectOut(device_id=parsed_body.device_id.strip(), active=False)
 
 
 class DesktopCommandsController(BaseApiController):

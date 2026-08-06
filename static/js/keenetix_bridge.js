@@ -6,7 +6,7 @@
 (function () {
     'use strict';
 
-    var POLL_MS = 10000;
+    var POLL_MS = 5000;
     var lastOnline = false;
 
     function csrfToken() {
@@ -61,6 +61,10 @@
         }, 4200);
     }
 
+    function progressApi() {
+        return window.FileTransferProgress || null;
+    }
+
     function setPresence(online, detail) {
         lastOnline = !!online;
         var el = document.getElementById('keenetix-bridge-presence');
@@ -76,12 +80,11 @@
         if (online) {
             el.classList.add('keenetix-bridge-presence--paired');
             el.title = detail || 'KeenetiX подключён — сканы откроются в текущем окне';
-            el.textContent = 'KeenetiX';
         } else {
             el.classList.add('keenetix-bridge-presence--offline');
             el.title = detail || 'KeenetiX не подключён. Запустите приложение с токеном этого пользователя';
-            el.textContent = 'KeenetiX';
         }
+        el.textContent = 'KeenetiX';
     }
 
     function refreshStatus() {
@@ -119,15 +122,37 @@
     function openViaDesktop(a) {
         var scanId = a.getAttribute('data-scan-id') || '';
         var workspaceId = a.getAttribute('data-workspace-id') || '';
+        var progress = progressApi();
+        if (a.dataset.keenetixBusy === '1') {
+            return Promise.resolve();
+        }
+        a.dataset.keenetixBusy = '1';
+        if (progress) {
+            progress.showBusy('Открытие в KeenetiX', 'Проверка подключения…');
+            progress.setBusyPercent(20, 'Проверка подключения…');
+        }
         return refreshStatus().then(function () {
             if (!lastOnline) {
+                if (progress) {
+                    progress.hide();
+                }
                 toast('KeenetiX не подключён. Запустите KeenetiX Pro с токеном этого пользователя.', 'warn');
                 return;
             }
+            if (progress) {
+                progress.setBusyPercent(55, 'Отправка команды в KeenetiX…');
+            }
             return openScan(scanId, workspaceId).then(function () {
+                if (progress) {
+                    progress.setBusyPercent(100, 'Команда отправлена — скачивание в KeenetiX');
+                    progress.finish();
+                }
                 toast('Скан отправлен в KeenetiX', 'ok');
                 a.classList.add('keenetix-bridge-open--ok');
             }).catch(function (err) {
+                if (progress) {
+                    progress.hide();
+                }
                 if (String(err && err.message) === 'desktop_offline') {
                     toast('KeenetiX отключился. Запустите приложение снова.', 'warn');
                     setPresence(false);
@@ -135,6 +160,13 @@
                 }
                 toast('Не удалось открыть скан в KeenetiX', 'warn');
             });
+        }).catch(function () {
+            if (progress) {
+                progress.hide();
+            }
+            toast('Не удалось открыть скан в KeenetiX', 'warn');
+        }).finally(function () {
+            delete a.dataset.keenetixBusy;
         });
     }
 

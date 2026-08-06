@@ -28,6 +28,16 @@ class DesktopConnectOut(BaseModel):
     active: bool = True
 
 
+class DesktopDisconnectBody(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+
+
+class DesktopDisconnectOut(BaseModel):
+    ok: bool = True
+    device_id: str
+    active: bool = False
+
+
 class DesktopCommandsQuery(BaseModel):
     device_id: str = Field(min_length=1, max_length=64)
 
