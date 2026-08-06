@@ -19,7 +19,6 @@
             </p>
         </div>
         <div class="text-nowrap d-inline-flex align-items-center gap-1">
-            {% include 'includes/bookmark_toggle.html' with bookmark_toggle_style='button' %}
             {% if structure_type.is_created %}
             <a href="{% url 'structures:list' structure_type.code %}" class="btn btn-primary btn-sm">Записи</a>
             {% endif %}

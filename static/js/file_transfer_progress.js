@@ -76,6 +76,58 @@
         }, 350);
     }
 
+    /** Indeterminate / staged busy UI for non-XHR flows (e.g. Open in KeenetiX). */
+    function showBusy(title, meta) {
+        if (!overlay && !initOverlay()) {
+            return;
+        }
+        titleEl.textContent = title || 'Передача';
+        barEl.style.width = '35%';
+        barEl.classList.add('progress-bar-animated', 'progress-bar-striped');
+        progressRoot.setAttribute('aria-valuenow', '0');
+        metaEl.textContent = meta || 'Подождите…';
+        setBusy(true);
+    }
+
+    function setBusyMeta(meta) {
+        if (!metaEl) {
+            return;
+        }
+        metaEl.textContent = meta || '';
+    }
+
+    function setBusyPercent(percent, meta) {
+        if (!barEl) {
+            return;
+        }
+        var value = Math.max(0, Math.min(100, Math.round(percent)));
+        barEl.style.width = value + '%';
+        if (value >= 100) {
+            barEl.classList.remove('progress-bar-animated');
+        } else {
+            barEl.classList.add('progress-bar-animated', 'progress-bar-striped');
+        }
+        progressRoot.setAttribute('aria-valuenow', String(value));
+        if (meta != null) {
+            metaEl.textContent = meta;
+        }
+    }
+
+    function hideBusy() {
+        if (!overlay) {
+            return;
+        }
+        setBusy(false);
+    }
+
+    window.FileTransferProgress = {
+        showBusy: showBusy,
+        setBusyMeta: setBusyMeta,
+        setBusyPercent: setBusyPercent,
+        finish: finishProgress,
+        hide: hideBusy,
+    };
+
     function formHasNewFile(form) {
         var fileInput = form.querySelector('input[type="file"]');
         return Boolean(fileInput && fileInput.files && fileInput.files.length > 0);

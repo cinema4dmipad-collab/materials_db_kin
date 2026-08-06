@@ -1,114 +1,61 @@
 {% extends 'base.html' %}
-{% load ui_tags %}
+{% load static ui_tags %}
 
 {% block title %}Структуры — База композитов{% endblock %}
 
-{% block content %}
-
-<div class="card">
-
-    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-
-        <div>
-
-            <h1 class="h4 mb-0">Типы структур</h1>
-
-            <p class="text-muted small mb-0">Метаданные и SQL-таблицы динамических параметров</p>
-
-        </div>
-
-        <a href="{% url 'structures:type_create' %}" class="btn btn-primary btn-sm">Создать</a>
-
-    </div>
-
-    <div class="card-body p-0">
-
-        {% include 'includes/list_filter_bar.html' %}
-
-        {% if types %}
-
-        <div class="p-3">
-
-            <div class="row g-3">
-
-                {% for st in types %}
-
-                <div class="col-md-6 col-lg-4">
-
-                    <div class="card h-100">
-
-                        <div class="card-body d-flex flex-column">
-
-                            <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
-                                <h2 class="h5 card-title mb-0">
-                                    {% include 'includes/type_badge.html' with label=st.name tone=st.display_color %}
-                                </h2>
-                                {% include 'includes/bookmark_toggle.html' with bookmark_entity_type=structure_type_bookmark_entity_type bookmark_entity_id=st.bookmark_entity_id bookmark_context_slug=st.code is_bookmarked=st.is_bookmarked bookmark_next_url=request.get_full_path %}
-                            </div>
-
-                            <p class="card-text text-muted small mb-2">
-                                Код: <code>{{ st.code }}</code><br>
-                                Таблица: <code>{{ st.table_name }}</code><br>
-                                Полей: {{ st.fields.count }}<br>
-                                Создал: {% include 'includes/creator_filter_link.html' with obj=st %}<br>
-                                {% if st.is_created %}
-                                <span class="type-pill tone-green"><span class="type-pill__dot" aria-hidden="true"></span><span class="type-pill__label">БД готова</span></span>
-                                {% else %}
-                                <span class="type-pill tone-amber"><span class="type-pill__dot" aria-hidden="true"></span><span class="type-pill__label">Таблица не создана</span></span>
-                                {% endif %}
-                            </p>
-
-                            {% if st.description %}
-
-                            <p class="card-text small">{{ st.description }}</p>
-
-                            {% endif %}
-
-                            <div class="mt-auto d-flex gap-2 flex-wrap">
-
-                                <a href="{% url 'structures:type_manage' st.code %}" class="btn btn-outline-secondary btn-sm">Управление</a>
-
-                                {% if st.is_created %}
-
-                                <a href="{% url 'structures:list' st.code %}" class="btn btn-outline-secondary btn-sm">Записи</a>
-
-                                {% endif %}
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                {% endfor %}
-
-            </div>
-
-        </div>
-
-        {% else %}
-
-        <div class="alert alert-info mb-0 m-3">
-
-            {% if has_active_filters %}
-
-            По вашему запросу типов не найдено. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
-
-            {% else %}
-
-            Нет активных типов. <a href="{% url 'structures:type_create' %}">Создать</a>.
-
-            {% endif %}
-
-        </div>
-
-        {% endif %}
-
-    </div>
-
-</div>
-
+{% block extra_head %}
+<link href="{% static 'css/structure_types.css' %}?v={{ app_version }}-st3" rel="stylesheet">
 {% endblock %}
 
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h1 class="h4 mb-0">Типы структур</h1>
+            <p class="text-muted small mb-0">Клик по названию открывает записи · шестерёнка — управление типом</p>
+        </div>
+        <a href="{% url 'structures:type_create' %}" class="btn btn-primary btn-sm">Создать</a>
+    </div>
+    <div class="card-body p-0">
+        {% include 'includes/list_filter_bar.html' %}
+        {% if types %}
+        <div class="structure-type-grid p-3">
+            <div class="row g-3">
+                {% for st in types %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="structure-type-card{% if not st.is_created %} structure-type-card--pending{% endif %}">
+                        <a href="{% url 'structures:list' st.code %}"
+                           class="structure-type-card__main"
+                           title="Открыть записи «{{ st.name }}»">
+                            <span class="structure-type-card__name">
+                                {% include 'includes/type_badge.html' with label=st.name tone=st.display_color %}
+                            </span>
+                            {% if not st.is_created %}
+                            <span class="structure-type-card__warn" aria-label="Таблица не создана в БД" title="Таблица ещё не создана в БД">
+                                <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                            </span>
+                            {% endif %}
+                        </a>
+                        <a href="{% url 'structures:type_manage' st.code %}"
+                           class="structure-type-card__gear"
+                           title="Управление структурой"
+                           aria-label="Управление «{{ st.name }}»">
+                            <i class="bi bi-gear" aria-hidden="true"></i>
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0 m-3">
+            {% if has_active_filters %}
+            По вашему запросу типов не найдено. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
+            {% else %}
+            Нет активных типов. <a href="{% url 'structures:type_create' %}">Создать</a>.
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -18,6 +18,43 @@ class PaginatedMeta(BaseModel):
     offset: int
 
 
+class DesktopConnectBody(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+
+
+class DesktopConnectOut(BaseModel):
+    ok: bool = True
+    device_id: str
+    active: bool = True
+
+
+class DesktopDisconnectBody(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+
+
+class DesktopDisconnectOut(BaseModel):
+    ok: bool = True
+    device_id: str
+    active: bool = False
+
+
+class DesktopCommandsQuery(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+
+
+class DesktopCommandOut(BaseModel):
+    id: UUID
+    command: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+
+class DesktopCommandsOut(BaseModel):
+    ok: bool = True
+    active: bool
+    commands: list[DesktopCommandOut] = Field(default_factory=list)
+
+
 class PropertyOut(BaseModel):
     id: UUID
     code: str

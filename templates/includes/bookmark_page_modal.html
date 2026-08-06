@@ -1,0 +1,57 @@
+<div class="modal fade" id="bookmarkPageModal" tabindex="-1" aria-labelledby="bookmarkPageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post"
+              action="{% url 'core:bookmark_page_save' %}"
+              class="modal-content"
+              id="bookmark-page-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" id="bookmark-page-next" value="{{ request.get_full_path }}">
+            <input type="hidden"
+                   id="bookmark-page-url"
+                   name="url"
+                   value="{{ request.get_full_path }}"
+                   maxlength="2000"
+                   required>
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="bookmarkPageModalLabel">Добавить в закладки</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Текущая страница сохранится в закладки под выбранным названием и иконкой.
+                </p>
+                <div class="mb-3">
+                    <label for="bookmark-page-label" class="form-label">Название</label>
+                    <input type="text"
+                           class="form-control"
+                           id="bookmark-page-label"
+                           name="label"
+                           maxlength="300"
+                           required
+                           autocomplete="off"
+                           placeholder="Например: Справка по импорту">
+                </div>
+                <fieldset class="mb-0">
+                    <legend class="form-label mb-2">Иконка</legend>
+                    <div class="bookmark-icon-picker" role="radiogroup" aria-label="Иконка закладки">
+                        {% for icon in page_bookmark_icons %}
+                        <label class="bookmark-icon-picker__option">
+                            <input type="radio"
+                                   name="icon"
+                                   value="{{ icon }}"
+                                   {% if icon == default_page_bookmark_icon %}checked{% endif %}>
+                            <span class="bookmark-icon-picker__face" title="{{ icon }}">
+                                <i class="{{ icon }}" aria-hidden="true"></i>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>

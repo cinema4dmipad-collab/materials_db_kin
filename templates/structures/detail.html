@@ -15,7 +15,6 @@
             <p class="text-muted small mb-0">{{ structure_type.name }}</p>
         </div>
         <div class="text-nowrap d-inline-flex align-items-center gap-1">
-            {% include 'includes/bookmark_toggle.html' with bookmark_toggle_style='button' %}
             <a href="{% url 'structures:edit' structure_type.code record.id %}" class="btn btn-primary btn-sm">Изменить</a>
             <a href="{% url 'structures:delete' structure_type.code record.id %}"
                class="btn btn-outline-danger btn-sm"

@@ -1,7 +1,12 @@
 from django.urls import path
 
 from . import views
-from .bookmark_views import BookmarkListView, BookmarkRemoveView, BookmarkToggleView
+from .bookmark_views import (
+    BookmarkListView,
+    BookmarkPageSaveView,
+    BookmarkRemoveView,
+    BookmarkToggleView,
+)
 from .tag_views import TagBulkDeleteView, TagCreateView, TagDeleteView, TagListView, TagUpdateView
 
 app_name = 'core'
@@ -12,6 +17,7 @@ urlpatterns = [
     path('help/', views.help_page, name='help'),
     path('bookmarks/', BookmarkListView.as_view(), name='bookmark_list'),
     path('bookmarks/toggle/', BookmarkToggleView.as_view(), name='bookmark_toggle'),
+    path('bookmarks/page/', BookmarkPageSaveView.as_view(), name='bookmark_page_save'),
     path('bookmarks/<uuid:pk>/remove/', BookmarkRemoveView.as_view(), name='bookmark_remove'),
     path('tags/', TagListView.as_view(), name='tag_list'),
     path('tags/create/', TagCreateView.as_view(), name='tag_create'),

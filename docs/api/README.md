@@ -48,8 +48,10 @@ X-Workspace-Id: <uuid>
 Для агентов/разработки в репозитории KeenetiX:  
 `KeenetiX/docs/integrations/materials-db-api.md` + правило `.cursor/rules/materials-db-api.mdc`.
 
-Deep link с сайта: `keenetix://lab/scan/<scan_uuid>?workspace=<workspace_uuid>` —
-кнопка «Открыть в KeenetiX» на карточке/в списках сканов.
+Desktop channel: кнопка «Открыть в KeenetiX» → `POST /api/v1/desktop/open-scan/`
+(сессия браузера); KeenetiX с PAT делает `connect` + polling `commands`.
+Активен последний desktop с токеном этого пользователя. Протокол `keenetix://` не используется.
+См. `KeenetiX/docs/integrations/materials-db-api.md` § Desktop channel.
 
 ## OpenAPI / Redoc
 

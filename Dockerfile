@@ -11,7 +11,11 @@ ARG SOURCE_COMMIT=
 # Bump in Dokploy env (BUILD_CACHE_BUST=2) to force rebuild after Dockerfile changes.
 ARG BUILD_CACHE_BUST=1
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+# Build-args → ENV, чтобы pip_mirror_env.sh / poetry_install.sh видели зеркало.
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    PIP_MIRROR_URLS=${PIP_MIRROR_URLS} \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=false \
@@ -33,18 +37,19 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends postgresql-client-${POSTGRES_CLIENT_MAJOR} \
     && rm -rf /var/lib/apt/lists/*
 
-COPY deploy/ci/pip_mirror_env.sh /tmp/pip_mirror_env.sh
-RUN chmod +x /tmp/pip_mirror_env.sh
+COPY deploy/ci/pip_mirror_env.sh deploy/ci/poetry_install.sh /tmp/
+RUN chmod +x /tmp/pip_mirror_env.sh /tmp/poetry_install.sh
 
 RUN . /tmp/pip_mirror_env.sh \
     && pip install --no-cache-dir poetry
 
 COPY pyproject.toml poetry.lock* ./
-RUN poetry install --no-ansi --no-root \
+# poetry_install.sh подхватывает PIP_* и при недоступном pypi.org берёт зеркало.
+RUN sh /tmp/poetry_install.sh \
     && rm -rf "$POETRY_CACHE_DIR"
 
 COPY . .
-RUN poetry install --no-ansi --no-root \
+RUN sh /tmp/poetry_install.sh \
     && rm -rf "$POETRY_CACHE_DIR"
 
 ARG GIT_COMMIT=

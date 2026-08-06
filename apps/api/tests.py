@@ -207,3 +207,73 @@ class ApiV1Tests(TestCase):
         again = self.client.get(reverse('accounts:profile'))
         self.assertNotContains(again, 'data-token-secret=')
         self.assertIsNone(self.client.session.get('api_token_plaintext'))
+
+    def test_desktop_last_connect_wins_and_open_scan(self):
+        # First device becomes active.
+        r1 = self.client.post(
+            reverse('api:desktop_connect'),
+            data='{"device_id":"device-a"}',
+            content_type='application/json',
+            **self._headers(),
+        )
+        self.assertIn(r1.status_code, (200, 201))
+        self.assertTrue(r1.json().get('active'))
+
+        # Second device steals the session.
+        r2 = self.client.post(
+            reverse('api:desktop_connect'),
+            data='{"device_id":"device-b"}',
+            content_type='application/json',
+            **self._headers(),
+        )
+        self.assertIn(r2.status_code, (200, 201))
+
+        cmds_a = self.client.get(
+            reverse('api:desktop_commands'),
+            {'device_id': 'device-a'},
+            **self._headers(),
+        )
+        self.assertEqual(cmds_a.status_code, 200)
+        self.assertFalse(cmds_a.json().get('active'))
+
+        # Browser session queues open_scan for the active desktop.
+        self.client.login(username=self.user.username, password=self.password)
+        open_resp = self.client.post(
+            reverse('api:desktop_open_scan'),
+            data=(
+                f'{{"scan_id":"{self.scan.pk}",'
+                f'"workspace_id":"{self.workspace.pk}"}}'
+            ),
+            content_type='application/json',
+        )
+        self.assertEqual(open_resp.status_code, 200)
+        self.assertTrue(open_resp.json().get('ok'))
+
+        cmds_b = self.client.get(
+            reverse('api:desktop_commands'),
+            {'device_id': 'device-b'},
+            **self._headers(),
+        )
+        self.assertEqual(cmds_b.status_code, 200)
+        body = cmds_b.json()
+        self.assertTrue(body.get('active'))
+        self.assertEqual(len(body.get('commands') or []), 1)
+        self.assertEqual(body['commands'][0]['command'], 'open_scan')
+        self.assertEqual(body['commands'][0]['payload']['scan_id'], str(self.scan.pk))
+
+        status = self.client.get(reverse('api:desktop_status'))
+        self.assertEqual(status.status_code, 200)
+        self.assertTrue(status.json().get('online'))
+
+        # Explicit disconnect clears presence immediately (no TTL wait).
+        disc = self.client.post(
+            reverse('api:desktop_disconnect'),
+            data='{"device_id":"device-b"}',
+            content_type='application/json',
+            **self._headers(),
+        )
+        self.assertIn(disc.status_code, (200, 201))
+        self.assertFalse(disc.json().get('active'))
+        status_off = self.client.get(reverse('api:desktop_status'))
+        self.assertEqual(status_off.status_code, 200)
+        self.assertFalse(status_off.json().get('online'))

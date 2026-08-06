@@ -55,9 +55,6 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
             ).exists()
         )
 
-        detail = self.client.get(detail_url)
-        self.assertContains(detail, 'Убрать из закладок')
-
         response = self.client.post(
             toggle_url,
             {
@@ -77,7 +74,7 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
         )
 
     def test_sidebar_shows_bookmark_section(self):
-        UserBookmark.objects.create(
+        bookmark = UserBookmark.objects.create(
             user=self.user,
             workspace=self.workspace,
             entity_type=BookmarkEntityType.MATERIAL,
@@ -87,6 +84,8 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
         response = self.client.get(reverse('core:dashboard'))
         self.assertContains(response, 'Закладки')
         self.assertContains(response, self.material.name)
+        self.assertContains(response, reverse('core:bookmark_remove', kwargs={'pk': bookmark.pk}))
+        self.assertContains(response, 'Удалить закладку')
 
     def test_bookmark_list_page(self):
         UserBookmark.objects.create(
@@ -138,6 +137,81 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
             entity_id=self.scan.pk,
         )
         self.assertEqual(bookmark.parent_id, self.sample.pk)
+
+    def test_page_bookmark_with_custom_name(self):
+        help_url = reverse('core:help')
+        response = self.client.post(
+            reverse('core:bookmark_page_save'),
+            {
+                'label': 'Моя справка',
+                'url': help_url,
+                'icon': 'bi-question-circle',
+                'next': help_url,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        bookmark = UserBookmark.objects.get(
+            user=self.user,
+            workspace=self.workspace,
+            entity_type=BookmarkEntityType.PAGE,
+        )
+        self.assertEqual(bookmark.label, 'Моя справка')
+        self.assertEqual(bookmark.url, help_url.rstrip('/') or '/')
+        self.assertEqual(bookmark.icon, 'bi-question-circle')
+
+        listing = self.client.get(reverse('core:bookmark_list'))
+        self.assertContains(listing, 'Моя справка')
+        self.assertContains(listing, 'Страница')
+        self.assertContains(listing, bookmark.url)
+        self.assertContains(listing, 'bi-question-circle')
+
+        dashboard = self.client.get(reverse('core:dashboard'))
+        self.assertContains(dashboard, 'Моя справка')
+        self.assertContains(dashboard, 'bi-question-circle')
+
+    def test_page_bookmark_rejects_external_url(self):
+        response = self.client.post(
+            reverse('core:bookmark_page_save'),
+            {
+                'label': 'Bad',
+                'url': 'https://example.com/help',
+                'next': '/',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            UserBookmark.objects.filter(
+                user=self.user,
+                entity_type=BookmarkEntityType.PAGE,
+            ).exists()
+        )
+
+    def test_page_bookmark_dedupes_slash_and_hash_variants(self):
+        help_url = reverse('core:help')
+        self.client.post(
+            reverse('core:bookmark_page_save'),
+            {'label': 'Help A', 'url': help_url, 'icon': 'bi-star', 'next': '/'},
+        )
+        self.client.post(
+            reverse('core:bookmark_page_save'),
+            {
+                'label': 'Help B',
+                'url': help_url.rstrip('/') + '/#section',
+                'icon': 'bi-house',
+                'next': '/',
+            },
+        )
+        pages = UserBookmark.objects.filter(
+            user=self.user,
+            workspace=self.workspace,
+            entity_type=BookmarkEntityType.PAGE,
+        )
+        self.assertEqual(pages.count(), 1)
+        bookmark = pages.get()
+        self.assertEqual(bookmark.label, 'Help B')
+        self.assertEqual(bookmark.icon, 'bi-house')
+        self.assertFalse(bookmark.url.endswith('/'))
+        self.assertNotIn('#', bookmark.url)
 
 
 class StructureRecordBookmarkTests(TransactionTestCase):
@@ -211,8 +285,8 @@ class StructureRecordBookmarkTests(TransactionTestCase):
         self.assertEqual(bookmark.context_slug, self.structure_type.code)
         self.assertEqual(bookmark.label, 'Fiber A')
 
-        detail = self.client.get(detail_url)
-        self.assertContains(detail, 'Убрать из закладок')
+        listing = self.client.get(reverse('core:bookmark_list'))
+        self.assertContains(listing, 'Fiber A')
 
         sidebar = self.client.get(reverse('core:dashboard'))
         self.assertContains(sidebar, 'Fiber A')
