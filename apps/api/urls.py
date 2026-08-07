@@ -60,4 +60,9 @@ urlpatterns = [
         controllers.ScanDownloadController.as_view(),
         name='scan_download',
     ),
+    path(
+        'v1/scans/<uuid:scan_id>/preview/',
+        controllers.ScanPreviewController.as_view(),
+        name='scan_preview',
+    ),
 ]

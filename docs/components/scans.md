@@ -34,6 +34,7 @@ Download links use `.file-download-link` with progress indicator (`file_transfer
 **Открыть в KeenetiX** — desktop channel (`POST /api/v1/desktop/open-scan/`); кнопка на карточке и в списках.
 API create: multipart `file` + optional `preview`; response includes `preview_url` when set.
 API update: `PUT /api/v1/scans/{id}/` replaces HDF5 (+ optional preview) — KeenetiX «Обновить скан».
+Preview is served via app proxy (`GET …/preview/`), not a direct S3 URL (SeaweedFS is often unreachable from the browser).
 
 ## Upload Progress
 

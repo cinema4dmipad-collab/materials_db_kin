@@ -180,10 +180,8 @@ def serialize_scan(scan: ScanRecord) -> ScanOut:
         tag_names = []
     preview_url = None
     if getattr(scan, 'preview', None) and scan.preview:
-        try:
-            preview_url = scan.preview.url
-        except ValueError:
-            preview_url = None
+        # Proxy through the app — direct S3/SeaweedFS URLs are often unreachable from the browser.
+        preview_url = reverse('api:scan_preview', kwargs={'scan_id': scan.pk})
     return ScanOut(
         id=scan.pk,
         sample_id=scan.sample_id,

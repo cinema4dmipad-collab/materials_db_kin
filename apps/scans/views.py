@@ -354,3 +354,18 @@ class ScanDownloadView(AppViewMixin, SampleScanMixin, View):
         if not scan.file:
             raise Http404('Файл не найден')
         return build_file_download_response(scan.file, filename=scan.filename)
+
+
+class ScanPreviewView(AppViewMixin, SampleScanMixin, View):
+    """Stream preview image through the app (S3/SeaweedFS may be unreachable from browser)."""
+
+    def get(self, request, *args, **kwargs):
+        scan = get_object_or_404(self.sample.scans.all(), pk=kwargs['pk'])
+        if not scan.preview:
+            raise Http404('Превью не найдено')
+        filename = scan.preview.name.rsplit('/', 1)[-1]
+        return build_file_download_response(
+            scan.preview,
+            filename=filename,
+            as_attachment=False,
+        )

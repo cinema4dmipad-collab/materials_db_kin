@@ -416,3 +416,34 @@ class ScanDownloadController(BaseApiController):
                 'Файловое хранилище недоступно (S3/SeaweedFS).',
                 HTTPStatus.SERVICE_UNAVAILABLE,
             ) from exc
+
+
+class ScanPreviewController(BaseApiController):
+    """Inline C-scan preview image (proxied; S3 may be unreachable from clients)."""
+
+    validate_responses: ClassVar[bool] = False
+
+    @validate(
+        FileResponseSpec(as_attachment=False, status_code=HTTPStatus.OK),
+        *_ERROR_RESPONSES,
+    )
+    def get(self, parsed_path: Path[ScanPath]) -> FileResponse:
+        workspace = require_workspace(self.request)
+        require_perm(self.request.user, workspace, WorkspacePerm.SCAN_VIEW)
+        scan = scans_qs(workspace).filter(pk=parsed_path.scan_id).first()
+        if scan is None or not scan.preview:
+            raise api_error('Не найдено.', HTTPStatus.NOT_FOUND)
+        filename = scan.preview.name.rsplit('/', 1)[-1]
+        try:
+            return build_file_download_response(
+                scan.preview,
+                filename=filename,
+                as_attachment=False,
+            )
+        except Http404 as exc:
+            raise api_error('Не найдено.', HTTPStatus.NOT_FOUND) from exc
+        except StorageUnavailable as exc:
+            raise api_error(
+                'Файловое хранилище недоступно (S3/SeaweedFS).',
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            ) from exc

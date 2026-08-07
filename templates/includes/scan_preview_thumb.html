@@ -1,5 +1,5 @@
 {% if scan.preview %}
-<img src="{{ scan.preview.url }}"
+<img src="{% url 'scans:preview' scan.sample_id scan.pk %}"
      alt="Превью {{ scan.title }}"
      class="scan-preview-thumb{% if size == 'lg' %} scan-preview-thumb--lg{% endif %}"
      loading="lazy">

@@ -436,7 +436,11 @@ class ScanViewsTests(TestCase):
         self.assertContains(list_response, 'type-pill-link')
         self.assertContains(list_response, 'Теневой')
         self.assertContains(list_response, 'scan-preview-thumb')
-        self.assertContains(list_response, scan.preview.url)
+        preview_url = reverse('scans:preview', kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk})
+        self.assertContains(list_response, preview_url)
+        preview_response = self.client.get(preview_url)
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertTrue(b''.join(preview_response.streaming_content).startswith(b'\x89PNG'))
 
         file_name = scan.file.name
         preview_name = scan.preview.name
