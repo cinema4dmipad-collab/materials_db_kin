@@ -8,11 +8,13 @@ $env:POETRY_NO_INTERACTION = '1'
 if (-not $env:PIP_DEFAULT_TIMEOUT) { $env:PIP_DEFAULT_TIMEOUT = '120' }
 if (-not $env:PIP_RETRIES) { $env:PIP_RETRIES = '10' }
 
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
 function Invoke-Uv {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
-    & python -m uv @Args
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$UvArgs)
+    & python -m uv @UvArgs
     if ($LASTEXITCODE -ne 0) {
-        throw "uv failed: uv $($Args -join ' ') (exit $LASTEXITCODE)"
+        throw "uv failed: uv $($UvArgs -join ' ') (exit $LASTEXITCODE)"
     }
 }
 
@@ -127,73 +129,85 @@ function Select-PipMirror {
     Use-PipMirror -HostName 'pypi.tuna.tsinghua.edu.cn' -Url 'https://pypi.tuna.tsinghua.edu.cn/simple/'
 }
 
-function Invoke-PoetryPython {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
-    & poetry run python @Args
+function Get-PoetryPython {
+    $envPath = (& poetry env info -p 2>$null | Select-Object -Last 1)
+    if ($envPath) {
+        $envPath = $envPath.Trim()
+    }
+    $candidate = Join-Path $envPath 'Scripts\python.exe'
+    if ($envPath -and (Test-Path -LiteralPath $candidate)) {
+        return $candidate
+    }
+    $inProject = Join-Path $PWD '.venv\Scripts\python.exe'
+    if (Test-Path -LiteralPath $inProject) {
+        return $inProject
+    }
+    throw 'Poetry virtualenv python not found.'
+}
+
+function Invoke-EnvPython {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$PyArgs
+    )
+    & $PythonExe @PyArgs
     if ($LASTEXITCODE -ne 0) {
-        throw "poetry run python failed (exit $LASTEXITCODE): $($Args -join ' ')"
+        throw "python failed (exit $LASTEXITCODE): $PythonExe $($PyArgs -join ' ')"
     }
 }
 
-function Export-LockRequirements {
-    param([Parameter(Mandatory = $true)][string]$OutPath)
-    $code = @'
-import tomllib
-from pathlib import Path
-import sys
+function Install-ViaPip {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [Parameter(Mandatory = $true)][string]$RequirementsPath
+    )
+    if (-not (Test-Path -LiteralPath $RequirementsPath)) {
+        throw "Requirements file missing: $RequirementsPath"
+    }
+    $pipArgs = @(
+        '-m', 'pip', 'install', '--no-cache-dir',
+        '-r', $RequirementsPath
+    )
+    if ($env:PIP_INDEX_URL) {
+        $pipArgs += @('-i', $env:PIP_INDEX_URL)
+    }
+    if ($env:PIP_TRUSTED_HOST) {
+        $pipArgs += @('--trusted-host', $env:PIP_TRUSTED_HOST)
+    }
+    Write-Host "pip install -r $RequirementsPath (index=$($env:PIP_INDEX_URL))"
+    Invoke-EnvPython -PythonExe $PythonExe @pipArgs
+}
 
-lock = tomllib.loads(Path("poetry.lock").read_text(encoding="utf-8"))
-lines = []
-for pkg in lock.get("package", []):
-    groups = pkg.get("groups") or []
-    if "main" not in groups:
-        continue
-    lines.append(f'{pkg["name"]}=={pkg["version"]}')
-Path(sys.argv[1]).write_text("\n".join(lines) + "\n", encoding="utf-8")
-print(f"Exported {len(lines)} packages from poetry.lock → {sys.argv[1]}")
-'@
-    & poetry run python -c $code $OutPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to export poetry.lock → $OutPath"
+function Export-LockRequirements {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [Parameter(Mandatory = $true)][string]$OutPath
+    )
+    $exporter = Join-Path $ScriptDir 'export_lock_requirements.py'
+    if (-not (Test-Path -LiteralPath $exporter)) {
+        throw "Missing $exporter"
+    }
+    Invoke-EnvPython -PythonExe $PythonExe $exporter $OutPath
+    if (-not (Test-Path -LiteralPath $OutPath)) {
+        throw "Export succeeded but file not found: $OutPath"
     }
 }
 
 function Install-FromPyproject {
+    param([Parameter(Mandatory = $true)][string]$PythonExe)
     Write-Host 'poetry.lock missing — installing dependencies from pyproject.toml via pip.'
     $requirementsPath = Join-Path ([System.IO.Path]::GetTempPath()) ("requirements-ci-" + [guid]::NewGuid().ToString() + ".txt")
-    $exportCode = @'
-import tomllib
-from pathlib import Path
-import sys
-deps = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
-Path(sys.argv[1]).write_text("\n".join(deps) + "\n", encoding="utf-8")
-'@
-    & poetry run python -c $exportCode $requirementsPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to export pyproject dependencies"
-    }
-    $pipArgs = @('-m', 'pip', 'install', '--no-cache-dir', '-r', $requirementsPath)
-    if ($env:PIP_INDEX_URL) {
-        $pipArgs += @('-i', $env:PIP_INDEX_URL)
-    }
-    if ($env:PIP_TRUSTED_HOST) {
-        $pipArgs += @('--trusted-host', $env:PIP_TRUSTED_HOST)
-    }
-    Invoke-PoetryPython @pipArgs
+    $exportCode = 'import tomllib; from pathlib import Path; import sys; deps = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]; Path(sys.argv[1]).write_text("\n".join(deps) + "\n", encoding="utf-8")'
+    Invoke-EnvPython -PythonExe $PythonExe -c $exportCode $requirementsPath
+    Install-ViaPip -PythonExe $PythonExe -RequirementsPath $requirementsPath
 }
 
 function Install-ViaPipFromLock {
+    param([Parameter(Mandatory = $true)][string]$PythonExe)
     Write-Host "Mirror mode (PIP_INDEX_URL=$($env:PIP_INDEX_URL)) — install via pip into Poetry env."
     $requirementsPath = Join-Path ([System.IO.Path]::GetTempPath()) ("requirements-ci-lock-" + [guid]::NewGuid().ToString() + ".txt")
-    Export-LockRequirements -OutPath $requirementsPath
-    $pipArgs = @('-m', 'pip', 'install', '--no-cache-dir', '-r', $requirementsPath)
-    if ($env:PIP_INDEX_URL) {
-        $pipArgs += @('-i', $env:PIP_INDEX_URL)
-    }
-    if ($env:PIP_TRUSTED_HOST) {
-        $pipArgs += @('--trusted-host', $env:PIP_TRUSTED_HOST)
-    }
-    Invoke-PoetryPython @pipArgs
+    Export-LockRequirements -PythonExe $PythonExe -OutPath $requirementsPath
+    Install-ViaPip -PythonExe $PythonExe -RequirementsPath $requirementsPath
 }
 
 $pythonExecutable = Get-Python313Executable
@@ -204,19 +218,21 @@ if (-not (Get-Command poetry -ErrorAction SilentlyContinue)) {
 }
 
 poetry env use $pythonExecutable
+$envPython = Get-PoetryPython
+Write-Host "Poetry env python: $envPython"
+
 Select-PipMirror
 
 if (-not (Test-Path 'poetry.lock')) {
-    Install-FromPyproject
+    Install-FromPyproject -PythonExe $envPython
     exit 0
 }
 
 if ($env:PIP_INDEX_URL) {
-    Install-ViaPipFromLock
+    Install-ViaPipFromLock -PythonExe $envPython
     exit 0
 }
 
-# PyPI доступен — пробуем Poetry; при обрыве сети уходим на зеркало + pip.
 Write-Host 'Installing dependencies via Poetry...'
 & poetry install --no-interaction --no-ansi --no-root @args
 if ($LASTEXITCODE -eq 0) {
@@ -226,14 +242,5 @@ if ($LASTEXITCODE -eq 0) {
 Write-Host "Poetry install failed (exit $LASTEXITCODE) — fallback to mirror + pip."
 $env:PIP_INDEX_URL = $null
 $env:PIP_TRUSTED_HOST = $null
-# Force mirror selection even if a stale probe thought PyPI was up.
-if (Test-PipIndex -Url 'https://pypi.org/simple/pip/') {
-    # Still prefer a stable mirror after a flaky Poetry run.
-    Use-PipMirror -HostName 'pypi.tuna.tsinghua.edu.cn' -Url 'https://pypi.tuna.tsinghua.edu.cn/simple/'
-} else {
-    Select-PipMirror
-}
-if (-not $env:PIP_INDEX_URL) {
-    Use-PipMirror -HostName 'pypi.tuna.tsinghua.edu.cn' -Url 'https://pypi.tuna.tsinghua.edu.cn/simple/'
-}
-Install-ViaPipFromLock
+Use-PipMirror -HostName 'pypi.tuna.tsinghua.edu.cn' -Url 'https://pypi.tuna.tsinghua.edu.cn/simple/'
+Install-ViaPipFromLock -PythonExe $envPython
