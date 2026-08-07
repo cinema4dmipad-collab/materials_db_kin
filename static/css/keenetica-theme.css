@@ -1692,6 +1692,39 @@ a.entity-tag.tone-neutral:hover {
     font-size: 2rem;
 }
 
+.scan-preview-thumb--detail {
+    width: min(100%, 22rem);
+    height: auto;
+    aspect-ratio: 1;
+    max-height: 22rem;
+    font-size: 3rem;
+    object-fit: contain;
+    background: #0f172a0a;
+}
+
+.scan-detail-layout {
+    display: grid;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+@media (min-width: 768px) {
+    .scan-detail-layout {
+        grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem);
+    }
+
+    .scan-detail-layout__preview {
+        position: sticky;
+        top: 1rem;
+        justify-self: end;
+        text-align: center;
+    }
+}
+
+.scan-detail-layout__preview .scan-preview-thumb--detail {
+    width: 100%;
+}
+
 .scan-preview-thumb--empty {
     background: #f8fafc;
 }

@@ -35,37 +35,39 @@
         </div>
     </div>
     <div class="card-body">
-        <div class="d-flex flex-wrap gap-3 mb-3 align-items-start">
-            {% include 'includes/scan_preview_thumb.html' with scan=scan size='lg' %}
-            {% if not scan.preview %}
-            <p class="text-muted small mb-0 align-self-center">Превью C-скана не загружено.</p>
-            {% endif %}
-        </div>
-        <dl class="row mb-0">
-            <dt class="col-sm-3">Метод</dt>
-            <dd class="col-sm-9">
-                {% url 'scans:list' sample.pk as sample_scans_url %}
-                {% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method use_scan_method_filter=True filter_base_path=sample_scans_url %}
-            </dd>
-            <dt class="col-sm-3">Теги</dt>
-            <dd class="col-sm-9">
-                {% if tags_form %}
-                {% url 'scans:tags' sample.pk scan.pk as scan_tags_url %}
-                {% include 'includes/entity_tags_form.html' with tags_form=tags_form tags_form_action=scan_tags_url %}
-                {% else %}
-                {% url 'scans:list' sample.pk as sample_scans_url %}
-                {% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}
+        <div class="scan-detail-layout">
+            <dl class="row mb-0 scan-detail-layout__meta">
+                <dt class="col-sm-3">Метод</dt>
+                <dd class="col-sm-9">
+                    {% url 'scans:list' sample.pk as sample_scans_url %}
+                    {% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method use_scan_method_filter=True filter_base_path=sample_scans_url %}
+                </dd>
+                <dt class="col-sm-3">Теги</dt>
+                <dd class="col-sm-9">
+                    {% if tags_form %}
+                    {% url 'scans:tags' sample.pk scan.pk as scan_tags_url %}
+                    {% include 'includes/entity_tags_form.html' with tags_form=tags_form tags_form_action=scan_tags_url %}
+                    {% else %}
+                    {% url 'scans:list' sample.pk as sample_scans_url %}
+                    {% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=sample_scans_url %}
+                    {% endif %}
+                </dd>
+                <dt class="col-sm-3">Описание</dt>
+                <dd class="col-sm-9">{{ scan.description|default:"—" }}</dd>
+                <dt class="col-sm-3">Загрузил</dt>
+                <dd class="col-sm-9">{{ scan|creator_display }}</dd>
+                <dt class="col-sm-3">Загружен</dt>
+                <dd class="col-sm-9">{{ scan.uploaded_at|date:"d.m.Y H:i" }}</dd>
+                <dt class="col-sm-3">Файл</dt>
+                <dd class="col-sm-9">{{ scan.filename }}</dd>
+            </dl>
+            <aside class="scan-detail-layout__preview" aria-label="Превью C-скана">
+                {% include 'includes/scan_preview_thumb.html' with scan=scan size='detail' %}
+                {% if not scan.preview %}
+                <p class="text-muted small mb-0 mt-2">Превью C-скана не загружено.</p>
                 {% endif %}
-            </dd>
-            <dt class="col-sm-3">Описание</dt>
-            <dd class="col-sm-9">{{ scan.description|default:"—" }}</dd>
-            <dt class="col-sm-3">Загрузил</dt>
-            <dd class="col-sm-9">{{ scan|creator_display }}</dd>
-            <dt class="col-sm-3">Загружен</dt>
-            <dd class="col-sm-9">{{ scan.uploaded_at|date:"d.m.Y H:i" }}</dd>
-            <dt class="col-sm-3">Файл</dt>
-            <dd class="col-sm-9">{{ scan.filename }}</dd>
-        </dl>
+            </aside>
+        </div>
     </div>
 </div>
 {% endblock %}

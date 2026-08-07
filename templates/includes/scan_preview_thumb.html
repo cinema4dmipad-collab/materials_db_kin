@@ -1,10 +1,10 @@
 {% if scan.preview %}
 <img src="{% url 'scans:preview' scan.sample_id scan.pk %}"
      alt="Превью {{ scan.title }}"
-     class="scan-preview-thumb{% if size == 'lg' %} scan-preview-thumb--lg{% endif %}"
+     class="scan-preview-thumb{% if size == 'lg' %} scan-preview-thumb--lg{% elif size == 'detail' %} scan-preview-thumb--detail{% endif %}"
      loading="lazy">
 {% else %}
-<span class="scan-preview-thumb scan-preview-thumb--empty{% if size == 'lg' %} scan-preview-thumb--lg{% endif %}"
+<span class="scan-preview-thumb scan-preview-thumb--empty{% if size == 'lg' %} scan-preview-thumb--lg{% elif size == 'detail' %} scan-preview-thumb--detail{% endif %}"
       title="Превью не загружено"
       aria-hidden="true">
     <i class="bi bi-image" aria-hidden="true"></i>
