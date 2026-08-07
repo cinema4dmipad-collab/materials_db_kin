@@ -6,7 +6,7 @@ Location: `apps/scans/`
 
 ## Model
 
-**Scan** — sample (FK), title, description, method (echo, shadow, immersion, …), HDF5 `file`, optional `preview` (PNG/JPEG/WebP C-scan thumbnail), tags, upload metadata.
+**Scan** — sample (FK), title, description, method (echo, shadow, immersion, …), HDF5 `file`, optional `preview` (PNG/JPEG/WebP C-scan thumbnail), tags, upload metadata. Document attachments: `ScanAttachment` (see [attachments.md](attachments.md)).
 
 ## File Validation
 

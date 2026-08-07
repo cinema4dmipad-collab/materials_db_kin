@@ -1,5 +1,11 @@
 from django.urls import path
 
+from apps.scans.attachment_views import (
+    ScanAttachmentDeleteView,
+    ScanAttachmentDownloadView,
+    ScanAttachmentListView,
+    ScanAttachmentPreviewView,
+)
 from apps.scans.views import (
     ScanCreateView,
     ScanDeleteView,
@@ -22,4 +28,24 @@ urlpatterns = [
     path('<uuid:pk>/download/', ScanDownloadView.as_view(), name='download'),
     path('<uuid:pk>/preview/', ScanPreviewView.as_view(), name='preview'),
     path('<uuid:pk>/delete/', ScanDeleteView.as_view(), name='delete'),
+    path(
+        '<uuid:scan_pk>/attachments/',
+        ScanAttachmentListView.as_view(),
+        name='attachment_list',
+    ),
+    path(
+        '<uuid:scan_pk>/attachments/<uuid:pk>/download/',
+        ScanAttachmentDownloadView.as_view(),
+        name='attachment_download',
+    ),
+    path(
+        '<uuid:scan_pk>/attachments/<uuid:pk>/preview/',
+        ScanAttachmentPreviewView.as_view(),
+        name='attachment_preview',
+    ),
+    path(
+        '<uuid:scan_pk>/attachments/<uuid:pk>/delete/',
+        ScanAttachmentDeleteView.as_view(),
+        name='attachment_delete',
+    ),
 ]

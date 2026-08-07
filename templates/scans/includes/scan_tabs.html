@@ -1,0 +1,14 @@
+{% if sample and scan %}
+<ul class="nav nav-tabs app-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link{% if scan_active_tab == 'detail' or not scan_active_tab %} active{% endif %}"
+           href="{% url 'scans:detail' sample.pk scan.pk %}">Карточка</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if scan_active_tab == 'attachments' %} active{% endif %}"
+           href="{% url 'scans:attachment_list' sample.pk scan.pk %}">
+            Файлы{% if scan_attachment_count %} ({{ scan_attachment_count }}){% endif %}
+        </a>
+    </li>
+</ul>
+{% endif %}

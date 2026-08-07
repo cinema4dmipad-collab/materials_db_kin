@@ -9,6 +9,7 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.core.attachments.processing import schedule_attachment_preview
 from apps.core.bulk import parse_bulk_ids
 from apps.core.creator import assign_creator
 from apps.core.file_download import build_file_download_response
@@ -500,6 +501,7 @@ class AttachmentListView(AppViewMixin, QuerySetFilterMixin, SampleAttachmentMixi
             attachment.sample = self.sample
             assign_creator(attachment, request.user)
             attachment.save()
+            schedule_attachment_preview(attachment)
             messages.success(request, 'Файл прикреплён к образцу.')
             return redirect('attachments:list', sample_pk=self.sample.pk)
 
@@ -540,3 +542,16 @@ class AttachmentDownloadView(AppViewMixin, SampleAttachmentMixin, View):
         if not attachment.file:
             raise Http404('Файл не найден')
         return build_file_download_response(attachment.file, filename=attachment.filename)
+
+
+class AttachmentPreviewView(AppViewMixin, SampleAttachmentMixin, View):
+    def get(self, request, *args, **kwargs):
+        attachment = get_object_or_404(self.sample.attachments.all(), pk=kwargs['pk'])
+        if not attachment.preview_pdf:
+            raise Http404('Превью не найдено')
+        filename = attachment.preview_pdf.name.rsplit('/', 1)[-1]
+        return build_file_download_response(
+            attachment.preview_pdf,
+            filename=filename,
+            as_attachment=False,
+        )

@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -7,24 +6,49 @@ from django.views import View
 from django.views.generic import DeleteView, ListView
 
 from apps.core.attachments.processing import schedule_attachment_preview
-from apps.core.file_download import build_file_download_response
-
 from apps.core.creator import assign_creator
-from apps.core.list_filters import ALL_SEARCH_SCOPE, CREATOR_SEARCH_SCOPE, UPLOADED_BY_CREATOR_FILTER, QuerySetFilterMixin
-from apps.materials.forms_attachments import MaterialAttachmentForm
-from apps.materials.models import MaterialAttachment
-from apps.materials.services import material_attachments_for_material
-from apps.materials.tab_mixins import MaterialTabMixin
+from apps.core.file_download import build_file_download_response
+from apps.core.list_filters import (
+    ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
+    UPLOADED_BY_CREATOR_FILTER,
+    QuerySetFilterMixin,
+)
+from apps.scans.forms_attachments import ScanAttachmentForm
+from apps.scans.models import ScanAttachment
 from apps.workspaces.mixins import AppViewMixin
+from apps.workspaces.services import samples_visible_in, scans_visible_in
 
 
-class MaterialAttachmentMixin(MaterialTabMixin):
-    active_tab = 'attachments'
+class ScanAttachmentMixin:
+    active_tab = 'scan_attachments'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.sample = get_object_or_404(
+            samples_visible_in(request.active_workspace).select_related('material'),
+            pk=kwargs['sample_pk'],
+        )
+        self.scan = get_object_or_404(
+            scans_visible_in(request.active_workspace).filter(sample=self.sample),
+            pk=kwargs['scan_pk'],
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['sample'] = self.sample
+        context['scan'] = self.scan
+        context['active_tab'] = 'scans'
+        context['scan_active_tab'] = 'attachments'
+        context['scan_count'] = self.sample.scans.count()
+        context['attachment_count'] = self.sample.attachments.count()
+        context['scan_attachment_count'] = self.scan.attachments.count()
+        return context
 
 
-class MaterialAttachmentListView(AppViewMixin, QuerySetFilterMixin, MaterialAttachmentMixin, ListView):
-    model = MaterialAttachment
-    template_name = 'materials/attachments/list.html'
+class ScanAttachmentListView(AppViewMixin, QuerySetFilterMixin, ScanAttachmentMixin, ListView):
+    model = ScanAttachment
+    template_name = 'scans/attachments/list.html'
     context_object_name = 'attachments'
     search_fields = ('title', 'description', 'file')
     search_scopes = (
@@ -37,37 +61,38 @@ class MaterialAttachmentListView(AppViewMixin, QuerySetFilterMixin, MaterialAtta
     search_placeholder = 'Введите текст для поиска...'
 
     def get_custom_search_scope_filters(self):
-        return {
-            CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER,
-        }
+        return {CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER}
 
     def get_attachment_form(self):
         if hasattr(self, '_attachment_form'):
             return self._attachment_form
-        kwargs = {'prefix': 'attachment', 'material': self.material}
+        kwargs = {'prefix': 'attachment', 'scan': self.scan}
         if self.request.method == 'POST':
             kwargs['data'] = self.request.POST
             kwargs['files'] = self.request.FILES
-        return MaterialAttachmentForm(**kwargs)
+        return ScanAttachmentForm(**kwargs)
 
     def post(self, request, *args, **kwargs):
-        self._require_material_editable()
         self.object_list = self.get_queryset()
-        form = MaterialAttachmentForm(
+        form = ScanAttachmentForm(
             request.POST,
             request.FILES,
             prefix='attachment',
-            material=self.material,
+            scan=self.scan,
         )
         if form.is_valid():
             attachment = form.save(commit=False)
-            attachment.material = self.material
-            attachment.workspace = request.active_workspace
+            attachment.scan = self.scan
+            attachment.workspace = self.scan.workspace or request.active_workspace
             assign_creator(attachment, request.user)
             attachment.save()
             schedule_attachment_preview(attachment)
-            messages.success(request, 'Файл прикреплён к материалу.')
-            return redirect('material_attachments:list', material_pk=self.material.pk)
+            messages.success(request, 'Файл прикреплён к скану.')
+            return redirect(
+                'scans:attachment_list',
+                sample_pk=self.sample.pk,
+                scan_pk=self.scan.pk,
+            )
 
         self._attachment_form = form
         context = self.get_context_data(attachments=self.object_list, attachment_form=form)
@@ -79,47 +104,41 @@ class MaterialAttachmentListView(AppViewMixin, QuerySetFilterMixin, MaterialAtta
         return context
 
     def get_queryset(self):
-        return self.filter_queryset(
-            material_attachments_for_material(self.material, self.request.active_workspace),
-        )
+        return self.filter_queryset(self.scan.attachments.all())
 
 
-class MaterialAttachmentDeleteView(AppViewMixin, MaterialAttachmentMixin, DeleteView):
-    model = MaterialAttachment
-    template_name = 'materials/attachments/confirm_delete.html'
+class ScanAttachmentDeleteView(AppViewMixin, ScanAttachmentMixin, DeleteView):
+    model = ScanAttachment
+    template_name = 'scans/attachments/confirm_delete.html'
     context_object_name = 'attachment'
 
     def get_queryset(self):
-        return material_attachments_for_material(self.material, self.request.active_workspace)
+        return self.scan.attachments.all()
 
     def get_success_url(self):
-        return reverse('material_attachments:list', material_pk=self.material.pk)
+        return reverse(
+            'scans:attachment_list',
+            kwargs={'sample_pk': self.sample.pk, 'scan_pk': self.scan.pk},
+        )
 
     def delete(self, request, *args, **kwargs):
-        self._require_material_editable()
         self.object = self.get_object()
         self.object.delete()
         messages.success(self.request, 'Файл удалён.')
         return redirect(self.get_success_url())
 
 
-class MaterialAttachmentDownloadView(AppViewMixin, MaterialAttachmentMixin, View):
+class ScanAttachmentDownloadView(AppViewMixin, ScanAttachmentMixin, View):
     def get(self, request, *args, **kwargs):
-        attachment = get_object_or_404(
-            material_attachments_for_material(self.material, self.request.active_workspace),
-            pk=kwargs['pk'],
-        )
+        attachment = get_object_or_404(self.scan.attachments.all(), pk=kwargs['pk'])
         if not attachment.file:
             raise Http404('Файл не найден')
         return build_file_download_response(attachment.file, filename=attachment.filename)
 
 
-class MaterialAttachmentPreviewView(AppViewMixin, MaterialAttachmentMixin, View):
+class ScanAttachmentPreviewView(AppViewMixin, ScanAttachmentMixin, View):
     def get(self, request, *args, **kwargs):
-        attachment = get_object_or_404(
-            material_attachments_for_material(self.material, self.request.active_workspace),
-            pk=kwargs['pk'],
-        )
+        attachment = get_object_or_404(self.scan.attachments.all(), pk=kwargs['pk'])
         if not attachment.preview_pdf:
             raise Http404('Превью не найдено')
         filename = attachment.preview_pdf.name.rsplit('/', 1)[-1]

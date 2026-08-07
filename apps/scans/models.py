@@ -82,8 +82,92 @@ class ScanRecord(models.Model):
         return f'.{extension}' in self.HDF5_EXTENSIONS
 
     def delete(self, *args, **kwargs):
+        for attachment in self.attachments.all():
+            if attachment.file:
+                attachment.file.delete(save=False)
+            if attachment.preview_pdf:
+                attachment.preview_pdf.delete(save=False)
         if self.file:
             self.file.delete(save=False)
         if self.preview:
             self.preview.delete(save=False)
+        super().delete(*args, **kwargs)
+
+
+class ScanAttachment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    scan = models.ForeignKey(
+        ScanRecord,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        verbose_name='Скан',
+    )
+    workspace = models.ForeignKey(
+        'workspaces.Workspace',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='scan_attachments',
+        verbose_name='Пространство',
+    )
+    file = models.FileField(
+        upload_to='scan_attachments/%Y/%m/%d/',
+        verbose_name='Файл',
+    )
+    preview_pdf = models.FileField(
+        upload_to='scan_attachments/previews/%Y/%m/%d/',
+        blank=True,
+        verbose_name='Превью (PDF)',
+        help_text='PDF для просмотра: копия PDF или результат конвертации Word.',
+    )
+    preview_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('none', 'Нет'),
+            ('skipped', 'Не требуется'),
+            ('pending', 'Обработка'),
+            ('ready', 'Готово'),
+            ('failed', 'Ошибка'),
+        ],
+        default='none',
+        verbose_name='Статус превью',
+    )
+    title = models.CharField(max_length=200, verbose_name='Название')
+    description = models.TextField(blank=True, verbose_name='Описание')
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Загружен')
+    uploaded_by = models.CharField(max_length=100, blank=True, verbose_name='Загрузил')
+    uploaded_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_scan_attachments',
+        verbose_name='Загрузил (пользователь)',
+    )
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        verbose_name = 'вложение скана'
+        verbose_name_plural = 'вложения сканов'
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def filename(self):
+        if not self.file:
+            return ''
+        return self.file.name.rsplit('/', 1)[-1]
+
+    @property
+    def kind(self):
+        from apps.core.attachments.kinds import detect_attachment_kind
+
+        return detect_attachment_kind(self.filename)
+
+    def delete(self, *args, **kwargs):
+        if self.file:
+            self.file.delete(save=False)
+        if self.preview_pdf:
+            self.preview_pdf.delete(save=False)
         super().delete(*args, **kwargs)

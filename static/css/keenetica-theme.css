@@ -1794,3 +1794,48 @@ a.entity-tag.tone-neutral:hover {
     background: transparent;
     color: var(--kx-text-subtle);
 }
+
+.attachment-preview-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 0.35rem;
+    border: 1px solid var(--kx-border);
+    background: var(--kx-surface-muted);
+    color: var(--kx-text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.attachment-preview-badge:hover {
+    color: var(--kx-brand-dark);
+    border-color: var(--kx-brand-soft-strong);
+    background: var(--kx-brand-soft);
+}
+
+.attachment-preview-badge--excel {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-color: #c8e6c9;
+}
+
+.attachment-preview-badge--pdf {
+    background: var(--tone-coral-bg);
+    color: var(--tone-coral-text);
+    border-color: #f5c6bb;
+}
+
+.attachment-preview-badge--pending {
+    background: var(--tone-amber-bg);
+    color: var(--tone-amber-text);
+    border-color: #fde68a;
+}
+
+.attachment-preview-badge--failed {
+    background: #fdecea;
+    color: #b91c1c;
+    border-color: #fecaca;
+}

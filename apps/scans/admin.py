@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import ScanRecord
+from .models import ScanAttachment, ScanRecord
+
+
+class ScanAttachmentInline(admin.TabularInline):
+    model = ScanAttachment
+    extra = 0
+    fields = ['title', 'file', 'preview_status', 'uploaded_at']
+    readonly_fields = ['uploaded_at']
+
 
 @admin.register(ScanRecord)
 class ScanRecordAdmin(admin.ModelAdmin):
@@ -8,6 +16,7 @@ class ScanRecordAdmin(admin.ModelAdmin):
     search_fields = ['title', 'sample__code', 'description']
     list_filter = ['method', 'uploaded_at']
     readonly_fields = ['file_preview', 'uploaded_at']
+    inlines = [ScanAttachmentInline]
 
     @admin.display(description='Файл')
     def file_preview(self, obj):
@@ -18,3 +27,11 @@ class ScanRecordAdmin(admin.ModelAdmin):
     @admin.display(description='Превью', boolean=True)
     def has_preview(self, obj):
         return bool(obj.preview)
+
+
+@admin.register(ScanAttachment)
+class ScanAttachmentAdmin(admin.ModelAdmin):
+    list_display = ['title', 'scan', 'preview_status', 'uploaded_at', 'uploaded_by']
+    search_fields = ['title', 'scan__title', 'file']
+    list_filter = ['preview_status', 'uploaded_at']
+

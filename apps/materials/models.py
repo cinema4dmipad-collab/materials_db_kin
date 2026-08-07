@@ -188,6 +188,24 @@ class MaterialAttachment(models.Model):
         upload_to='material_attachments/%Y/%m/%d/',
         verbose_name='Файл',
     )
+    preview_pdf = models.FileField(
+        upload_to='material_attachments/previews/%Y/%m/%d/',
+        blank=True,
+        verbose_name='Превью (PDF)',
+        help_text='PDF для просмотра: копия PDF или результат конвертации Word.',
+    )
+    preview_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('none', 'Нет'),
+            ('skipped', 'Не требуется'),
+            ('pending', 'Обработка'),
+            ('ready', 'Готово'),
+            ('failed', 'Ошибка'),
+        ],
+        default='none',
+        verbose_name='Статус превью',
+    )
     title = models.CharField(max_length=200, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Загружен')
@@ -215,9 +233,17 @@ class MaterialAttachment(models.Model):
             return ''
         return self.file.name.rsplit('/', 1)[-1]
 
+    @property
+    def kind(self):
+        from apps.core.attachments.kinds import detect_attachment_kind
+
+        return detect_attachment_kind(self.filename)
+
     def delete(self, *args, **kwargs):
         if self.file:
             self.file.delete(save=False)
+        if self.preview_pdf:
+            self.preview_pdf.delete(save=False)
         super().delete(*args, **kwargs)
 
 

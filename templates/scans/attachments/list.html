@@ -1,15 +1,16 @@
 {% extends 'base.html' %}
 {% load attachment_tags ui_tags %}
 
-{% block title %}Файлы — {{ sample.code }}{% endblock %}
+{% block title %}Файлы скана — {{ scan.title }}{% endblock %}
 
 {% block content %}
 {% include 'samples/includes/sample_tabs.html' %}
+{% include 'scans/includes/scan_tabs.html' %}
 
 <div class="card mb-4">
     <div class="card-header">
-        <h1 class="h5 mb-0">Прикреплённые файлы — {{ sample.code }}</h1>
-        <p class="text-muted small mb-0 mt-1">Оригинал сохраняется; Word → PDF для превью; Excel — только иконка.</p>
+        <h1 class="h5 mb-0">Файлы скана — {{ scan.title }}</h1>
+        <p class="text-muted small mb-0 mt-1">Документы к этому скану (оригинал сохраняется; Word конвертируется в PDF для превью).</p>
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
@@ -31,21 +32,21 @@
                     {% for attachment in attachments %}
                     <tr>
                         <td>
-                            {% url 'attachments:preview' sample.pk attachment.pk as att_preview_url %}
+                            {% url 'scans:attachment_preview' sample.pk scan.pk attachment.pk as att_preview_url %}
                             {% attachment_preview_cell attachment preview_url=att_preview_url %}
                         </td>
                         <td>{{ attachment.title }}</td>
                         <td>
-                            <a href="{% url 'attachments:download' sample.pk attachment.pk %}" class="file-download-link" data-download-name="{{ attachment.filename }}">{{ attachment.filename }}</a>
+                            <a href="{% url 'scans:attachment_download' sample.pk scan.pk attachment.pk %}" class="file-download-link" data-download-name="{{ attachment.filename }}">{{ attachment.filename }}</a>
                         </td>
                         <td>{{ attachment.description|default:"—"|truncatewords:12 }}</td>
                         <td>{% include 'includes/creator_filter_link.html' with obj=attachment %}</td>
                         <td>{{ attachment.uploaded_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end text-nowrap">
                             <div class="table-actions">
-                            {% url 'attachments:download' sample.pk attachment.pk as attachment_download_url %}
+                            {% url 'scans:attachment_download' sample.pk scan.pk attachment.pk as attachment_download_url %}
                             {% include 'includes/table_action_icon.html' with action='download' url=attachment_download_url title='Скачать' extra_class='file-download-link btn-action-download' download_name=attachment.filename %}
-                            {% url 'attachments:delete' sample.pk attachment.pk as attachment_delete_url %}
+                            {% url 'scans:attachment_delete' sample.pk scan.pk attachment.pk as attachment_delete_url %}
                             {% include 'includes/table_action_icon.html' with action='delete' url=attachment_delete_url title='Удалить' %}
                             </div>
                         </td>
@@ -59,7 +60,7 @@
             {% if has_active_filters %}
             По вашему запросу файлы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
             {% else %}
-            Файлы ещё не прикреплены.
+            К скану ещё не прикреплены файлы.
             {% endif %}
         </p>
         {% endif %}
@@ -71,8 +72,13 @@
         <h2 class="h5 mb-0">Прикрепить файл</h2>
     </div>
     <div class="card-body">
-        {% include 'samples/includes/attachment_form.html' %}
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            {% with attachment_form=attachment_form %}
+            {% include 'samples/includes/attachment_fields.html' %}
+            {% endwith %}
+            <button type="submit" class="btn btn-primary mt-3">Прикрепить</button>
+        </form>
     </div>
 </div>
 {% endblock %}
-

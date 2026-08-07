@@ -203,6 +203,8 @@ class ScanDetailView(AppViewMixin, SampleScanMixin, DetailView):
         context = super().get_context_data(**kwargs)
         active_ws = self.request.active_workspace
         context['scan_is_editable'] = scan_is_editable_in_workspace(self.object, active_ws)
+        context['scan_active_tab'] = 'detail'
+        context['scan_attachment_count'] = self.object.attachments.count()
         tag_ws = scan_tag_workspace(
             scan=self.object,
             sample=self.sample,
