@@ -15,9 +15,13 @@ from apps.samples.models import Sample
 
 from apps.scans.models import ScanRecord
 
-from apps.scans.test_utils import make_hdf5_upload
+from apps.scans.test_utils import make_hdf5_upload, make_preview_upload
 
-from apps.scans.validators import MAX_SCAN_FILE_SIZE, validate_scan_file
+from apps.scans.validators import (
+    MAX_SCAN_FILE_SIZE,
+    validate_scan_file,
+    validate_scan_preview,
+)
 from apps.workspaces.services import ensure_legacy_workspace
 
 class SampleModelTests(TestCase):
@@ -189,6 +193,14 @@ class ScanFileValidationTests(TestCase):
     def test_accepts_valid_hdf5(self):
 
         validate_scan_file(make_hdf5_upload('scan.hdf5'))
+
+    def test_preview_rejects_non_image(self):
+        uploaded = SimpleUploadedFile('note.txt', b'hello', content_type='text/plain')
+        with self.assertRaisesMessage(Exception, 'изображением'):
+            validate_scan_preview(uploaded)
+
+    def test_preview_accepts_png(self):
+        validate_scan_preview(make_preview_upload())
 
 class ScanRecordModelTests(TestCase):
 
@@ -404,6 +416,8 @@ class ScanViewsTests(TestCase):
 
                 'file': make_hdf5_upload('surface.h5'),
 
+                'preview': make_preview_upload('surface.png'),
+
             },
 
         )
@@ -413,14 +427,19 @@ class ScanViewsTests(TestCase):
         scan = ScanRecord.objects.get(title='Surface scan')
 
         self.assertTrue(scan.file.storage.exists(scan.file.name))
+        self.assertTrue(scan.preview)
+        self.assertTrue(scan.preview.storage.exists(scan.preview.name))
 
         list_response = self.client.get(reverse('scans:list', kwargs={'sample_pk': self.sample.pk}))
 
         self.assertContains(list_response, 'Surface scan')
         self.assertContains(list_response, 'type-pill-link')
         self.assertContains(list_response, 'Теневой')
+        self.assertContains(list_response, 'scan-preview-thumb')
+        self.assertContains(list_response, scan.preview.url)
 
         file_name = scan.file.name
+        preview_name = scan.preview.name
 
         delete_response = self.client.post(
 
@@ -433,6 +452,7 @@ class ScanViewsTests(TestCase):
         self.assertFalse(ScanRecord.objects.filter(pk=scan.pk).exists())
 
         self.assertFalse(scan.file.storage.exists(file_name))
+        self.assertFalse(scan.file.storage.exists(preview_name))
 
     def test_download_view_streams_file_through_app(self):
         scan = ScanRecord.objects.create(

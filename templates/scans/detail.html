@@ -35,6 +35,12 @@
         </div>
     </div>
     <div class="card-body">
+        <div class="d-flex flex-wrap gap-3 mb-3 align-items-start">
+            {% include 'includes/scan_preview_thumb.html' with scan=scan size='lg' %}
+            {% if not scan.preview %}
+            <p class="text-muted small mb-0 align-self-center">Превью C-скана не загружено.</p>
+            {% endif %}
+        </div>
         <dl class="row mb-0">
             <dt class="col-sm-3">Метод</dt>
             <dd class="col-sm-9">

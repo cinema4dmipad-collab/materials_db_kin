@@ -16,9 +16,15 @@
                 </h1>
             </div>
             <div class="card-body">
-                <p class="text-muted small">Только файлы .h5 или .hdf5 с корректной сигнатурой HDF5.</p>
+                <p class="text-muted small">HDF5 (.h5 / .hdf5) обязателен; превью C-скана (PNG/JPEG/WebP) — по желанию.</p>
                 {% if is_edit and scan.file %}
-                <p class="mb-3"><strong>Текущий файл:</strong> {{ scan.filename }}</p>
+                <p class="mb-2"><strong>Текущий файл:</strong> {{ scan.filename }}</p>
+                {% endif %}
+                {% if is_edit and scan.preview %}
+                <div class="mb-3 d-flex align-items-center gap-2">
+                    <strong>Текущее превью:</strong>
+                    {% include 'includes/scan_preview_thumb.html' with scan=scan %}
+                </div>
                 {% endif %}
 
                 <form method="post" enctype="multipart/form-data" novalidate>

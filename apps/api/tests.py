@@ -6,7 +6,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from dmr.security.token.app.models import Token
 
-from apps.scans.test_utils import make_hdf5_upload
+from apps.scans.test_utils import make_hdf5_upload, make_preview_upload
 from apps.structures.models import StructureType
 from apps.workspaces.models import BUILTIN_GROUP_OPERATOR, Workspace
 from apps.workspaces.services import assign_user_to_groups, ensure_default_groups
@@ -190,6 +190,64 @@ class ApiV1Tests(TestCase):
             set(scan.tags.values_list('name', flat=True)),
             {'метод::ут', 'источник::KeenetiX'},
         )
+        self.assertIsNone(body.get('preview_url'))
+
+    def test_create_scan_with_preview(self):
+        response = self.client.post(
+            reverse('api:sample_scans_create', kwargs={'sample_id': self.sample.pk}),
+            data={
+                'file': make_hdf5_upload('with-preview.h5'),
+                'preview': make_preview_upload('c-scan.png'),
+                'title': 'With preview',
+            },
+            **self._headers(),
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()
+        self.assertTrue(body.get('preview_url'))
+        from apps.scans.models import ScanRecord
+
+        scan = ScanRecord.objects.get(pk=body['id'])
+        self.assertTrue(scan.preview)
+        self.assertTrue(scan.preview.storage.exists(scan.preview.name))
+
+    def test_update_scan_replaces_file_and_preview(self):
+        from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
+
+        from apps.scans.models import ScanRecord
+
+        scan = self.scan
+        old_name = scan.file.name
+        response = self.client.put(
+            reverse('api:scan_detail', kwargs={'scan_id': scan.pk}),
+            data=encode_multipart(
+                BOUNDARY,
+                {
+                    'file': make_hdf5_upload('updated.h5'),
+                    'preview': make_preview_upload('updated.png'),
+                    'title': 'Updated title',
+                },
+            ),
+            content_type=MULTIPART_CONTENT,
+            **self._headers(),
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body['title'], 'Updated title')
+        self.assertTrue(body.get('preview_url'))
+        scan = ScanRecord.objects.get(pk=scan.pk)
+        self.assertEqual(scan.title, 'Updated title')
+        self.assertNotEqual(scan.file.name, old_name)
+        self.assertTrue(scan.file.storage.exists(scan.file.name))
+        self.assertTrue(scan.preview)
+        self.assertTrue(scan.preview.storage.exists(scan.preview.name))
+        # GET still works after PUT (multipart parser on same controller).
+        detail = self.client.get(
+            reverse('api:scan_detail', kwargs={'scan_id': scan.pk}),
+            **self._headers(),
+        )
+        self.assertEqual(detail.status_code, 200, detail.content)
+        self.assertEqual(detail.json()['title'], 'Updated title')
 
     def test_token_create_on_profile(self):
         self.client.login(username=self.user.username, password=self.password)

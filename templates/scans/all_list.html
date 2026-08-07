@@ -16,6 +16,7 @@
             <table class="table table-striped table-hover align-middle mb-0 app-data-table">
                 <thead>
                     <tr>
+                        <th class="scan-preview-col">Превью</th>
                         <th>Название</th>
                         <th>Метод</th>
                         <th>Образец</th>
@@ -29,6 +30,11 @@
                 <tbody>
                     {% for scan in scans %}
                     <tr>
+                        <td class="scan-preview-col">
+                            <a href="{% url 'scans:detail' scan.sample.pk scan.pk %}" class="scan-preview-link">
+                                {% include 'includes/scan_preview_thumb.html' with scan=scan %}
+                            </a>
+                        </td>
                         <td>
                             <a href="{% url 'scans:detail' scan.sample.pk scan.pk %}">{{ scan.title }}</a>
                         </td>

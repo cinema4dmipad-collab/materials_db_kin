@@ -29,6 +29,12 @@ class ScanRecord(models.Model):
         upload_to='scans/%Y/%m/%d/',
         verbose_name='Файл скана (HDF5)',
     )
+    preview = models.FileField(
+        upload_to='scans/previews/%Y/%m/%d/',
+        blank=True,
+        verbose_name='Превью C-скана',
+        help_text='Необязательное изображение (PNG/JPEG/WebP) для списка сканов.',
+    )
     title = models.CharField(max_length=200, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
     method = models.CharField(
@@ -78,4 +84,6 @@ class ScanRecord(models.Model):
     def delete(self, *args, **kwargs):
         if self.file:
             self.file.delete(save=False)
+        if self.preview:
+            self.preview.delete(save=False)
         super().delete(*args, **kwargs)

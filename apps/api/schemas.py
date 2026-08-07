@@ -128,6 +128,7 @@ class ScanOut(BaseModel):
     size_bytes: int | None = None
     uploaded_at: datetime
     download_url: str
+    preview_url: str | None = None
     tags: list[str] = Field(default_factory=list)
 
 

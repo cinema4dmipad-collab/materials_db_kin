@@ -178,6 +178,12 @@ def serialize_scan(scan: ScanRecord) -> ScanOut:
         tag_names = [tag.name for tag in scan.tags.all()]
     except Exception:
         tag_names = []
+    preview_url = None
+    if getattr(scan, 'preview', None) and scan.preview:
+        try:
+            preview_url = scan.preview.url
+        except ValueError:
+            preview_url = None
     return ScanOut(
         id=scan.pk,
         sample_id=scan.sample_id,
@@ -189,5 +195,6 @@ def serialize_scan(scan: ScanRecord) -> ScanOut:
         size_bytes=_scan_size(scan),
         uploaded_at=scan.uploaded_at,
         download_url=reverse('api:scan_download', kwargs={'scan_id': scan.pk}),
+        preview_url=preview_url,
         tags=tag_names,
     )

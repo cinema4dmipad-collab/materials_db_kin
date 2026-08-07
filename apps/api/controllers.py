@@ -64,7 +64,7 @@ from apps.api.serializers import (
 from apps.core.file_download import StorageUnavailable, build_file_download_response
 from apps.scans.models import ScanRecord
 from apps.scans.title_utils import default_scan_title
-from apps.scans.validators import validate_scan_file
+from apps.scans.validators import validate_scan_file, validate_scan_preview
 from apps.workspaces.permissions import WorkspacePerm
 
 _ERROR_RESPONSES = (
@@ -222,6 +222,8 @@ class ScanListController(BaseApiController):
 
 
 class ScanDetailController(BaseApiController):
+    parsers = (MultiPartParser(),)
+
     def get(self, parsed_path: Path[ScanPath]) -> ScanOut:
         workspace = require_workspace(self.request)
         require_perm(self.request.user, workspace, WorkspacePerm.SCAN_VIEW)
@@ -233,6 +235,87 @@ class ScanDetailController(BaseApiController):
         )
         if scan is None:
             raise api_error('Не найдено.', HTTPStatus.NOT_FOUND)
+        return serialize_scan(scan)
+
+    def put(
+        self,
+        parsed_path: Path[ScanPath],
+        parsed_file_metadata: FileMetadata[ScanFilesPayload],
+        parsed_body: Body[ScanCreateBody],
+    ) -> ScanOut:
+        """Replace HDF5 (required) and optionally preview/metadata for an existing scan."""
+        del parsed_file_metadata
+        workspace = require_workspace(self.request)
+        require_perm(self.request.user, workspace, WorkspacePerm.SCAN_EDIT)
+        scan = (
+            scans_qs(workspace)
+            .prefetch_related('tags')
+            .filter(pk=parsed_path.scan_id)
+            .first()
+        )
+        if scan is None:
+            raise api_error('Не найдено.', HTTPStatus.NOT_FOUND)
+
+        uploaded = self.request.FILES.get('file')
+        if uploaded is None:
+            raise api_error('Файл скана обязателен (поле file).', HTTPStatus.BAD_REQUEST)
+        try:
+            validate_scan_file(uploaded)
+        except ValidationError as exc:
+            message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
+            raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
+
+        preview = self.request.FILES.get('preview')
+        if preview is not None:
+            try:
+                validate_scan_preview(preview)
+            except ValidationError as exc:
+                message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
+                raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
+
+        if parsed_body.method:
+            allowed_methods = {choice[0] for choice in ScanRecord.METHODS}
+            if parsed_body.method not in allowed_methods:
+                raise api_error('Некорректный method.', HTTPStatus.BAD_REQUEST)
+            scan.method = parsed_body.method
+
+        title = (parsed_body.title or '').strip()
+        if title:
+            scan.title = title
+        if parsed_body.description:
+            scan.description = parsed_body.description
+
+        old_file_name = scan.file.name if scan.file else ''
+        old_preview_name = scan.preview.name if scan.preview else ''
+        scan.file = uploaded
+        if preview is not None:
+            scan.preview = preview
+        scan.uploaded_by = self.request.user.get_username()
+        scan.uploaded_by_user = self.request.user
+        scan.save()
+
+        if old_file_name and old_file_name != (scan.file.name if scan.file else ''):
+            try:
+                scan.file.storage.delete(old_file_name)
+            except Exception:  # noqa: BLE001 — best-effort cleanup
+                pass
+        if (
+            preview is not None
+            and old_preview_name
+            and old_preview_name != (scan.preview.name if scan.preview else '')
+        ):
+            try:
+                scan.preview.storage.delete(old_preview_name)
+            except Exception:  # noqa: BLE001 — best-effort cleanup
+                pass
+
+        from apps.api.scan_meta import parse_tag_names
+        from apps.core.tag_utils import assign_tags
+
+        tag_names = parse_tag_names(parsed_body.tag_names)
+        if tag_names:
+            assign_tags(scan, tag_names, workspace=scan.workspace or workspace)
+
         return serialize_scan(scan)
 
 
@@ -262,6 +345,14 @@ class ScanCreateController(BaseApiController):
             message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
             raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
 
+        preview = self.request.FILES.get('preview')
+        if preview is not None:
+            try:
+                validate_scan_preview(preview)
+            except ValidationError as exc:
+                message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
+                raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
+
         method = parsed_body.method or 'echo'
         allowed_methods = {choice[0] for choice in ScanRecord.METHODS}
         if method not in allowed_methods:
@@ -279,6 +370,8 @@ class ScanCreateController(BaseApiController):
             uploaded_by_user=self.request.user,
         )
         scan.file = uploaded
+        if preview is not None:
+            scan.preview = preview
         scan.save()
 
         from apps.api.scan_meta import (

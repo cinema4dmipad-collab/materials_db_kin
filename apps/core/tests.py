@@ -898,6 +898,8 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'токен API')
         self.assertContains(response, 'HTTP API v1')
         self.assertContains(response, 'Открыть в KeenetiX')
+        self.assertContains(response, 'превью C-скана')
+        self.assertContains(response, 'обновить скан')
 
 
 class DashboardTests(AuthenticatedWorkspaceTestCase):

@@ -17,6 +17,7 @@
             <table class="table table-striped table-hover mb-0 align-middle app-data-table">
                 <thead>
                     <tr>
+                        <th class="scan-preview-col">Превью</th>
                         <th>Название</th>
                         <th>Метод</th>
                         <th>Теги</th>
@@ -29,6 +30,11 @@
                 <tbody>
                     {% for scan in scans %}
                     <tr>
+                        <td class="scan-preview-col">
+                            <a href="{% url 'scans:detail' sample.pk scan.pk %}" class="scan-preview-link">
+                                {% include 'includes/scan_preview_thumb.html' with scan=scan %}
+                            </a>
+                        </td>
                         <td>
                             <a href="{% url 'scans:detail' sample.pk scan.pk %}">{{ scan.title }}</a>
                         </td>
@@ -81,7 +87,7 @@
         <h2 class="h5 mb-0">Прикрепить скан HDF5</h2>
     </div>
     <div class="card-body">
-        <p class="text-muted small mb-3">Только файлы формата HDF5 (.h5, .hdf5).</p>
+        <p class="text-muted small mb-3">Файл HDF5 (.h5 / .hdf5) обязателен; превью C-скана (PNG/JPEG/WebP) — по желанию.</p>
         {% include 'samples/includes/scan_attach_form.html' %}
     </div>
 </div>

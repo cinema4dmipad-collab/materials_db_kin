@@ -28,8 +28,9 @@ X-Workspace-Id: <uuid>
 | GET | `/api/v1/samples/{id}/` | `sample.view` |
 | GET | `/api/v1/scans/` | `scan.view` |
 | GET | `/api/v1/scans/{id}/` | `scan.view` |
+| PUT | `/api/v1/scans/{id}/` | `scan.edit` (multipart: обязательный `file`, optional `preview`, `title`/`method`/`description`/`tag_names`; замена HDF5/превью в KeenetiX «Обновить скан») |
 | GET | `/api/v1/scans/{id}/download/` | `scan.view` (stream HDF5; **503** if S3/SeaweedFS unreachable) |
-| POST | `/api/v1/samples/{id}/scans/` | `scan.create` (multipart: `file`, optional `title`/`method`/`description`/`tag_names`; заголовок `X-Client: KeenetiX` добавляет тег `источник::KeenetiX`) |
+| POST | `/api/v1/samples/{id}/scans/` | `scan.create` (multipart: `file`, optional `preview` PNG/JPEG/WebP, `title`/`method`/`description`/`tag_names`; `X-Client: KeenetiX` → тег `источник::KeenetiX`). В ответе `preview_url` при наличии превью. |
 
 Пагинация: `limit` (1–200, default 50), `offset`.  
 Фильтры: `material_id` у samples, `sample_id` у scans, `search` у samples (подстрока по `code` / `name`, без учёта регистра).

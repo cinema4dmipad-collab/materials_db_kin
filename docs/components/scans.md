@@ -6,7 +6,7 @@ Location: `apps/scans/`
 
 ## Model
 
-**Scan** — sample (FK), title, description, method (echo, shadow, mirror, …), file, tags, upload metadata.
+**Scan** — sample (FK), title, description, method (echo, shadow, immersion, …), HDF5 `file`, optional `preview` (PNG/JPEG/WebP C-scan thumbnail), tags, upload metadata.
 
 ## File Validation
 
@@ -14,8 +14,9 @@ Location: `apps/scans/`
 
 * Extensions `.h5`, `.hdf5` only
 * HDF5 signature check on upload
+* Optional preview: `.png` / `.jpg` / `.jpeg` / `.webp`, max 5 MB, image magic check
 
-Large files supported via streaming storage and extended Gunicorn timeout.
+Large HDF5 files supported via streaming storage and extended Gunicorn timeout. Preview is a separate small file (not extracted from HDF5).
 
 ## Public UI
 
@@ -30,9 +31,9 @@ Tag forms use `sample.workspace` / `scan.workspace` for suggestions and assignme
 
 Download links use `.file-download-link` with progress indicator (`file_transfer_progress.js`).
 
-**Открыть в KeenetiX** — deep link `keenetix://lab/scan/<scan_uuid>?workspace=<workspace_uuid>`
-(кнопка на карточке скана и иконка в списках). Требует установленный KeenetiX Pro с настроенным Lab PAT;
-скачивание файла идёт через API на стороне десктопа (нужен доступный S3/SeaweedFS).
+**Открыть в KeenetiX** — desktop channel (`POST /api/v1/desktop/open-scan/`); кнопка на карточке и в списках.
+API create: multipart `file` + optional `preview`; response includes `preview_url` when set.
+API update: `PUT /api/v1/scans/{id}/` replaces HDF5 (+ optional preview) — KeenetiX «Обновить скан».
 
 ## Upload Progress
 

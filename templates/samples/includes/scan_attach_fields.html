@@ -28,6 +28,16 @@
         {% endfor %}
     </div>
     <div class="col-12">
+        <label class="form-label" for="{{ scan_form.preview.id_for_label }}">{{ scan_form.preview.label }}</label>
+        {{ scan_form.preview }}
+        {% if scan_form.preview.help_text %}
+        <div class="form-text">{{ scan_form.preview.help_text }}</div>
+        {% endif %}
+        {% for error in scan_form.preview.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+    </div>
+    <div class="col-12">
         <label class="form-label" for="{{ scan_form.description.id_for_label }}">{{ scan_form.description.label }}</label>
         {{ scan_form.description }}
         {% for error in scan_form.description.errors %}

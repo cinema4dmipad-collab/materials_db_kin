@@ -1661,3 +1661,37 @@ a.entity-tag.tone-neutral:hover {
     box-shadow: 0 0 0 3px rgba(232, 160, 36, 0.22);
     outline: none;
 }
+
+.scan-preview-col {
+    width: 3.5rem;
+}
+
+.scan-preview-link {
+    display: inline-flex;
+    text-decoration: none;
+}
+
+.scan-preview-thumb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    object-fit: cover;
+    border-radius: 0.35rem;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    background: #f1f5f9;
+    color: #94a3b8;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.scan-preview-thumb--lg {
+    width: 8rem;
+    height: 8rem;
+    font-size: 2rem;
+}
+
+.scan-preview-thumb--empty {
+    background: #f8fafc;
+}
