@@ -22,9 +22,10 @@ Large HDF5 files supported via streaming storage and extended Gunicorn timeout. 
 
 | URL | Action |
 |-----|--------|
-| `/scans/` | All scans (global list) |
-| `/samples/<pk>/scans/` | Scans for one sample |
+| `/scans/` | All scans (global list, tile grid) |
+| `/samples/<pk>/scans/` | Scans for one sample (tile grid) |
 | Create / detail / delete | Standard CRUD under sample namespace |
+| `…/scans/<pk>/attachments/` | Document attachments for a scan |
 | `…/scans/<pk>/tags/` | POST — save tags from detail card (when scan’s workspace is active) |
 
 Tag forms use `sample.workspace` / `scan.workspace` for suggestions and assignment (not the viewer’s active workspace when the sample is visible via a shared material).

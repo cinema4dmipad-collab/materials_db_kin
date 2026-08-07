@@ -11,7 +11,7 @@ Main application modules and their responsibilities.
 - [Structures](structures.md) — dynamic types and SQL tables
 - [Samples](samples.md) — specimens linked to materials
 - [Scans](scans.md) — HDF5 scan files
-- [Attachments](attachments.md) — files on materials / samples / scans (PDF preview, Word→PDF)
+- [Attachments](attachments.md) — files on materials / samples / scans (first-page PNG thumbnails, Word via LibreOffice)
 - [HTTP API v1](../api/README.md) — Bearer PAT + workspace header for external clients (KeenetiX)
 
 ## Dependency Graph
