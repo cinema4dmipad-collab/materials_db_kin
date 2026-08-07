@@ -1663,7 +1663,7 @@ a.entity-tag.tone-neutral:hover {
 }
 
 .scan-preview-col {
-    width: 3.5rem;
+    width: 5.5rem;
 }
 
 .scan-preview-link {
@@ -1675,21 +1675,21 @@ a.entity-tag.tone-neutral:hover {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2.75rem;
-    height: 2.75rem;
+    width: 4.5rem;
+    height: 4.5rem;
     object-fit: cover;
     border-radius: 0.35rem;
     border: 1px solid rgba(15, 23, 42, 0.12);
     background: #f1f5f9;
     color: #94a3b8;
-    font-size: 1.1rem;
+    font-size: 1.35rem;
     flex-shrink: 0;
 }
 
 .scan-preview-thumb--lg {
-    width: 8rem;
-    height: 8rem;
-    font-size: 2rem;
+    width: 12rem;
+    height: 12rem;
+    font-size: 2.5rem;
 }
 
 .scan-preview-thumb--detail {
@@ -1697,7 +1697,7 @@ a.entity-tag.tone-neutral:hover {
     height: auto;
     aspect-ratio: 1;
     max-height: none;
-    font-size: 3.5rem;
+    font-size: 4rem;
     object-fit: contain;
     border: 0;
     border-radius: 0.25rem;
@@ -1714,8 +1714,8 @@ a.entity-tag.tone-neutral:hover {
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
-    width: min(100%, 28rem);
-    padding: 0.85rem;
+    width: min(100%, 36rem);
+    padding: 1rem;
     border: 1px solid var(--kx-border);
     border-radius: 0.35rem;
     background: var(--kx-surface);
@@ -1734,8 +1734,8 @@ a.entity-tag.tone-neutral:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 16rem;
-    padding: 0.5rem;
+    min-height: 20rem;
+    padding: 0.65rem;
     border-radius: 0.25rem;
     border: 1px solid var(--kx-border);
     background:
@@ -1750,17 +1750,17 @@ a.entity-tag.tone-neutral:hover {
 }
 
 .scan-preview-frame--empty .scan-preview-frame__media {
-    min-height: 12rem;
+    min-height: 16rem;
 }
 
 .scan-detail-layout__preview .scan-preview-thumb--detail {
     width: 100%;
-    max-width: 26rem;
+    max-width: 34rem;
 }
 
 @media (min-width: 768px) {
     .scan-detail-layout {
-        grid-template-columns: minmax(0, 1fr) minmax(18rem, 28rem);
+        grid-template-columns: minmax(0, 1fr) minmax(22rem, 36rem);
         gap: 1.75rem;
     }
 
@@ -1776,17 +1776,17 @@ a.entity-tag.tone-neutral:hover {
     }
 
     .scan-preview-frame__media {
-        min-height: 22rem;
+        min-height: 28rem;
     }
 }
 
 @media (min-width: 1200px) {
     .scan-detail-layout {
-        grid-template-columns: minmax(0, 1fr) minmax(22rem, 32rem);
+        grid-template-columns: minmax(0, 1fr) minmax(26rem, 40rem);
     }
 
     .scan-preview-frame__media {
-        min-height: 26rem;
+        min-height: 32rem;
     }
 }
 
@@ -1797,8 +1797,8 @@ a.entity-tag.tone-neutral:hover {
 
 .attachment-preview-thumb {
     display: block;
-    width: 140px;
-    height: 186px;
+    width: 200px;
+    height: 266px;
     object-fit: contain;
     object-position: center top;
     border: 1px solid var(--kx-border);

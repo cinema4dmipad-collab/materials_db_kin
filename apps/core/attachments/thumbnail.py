@@ -8,7 +8,7 @@ from pathlib import Path
 import pypdfium2 as pdfium
 
 # Target width in pixels for list thumbnails (Google Drive–style).
-DEFAULT_TARGET_WIDTH = 720
+DEFAULT_TARGET_WIDTH = 960
 
 
 class PdfThumbnailError(RuntimeError):
