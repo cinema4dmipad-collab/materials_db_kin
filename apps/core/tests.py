@@ -887,8 +887,16 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'материалы этой структуры')
         self.assertContains(response, 'Поиск работает как у материалов')
         self.assertContains(response, 'текущего рабочего пространства')
+        self.assertContains(response, 'Импорт к разбору')
+        self.assertContains(response, 'Продолжить импорт')
+        self.assertContains(response, 'статус::на проверке')
+        self.assertContains(response, 'статус::учрежден')
+        self.assertContains(response, 'Активные фильтры')
+        self.assertContains(response, 'крестик на чипе')
         self.assertContains(response, 'Администрирование → Бэкапы')
+        self.assertContains(response, '/backups')
         self.assertContains(response, 'токен API')
+        self.assertContains(response, 'HTTP API v1')
         self.assertContains(response, 'Открыть в KeenetiX')
 
 
