@@ -4,7 +4,7 @@
 {% block title %}{{ structure_type.name }} — Материалы{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/structure_materials_grid.css' %}?v={{ app_version }}-smg4" rel="stylesheet">
+<link href="{% static 'css/structure_materials_grid.css' %}?v={{ app_version }}-smg5" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -40,7 +40,12 @@
                             <th scope="col" class="structure-materials-grid__name">Название</th>
                             <th scope="col" class="structure-materials-grid__code">Код</th>
                             {% for col in materials_grid.columns %}
-                            <th scope="col" title="{{ col.label }}">{{ col.label }}</th>
+                            <th scope="col" class="structure-materials-grid__field" title="{{ col.label }}">
+                                <span class="structure-materials-grid__col-label">{{ col.label_base }}</span>
+                                {% if col.unit %}
+                                <span class="structure-materials-grid__col-unit">{{ col.unit }}</span>
+                                {% endif %}
+                            </th>
                             {% endfor %}
                         </tr>
                     </thead>

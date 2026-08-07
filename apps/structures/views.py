@@ -4,7 +4,14 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
 
-from apps.core.list_filters import ALL_SEARCH_SCOPE, CREATOR_SEARCH_SCOPE, DEFAULT_CREATOR_FILTER, QuerySetFilterMixin
+from apps.core.list_filters import (
+    ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
+    CREATOR_WITH_LABEL_FILTER,
+    DEFAULT_CREATOR_FILTER,
+    TAG_SEARCH_SCOPE,
+    QuerySetFilterMixin,
+)
 
 from apps.core.creator import creator_label
 from apps.materials.picker_data import materials_for_picker
@@ -99,13 +106,42 @@ class StructureTypeSelectView(AppViewMixin, QuerySetFilterMixin, ListView):
 
 class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMixin, TemplateView):
     template_name = 'structures/list.html'
-    search_fields = ('name', 'code')
-    search_scopes = (
-        (ALL_SEARCH_SCOPE, 'Везде', ('name', 'code')),
-        ('name', 'Название', ('name',)),
-        ('code', 'Код', ('code',)),
+    enable_tag_filter = True
+    search_fields = (
+        'code',
+        'name',
+        'description',
+        'manufacturer__name',
+        'availability__name',
+        'technology__name',
+        'import_source_filename',
     )
-    search_placeholder = 'Название или код материала...'
+    search_scopes = (
+        (
+            ALL_SEARCH_SCOPE,
+            'Везде',
+            (
+                'code',
+                'name',
+                'description',
+                'manufacturer__name',
+                'availability__name',
+                'technology__name',
+                'import_source_filename',
+            ),
+        ),
+        ('code', 'Код', ('code',)),
+        ('name', 'Название', ('name',)),
+        ('description', 'Описание', ('description',)),
+        (CREATOR_SEARCH_SCOPE, 'Создал', ()),
+        (TAG_SEARCH_SCOPE, 'Тег', ()),
+    )
+    search_placeholder = 'Введите текст для поиска...'
+
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: CREATOR_WITH_LABEL_FILTER,
+        }
 
     def _materials_queryset(self):
         from apps.workspaces.services import materials_visible_in
@@ -113,6 +149,7 @@ class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMi
         return self.filter_queryset(
             materials_visible_in(self.request.active_workspace)
             .filter(struct_type=self.structure_type)
+            .select_related('manufacturer', 'availability', 'technology', 'created_by_user')
             .order_by('code', 'name')
         )
 

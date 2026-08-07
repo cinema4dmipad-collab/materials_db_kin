@@ -94,6 +94,7 @@ class BookmarkPageSaveView(AppViewMixin, View):
         label = (request.POST.get('label') or '').strip()
         url = (request.POST.get('url') or '').strip()
         icon = (request.POST.get('icon') or '').strip()
+        icon_color = (request.POST.get('icon_color') or '').strip()
         try:
             result = save_page_bookmark(
                 user=request.user,
@@ -101,6 +102,7 @@ class BookmarkPageSaveView(AppViewMixin, View):
                 url=url,
                 label=label,
                 icon=icon,
+                icon_color=icon_color,
             )
         except (ValidationError, ValueError) as exc:
             messages.error(request, str(exc))

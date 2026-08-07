@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from apps.core.unit_display import split_label_and_unit
 from apps.materials.structure_display import (
     STRUCTURE_SERVICE_COLUMNS,
     structure_field_display_value,
@@ -27,7 +28,15 @@ def structure_field_headers(fields) -> list[dict]:
         seen[label] = count
         if count > 1:
             label = f'{label} ({field.name})'
-        columns.append({'name': field.name, 'label': label})
+        label_base, unit = split_label_and_unit(label)
+        columns.append(
+            {
+                'name': field.name,
+                'label': label,
+                'label_base': label_base or label,
+                'unit': unit,
+            }
+        )
     return columns
 
 

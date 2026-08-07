@@ -2,9 +2,14 @@ from django.urls import reverse
 
 from apps.core.bookmarks import (
     DEFAULT_PAGE_BOOKMARK_ICON,
+    DEFAULT_PAGE_BOOKMARK_ICON_COLOR,
+    PAGE_BOOKMARK_COLOR_PRESETS,
     PAGE_BOOKMARK_ICONS,
+    find_bookmark_covering_url,
+    is_stock_navigation_url,
     sidebar_bookmark_items,
 )
+from apps.core.models import BookmarkEntityType
 from apps.workspaces.permissions import (
     WorkspacePerm,
     can_manage_global_groups,
@@ -215,6 +220,21 @@ def workspace_navigation(request):
     if admin_items:
         nav_sections.append({'title': 'Администрирование', 'items': admin_items})
 
+    current_path = request.get_full_path()
+    current_is_stock_nav = is_stock_navigation_url(current_path, workspace=active_workspace)
+    current_page_bookmark = None
+    current_url_is_bookmarked = False
+    if not current_is_stock_nav:
+        covering = find_bookmark_covering_url(
+            user=user,
+            workspace=active_workspace,
+            raw_url=current_path,
+        )
+        current_url_is_bookmarked = covering is not None
+        # Editable modal only for PAGE pins; entity pins already cover the URL.
+        if covering is not None and covering.entity_type == BookmarkEntityType.PAGE:
+            current_page_bookmark = covering
+
     return {
         'active_workspace': active_workspace,
         'workspace_user_groups': workspace_user_groups,
@@ -228,4 +248,9 @@ def workspace_navigation(request):
         'is_system_admin': is_system_admin(user),
         'page_bookmark_icons': PAGE_BOOKMARK_ICONS,
         'default_page_bookmark_icon': DEFAULT_PAGE_BOOKMARK_ICON,
+        'page_bookmark_color_presets': PAGE_BOOKMARK_COLOR_PRESETS,
+        'default_page_bookmark_icon_color': DEFAULT_PAGE_BOOKMARK_ICON_COLOR,
+        'current_page_is_stock_nav': current_is_stock_nav,
+        'current_page_bookmark': current_page_bookmark,
+        'current_url_is_bookmarked': current_url_is_bookmarked,
     }

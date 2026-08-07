@@ -318,7 +318,7 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         StructureField.objects.create(
             structure_type=self.structure_type,
             name='thickness',
-            label='Thickness',
+            label='Thickness, mm',
             field_type='DecimalField',
             max_digits=8,
             decimal_places=2,
@@ -510,9 +510,50 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         self.assertContains(response, 'structure-materials-grid')
         self.assertContains(response, 'Linked panel')
         self.assertContains(response, '4,00')
+        self.assertContains(response, 'Thickness')
+        self.assertContains(response, 'structure-materials-grid__col-unit')
+        self.assertContains(response, '>mm<')
         self.assertContains(response, reverse('materials:detail', args=[material.pk]))
         self.assertNotContains(response, 'structure-material-expand')
         self.assertNotContains(response, 'structure_material_expand.js')
+
+    def test_list_search_filters_by_tag_without_showing_tags(self):
+        from apps.core.models import Tag
+
+        tagged_row = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Tagged panel', 'thickness': '1.00'},
+        )['id']
+        other_row = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Other panel', 'thickness': '2.00'},
+        )['id']
+        tagged = Material.objects.create(
+            code='MAT-TAGGED',
+            name='Tagged material',
+            struct_type=self.structure_type,
+            struct_props_id=tagged_row,
+        )
+        Material.objects.create(
+            code='MAT-OTHER',
+            name='Other material',
+            struct_type=self.structure_type,
+            struct_props_id=other_row,
+        )
+        tag = Tag.objects.create(name='кевлар-тест', slug='kevlar-test')
+        tagged.tags.add(tag)
+
+        response = self.client.get(
+            reverse('structures:list', args=[self.structure_type.code]),
+            {'q': 'кевлар'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tagged material')
+        self.assertContains(response, 'MAT-TAGGED')
+        self.assertNotContains(response, 'Other material')
+        self.assertNotContains(response, 'MAT-OTHER')
+        self.assertNotContains(response, 'кевлар-тест')
 
     def test_list_allows_type_without_created_table(self):
         draft_type = StructureType.objects.create(

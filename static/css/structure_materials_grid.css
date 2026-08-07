@@ -53,6 +53,34 @@
     position: sticky;
     top: 0;
     z-index: 5;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    vertical-align: bottom;
+    line-height: 1.25;
+    hyphens: auto;
+}
+
+.structure-materials-grid thead th.structure-materials-grid__field {
+    min-width: 8.5rem;
+    max-width: 12rem;
+    width: 10rem;
+}
+
+.structure-materials-grid__col-label {
+    display: block;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.structure-materials-grid__col-unit {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #64748b;
+    white-space: normal;
 }
 
 .structure-materials-grid__name,

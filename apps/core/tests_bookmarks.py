@@ -139,14 +139,20 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
         self.assertEqual(bookmark.parent_id, self.sample.pk)
 
     def test_page_bookmark_with_custom_name(self):
-        help_url = reverse('core:help')
+        page_url = reverse('materials:detail', kwargs={'pk': self.material.pk})
+        before = self.client.get(page_url)
+        self.assertContains(before, 'bi-bookmark-plus')
+        self.assertContains(before, '>В закладки<')
+        self.assertNotContains(before, 'app-topbar__bookmark-btn is-bookmarked')
+
         response = self.client.post(
             reverse('core:bookmark_page_save'),
             {
-                'label': 'Моя справка',
-                'url': help_url,
+                'label': 'Мой материал',
+                'url': page_url,
                 'icon': 'bi-question-circle',
-                'next': help_url,
+                'icon_color': '#e76f51',
+                'next': page_url,
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -155,26 +161,203 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
             workspace=self.workspace,
             entity_type=BookmarkEntityType.PAGE,
         )
-        self.assertEqual(bookmark.label, 'Моя справка')
-        self.assertEqual(bookmark.url, help_url.rstrip('/') or '/')
+        self.assertEqual(bookmark.label, 'Мой материал')
+        self.assertEqual(bookmark.url, page_url.rstrip('/') or '/')
         self.assertEqual(bookmark.icon, 'bi-question-circle')
+        self.assertEqual(bookmark.icon_color, '#E76F51')
 
         listing = self.client.get(reverse('core:bookmark_list'))
-        self.assertContains(listing, 'Моя справка')
+        self.assertContains(listing, 'Мой материал')
         self.assertContains(listing, 'Страница')
         self.assertContains(listing, bookmark.url)
         self.assertContains(listing, 'bi-question-circle')
+        self.assertContains(listing, 'color: #E76F51')
 
         dashboard = self.client.get(reverse('core:dashboard'))
-        self.assertContains(dashboard, 'Моя справка')
+        self.assertContains(dashboard, 'Мой материал')
         self.assertContains(dashboard, 'bi-question-circle')
+        self.assertContains(dashboard, 'color: #E76F51')
+
+        material_page = self.client.get(page_url)
+        self.assertContains(material_page, 'app-topbar__bookmark-btn is-bookmarked')
+        self.assertContains(material_page, 'bi-bookmark-fill')
+        self.assertContains(material_page, 'Страница в закладках')
+        self.assertNotContains(material_page, 'bi-bookmark-plus')
+
+    def test_entity_bookmark_blocks_duplicate_page_pin(self):
+        detail_url = reverse('materials:detail', kwargs={'pk': self.material.pk})
+        UserBookmark.objects.create(
+            user=self.user,
+            workspace=self.workspace,
+            entity_type=BookmarkEntityType.MATERIAL,
+            entity_id=self.material.pk,
+            label=self.material.name,
+        )
+        page = self.client.get(detail_url)
+        self.assertContains(page, 'В закладках')
+        self.assertContains(page, 'уже есть в закладках')
+        self.assertNotContains(page, 'bi-bookmark-plus')
+
+        response = self.client.post(
+            reverse('core:bookmark_page_save'),
+            {
+                'label': 'Duplicate page pin',
+                'url': detail_url,
+                'icon': 'bi-star',
+                'next': detail_url,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            UserBookmark.objects.filter(
+                user=self.user,
+                entity_type=BookmarkEntityType.PAGE,
+            ).exists()
+        )
+
+    def test_stock_nav_pages_cannot_be_bookmarked(self):
+        materials_url = reverse('materials:list')
+        dashboard_url = reverse('core:dashboard')
+
+        materials_page = self.client.get(materials_url)
+        self.assertContains(materials_page, 'В меню')
+        self.assertContains(materials_page, 'is-stock-nav')
+        self.assertContains(materials_page, 'уже есть в боковом меню')
+
+        dashboard_page = self.client.get(dashboard_url)
+        self.assertContains(dashboard_page, 'В меню')
+        self.assertContains(dashboard_page, 'is-stock-nav')
+
+        response = self.client.post(
+            reverse('core:bookmark_page_save'),
+            {
+                'label': 'Материалы дубль',
+                'url': materials_url,
+                'icon': 'bi-box-seam',
+                'next': materials_url,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            UserBookmark.objects.filter(
+                user=self.user,
+                entity_type=BookmarkEntityType.PAGE,
+            ).exists()
+        )
+
+        # Redundant stock pins are cleaned when bookmarks are listed.
+        from apps.core.bookmarks import page_bookmark_entity_id, normalize_page_bookmark_url
+
+        normalized = normalize_page_bookmark_url(materials_url)
+        UserBookmark.objects.create(
+            user=self.user,
+            workspace=self.workspace,
+            entity_type=BookmarkEntityType.PAGE,
+            entity_id=page_bookmark_entity_id(normalized),
+            url=normalized,
+            label='Old materials pin',
+            icon='bi-box-seam',
+        )
+        listing = self.client.get(reverse('core:bookmark_list'))
+        self.assertEqual(listing.status_code, 200)
+        self.assertFalse(
+            UserBookmark.objects.filter(
+                user=self.user,
+                entity_type=BookmarkEntityType.PAGE,
+            ).exists()
+        )
+        self.assertNotContains(listing, 'Old materials pin')
+
+    def test_workspace_and_admin_stock_nav_cannot_be_bookmarked(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.workspaces.test_utils import login_test_client
+
+        settings_url = reverse('workspaces:settings', kwargs={'pk': self.workspace.pk})
+        members_url = reverse('workspaces:members', kwargs={'pk': self.workspace.pk})
+        users_url = reverse('administration:admin_users')
+
+        settings_page = self.client.get(settings_url)
+        self.assertEqual(settings_page.status_code, 200)
+        self.assertContains(settings_page, 'В меню')
+        self.assertContains(settings_page, 'is-stock-nav')
+
+        members_page = self.client.get(members_url)
+        self.assertEqual(members_page.status_code, 200)
+        self.assertContains(members_page, 'В меню')
+
+        for url, label in (
+            (settings_url, 'Настройки дубль'),
+            (members_url, 'Участники дубль'),
+        ):
+            response = self.client.post(
+                reverse('core:bookmark_page_save'),
+                {
+                    'label': label,
+                    'url': url,
+                    'icon': 'bi-gear',
+                    'next': url,
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            UserBookmark.objects.filter(
+                user=self.user,
+                entity_type=BookmarkEntityType.PAGE,
+            ).exists()
+        )
+
+        User = get_user_model()
+        admin = User.objects.create_superuser('bookmark-admin', password='pass-123')
+        login_test_client(self.client, user=admin, workspace=self.workspace, password='pass-123')
+        users_page = self.client.get(users_url)
+        self.assertEqual(users_page.status_code, 200)
+        self.assertContains(users_page, 'В меню')
+        self.assertContains(users_page, 'is-stock-nav')
+
+        response = self.client.post(
+            reverse('core:bookmark_page_save'),
+            {
+                'label': 'Пользователи дубль',
+                'url': users_url,
+                'icon': 'bi-person-badge',
+                'next': users_url,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            UserBookmark.objects.filter(
+                user=admin,
+                entity_type=BookmarkEntityType.PAGE,
+            ).exists()
+        )
+
+    def test_page_bookmark_rejects_invalid_icon_color(self):
+        page_url = reverse('materials:detail', kwargs={'pk': self.material.pk})
+        response = self.client.post(
+            reverse('core:bookmark_page_save'),
+            {
+                'label': 'Bad color',
+                'url': page_url,
+                'icon': 'bi-star',
+                'icon_color': 'red',
+                'next': page_url,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            UserBookmark.objects.filter(
+                user=self.user,
+                entity_type=BookmarkEntityType.PAGE,
+            ).exists()
+        )
 
     def test_page_bookmark_rejects_external_url(self):
         response = self.client.post(
             reverse('core:bookmark_page_save'),
             {
                 'label': 'Bad',
-                'url': 'https://example.com/help',
+                'url': 'https://example.com/materials/custom/',
                 'next': '/',
             },
         )
@@ -187,16 +370,16 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
         )
 
     def test_page_bookmark_dedupes_slash_and_hash_variants(self):
-        help_url = reverse('core:help')
+        page_url = reverse('materials:detail', kwargs={'pk': self.material.pk})
         self.client.post(
             reverse('core:bookmark_page_save'),
-            {'label': 'Help A', 'url': help_url, 'icon': 'bi-star', 'next': '/'},
+            {'label': 'Mat A', 'url': page_url, 'icon': 'bi-star', 'next': '/'},
         )
         self.client.post(
             reverse('core:bookmark_page_save'),
             {
-                'label': 'Help B',
-                'url': help_url.rstrip('/') + '/#section',
+                'label': 'Mat B',
+                'url': page_url.rstrip('/') + '/#section',
                 'icon': 'bi-house',
                 'next': '/',
             },
@@ -208,7 +391,7 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
         )
         self.assertEqual(pages.count(), 1)
         bookmark = pages.get()
-        self.assertEqual(bookmark.label, 'Help B')
+        self.assertEqual(bookmark.label, 'Mat B')
         self.assertEqual(bookmark.icon, 'bi-house')
         self.assertFalse(bookmark.url.endswith('/'))
         self.assertNotIn('#', bookmark.url)
