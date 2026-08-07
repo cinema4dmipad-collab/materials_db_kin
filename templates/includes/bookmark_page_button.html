@@ -1,14 +1,6 @@
+{% if not current_page_is_stock_nav %}
 <li class="nav-item">
-    {% if current_page_is_stock_nav %}
-    <button type="button"
-            class="app-topbar__bookmark-btn is-stock-nav"
-            id="bookmark-page-open"
-            disabled
-            title="Этот раздел уже есть в боковом меню">
-        <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
-        <span class="d-none d-md-inline">В меню</span>
-    </button>
-    {% elif current_url_is_bookmarked and not current_page_bookmark %}
+    {% if current_url_is_bookmarked and not current_page_bookmark %}
     <button type="button"
             class="app-topbar__bookmark-btn is-bookmarked"
             id="bookmark-page-open"
@@ -41,3 +33,4 @@
     </button>
     {% endif %}
 </li>
+{% endif %}
