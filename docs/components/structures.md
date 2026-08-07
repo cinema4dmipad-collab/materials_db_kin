@@ -31,7 +31,7 @@ Table names **must** start with `structures_`, snake_case latin, max 100 chars, 
 1. **Select type** — `/structures/` — card grid of types; click name/card → records; gear → manage
 2. **Create type** — `/structures/types/create/` — name, description, color, layers flag, **SQL table name**, field formset
 3. **Manage type** — `/structures/types/<code>/manage/` — color, fields, create/drop SQL table
-4. **Records** — `/structures/<code>/` — materials matrix for this type (name, code, structure fields only); horizontal scroll moves all columns including name/code; create/edit SQL row still via «Создать запись» / detail
+4. **Records** — `/structures/<code>/` — materials matrix for this type (name, code, structure fields only); horizontal scroll with sticky name/code columns; create/edit SQL row still via «Создать запись» / detail
 
 Detail page for a SQL row still shows linked materials; **Развернуть** loads material properties via `structure_material_expand.js`. Page bookmarks (header «В закладки») cover the current URL; entity toggles on structure pages were removed.
 

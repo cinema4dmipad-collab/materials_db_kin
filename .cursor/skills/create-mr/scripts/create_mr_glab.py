@@ -35,7 +35,7 @@ def load_token(host: str) -> str:
     raise RuntimeError(f"No token for {host} in {cfg_path}")
 
 
-def api_request(method: str, url: str, token: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def api_request(method: str, url: str, token: str, payload: Optional[Dict[str, Any]] = None) -> Any:
     data = None
     headers = {"PRIVATE-TOKEN": token}
     if payload is not None:
@@ -59,6 +59,26 @@ def extract_existing_mr_iid(resp: Dict[str, Any]) -> Optional[int]:
         return None
     match = re.search(r"!(\d+)", message)
     return int(match.group(1)) if match else None
+
+
+def find_open_mr_iid(api_base: str, project_id: int, token: str, source: str, target: str) -> Optional[int]:
+    query = urllib.parse.urlencode(
+        {
+            "state": "opened",
+            "source_branch": source,
+            "target_branch": target,
+            "per_page": "20",
+        }
+    )
+    listed = api_request(
+        "GET",
+        f"{api_base}/projects/{project_id}/merge_requests?{query}",
+        token,
+    )
+    if not isinstance(listed, list) or not listed:
+        return None
+    iid = listed[0].get("iid")
+    return int(iid) if isinstance(iid, int) else None
 
 
 def main() -> int:
@@ -104,18 +124,32 @@ def main() -> int:
     me = api_request("GET", f"{api_base}/user", token)
     assignee_ids: List[int] = [me["id"]] if isinstance(me.get("id"), int) else []
 
-    payload: Dict[str, Any] = {
-        "source_branch": branch,
-        "target_branch": target,
+    update_payload: Dict[str, Any] = {
         "title": title,
         "description": description,
     }
     if assignee_ids:
-        payload["assignee_ids"] = assignee_ids
+        update_payload["assignee_ids"] = assignee_ids
 
+    existing_iid = find_open_mr_iid(api_base, project_id, token, branch, target)
+    if existing_iid is not None:
+        updated = api_request(
+            "PUT",
+            f"{api_base}/projects/{project_id}/merge_requests/{existing_iid}",
+            token,
+            payload=update_payload,
+        )
+        print(updated["web_url"])
+        return 0
+
+    create_payload: Dict[str, Any] = {
+        "source_branch": branch,
+        "target_branch": target,
+        **update_payload,
+    }
     create_url = f"{api_base}/projects/{project_id}/merge_requests"
     try:
-        created = api_request("POST", create_url, token, payload=payload)
+        created = api_request("POST", create_url, token, payload=create_payload)
         web_url = created.get("web_url")
         if web_url:
             print(web_url)
@@ -133,7 +167,7 @@ def main() -> int:
         "PUT",
         f"{api_base}/projects/{project_id}/merge_requests/{iid}",
         token,
-        payload=payload,
+        payload=update_payload,
     )
     print(updated["web_url"])
     return 0
