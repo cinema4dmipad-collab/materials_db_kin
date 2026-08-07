@@ -220,13 +220,13 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
         dashboard_url = reverse('core:dashboard')
 
         materials_page = self.client.get(materials_url)
-        self.assertContains(materials_page, 'В меню')
-        self.assertContains(materials_page, 'is-stock-nav')
-        self.assertContains(materials_page, 'уже есть в боковом меню')
+        self.assertNotContains(materials_page, 'bookmark-page-open')
+        self.assertNotContains(materials_page, 'В меню')
+        self.assertNotContains(materials_page, 'В закладки')
 
         dashboard_page = self.client.get(dashboard_url)
-        self.assertContains(dashboard_page, 'В меню')
-        self.assertContains(dashboard_page, 'is-stock-nav')
+        self.assertNotContains(dashboard_page, 'bookmark-page-open')
+        self.assertNotContains(dashboard_page, 'В меню')
 
         response = self.client.post(
             reverse('core:bookmark_page_save'),
@@ -279,12 +279,12 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
 
         settings_page = self.client.get(settings_url)
         self.assertEqual(settings_page.status_code, 200)
-        self.assertContains(settings_page, 'В меню')
-        self.assertContains(settings_page, 'is-stock-nav')
+        self.assertNotContains(settings_page, 'bookmark-page-open')
+        self.assertNotContains(settings_page, 'В меню')
 
         members_page = self.client.get(members_url)
         self.assertEqual(members_page.status_code, 200)
-        self.assertContains(members_page, 'В меню')
+        self.assertNotContains(members_page, 'bookmark-page-open')
 
         for url, label in (
             (settings_url, 'Настройки дубль'),
@@ -312,8 +312,8 @@ class UserBookmarkTests(AuthenticatedWorkspaceTestCase):
         login_test_client(self.client, user=admin, workspace=self.workspace, password='pass-123')
         users_page = self.client.get(users_url)
         self.assertEqual(users_page.status_code, 200)
-        self.assertContains(users_page, 'В меню')
-        self.assertContains(users_page, 'is-stock-nav')
+        self.assertNotContains(users_page, 'bookmark-page-open')
+        self.assertNotContains(users_page, 'В меню')
 
         response = self.client.post(
             reverse('core:bookmark_page_save'),

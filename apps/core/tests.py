@@ -881,7 +881,7 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Развернуть')
         self.assertContains(response, 'В закладки')
         self.assertContains(response, 'В закладках')
-        self.assertContains(response, 'В меню')
+        self.assertContains(response, 'кнопки закладок нет')
         self.assertContains(response, 'иконка и цвет')
         self.assertContains(response, 'повторно добавить нельзя')
         self.assertContains(response, 'материалы этой структуры')
