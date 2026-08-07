@@ -140,11 +140,11 @@ class SampleAttachment(models.Model):
         upload_to='sample_attachments/%Y/%m/%d/',
         verbose_name='Файл',
     )
-    preview_pdf = models.FileField(
+    preview_image = models.FileField(
         upload_to='sample_attachments/previews/%Y/%m/%d/',
         blank=True,
-        verbose_name='Превью (PDF)',
-        help_text='PDF для просмотра: копия PDF или результат конвертации Word.',
+        verbose_name='Превью (изображение)',
+        help_text='Миниатюра первой страницы (PNG) для списка вложений.',
     )
     preview_status = models.CharField(
         max_length=20,
@@ -194,6 +194,6 @@ class SampleAttachment(models.Model):
     def delete(self, *args, **kwargs):
         if self.file:
             self.file.delete(save=False)
-        if self.preview_pdf:
-            self.preview_pdf.delete(save=False)
+        if self.preview_image:
+            self.preview_image.delete(save=False)
         super().delete(*args, **kwargs)

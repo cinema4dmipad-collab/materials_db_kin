@@ -1,4 +1,4 @@
-"""Fill preview_pdf / preview_status after an attachment is saved."""
+"""Fill preview_image / preview_status after an attachment is saved."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import tempfile
+from io import BytesIO
 from pathlib import Path
 
 from django.core.files import File
@@ -30,6 +31,7 @@ from apps.core.attachments.statuses import (
     PREVIEW_READY,
     PREVIEW_SKIPPED,
 )
+from apps.core.attachments.thumbnail import PdfThumbnailError, render_pdf_first_page_to_png
 
 logger = logging.getLogger(__name__)
 
@@ -78,14 +80,19 @@ def process_attachment_preview(attachment) -> None:
 
     try:
         if kind == KIND_PDF:
-            _store_pdf_as_preview(attachment, use_original=True)
+            _store_pdf_thumbnail(attachment, use_original=True)
         elif kind == KIND_WORD:
-            _convert_word_to_preview(attachment)
+            _convert_word_to_thumbnail(attachment)
         else:
             _set_status(attachment, PREVIEW_NONE)
             return
         _set_status(attachment, PREVIEW_READY)
-    except (LibreOfficeNotFoundError, LibreOfficeConvertError, OSError) as exc:
+    except (
+        LibreOfficeNotFoundError,
+        LibreOfficeConvertError,
+        PdfThumbnailError,
+        OSError,
+    ) as exc:
         logger.warning('Preview failed for %s: %s', attachment.pk, exc)
         _clear_preview_file(attachment)
         _set_status(attachment, PREVIEW_FAILED)
@@ -97,12 +104,12 @@ def _set_status(attachment, status: str) -> None:
 
 
 def _clear_preview_file(attachment) -> None:
-    if not attachment.preview_pdf:
+    if not attachment.preview_image:
         return
-    name = attachment.preview_pdf.name
-    attachment.preview_pdf.delete(save=False)
-    type(attachment).objects.filter(pk=attachment.pk).update(preview_pdf='')
-    attachment.preview_pdf = None
+    name = attachment.preview_image.name
+    attachment.preview_image.delete(save=False)
+    type(attachment).objects.filter(pk=attachment.pk).update(preview_image='')
+    attachment.preview_image = None
     if name:
         try:
             attachment.file.storage.delete(name)
@@ -110,21 +117,31 @@ def _clear_preview_file(attachment) -> None:
             pass
 
 
-def _store_pdf_as_preview(attachment, *, use_original: bool) -> None:
-    """Copy original PDF bytes into preview_pdf (keeps download/original independent)."""
+def _preview_basename(attachment) -> str:
+    stem = os.path.splitext(attachment.filename)[0] or 'preview'
+    return f'{stem}.png'
+
+
+def _save_preview_png(attachment, png_bytes: bytes) -> None:
+    if attachment.preview_image:
+        attachment.preview_image.delete(save=False)
+    attachment.preview_image.save(
+        _preview_basename(attachment),
+        File(BytesIO(png_bytes)),
+        save=True,
+    )
+
+
+def _store_pdf_thumbnail(attachment, *, use_original: bool) -> None:
+    """Rasterize the first page of the original PDF into preview_image."""
+    del use_original  # API kept for clarity at call sites
     storage = attachment.file.storage
-    src_name = attachment.file.name
-    base = os.path.basename(src_name)
-    if not base.lower().endswith('.pdf'):
-        base = f'{os.path.splitext(base)[0]}.pdf'
-
-    with storage.open(src_name, 'rb') as src:
-        if attachment.preview_pdf:
-            attachment.preview_pdf.delete(save=False)
-        attachment.preview_pdf.save(base, File(src), save=True)
+    with storage.open(attachment.file.name, 'rb') as src:
+        png_bytes = render_pdf_first_page_to_png(src.read())
+    _save_preview_png(attachment, png_bytes)
 
 
-def _convert_word_to_preview(attachment) -> None:
+def _convert_word_to_thumbnail(attachment) -> None:
     storage = attachment.file.storage
     suffix = os.path.splitext(attachment.filename)[1] or '.docx'
     tmp_dir = Path(tempfile.mkdtemp(prefix='lab_attach_'))
@@ -134,13 +151,9 @@ def _convert_word_to_preview(attachment) -> None:
         with storage.open(attachment.file.name, 'rb') as src, src_path.open('wb') as dest:
             shutil.copyfileobj(src, dest)
         pdf_path = convert_office_to_pdf(src_path)
-        with pdf_path.open('rb') as handle:
-            if attachment.preview_pdf:
-                attachment.preview_pdf.delete(save=False)
-            preview_name = f'{os.path.splitext(attachment.filename)[0] or "preview"}.pdf'
-            attachment.preview_pdf.save(preview_name, File(handle), save=True)
+        png_bytes = render_pdf_first_page_to_png(pdf_path)
+        _save_preview_png(attachment, png_bytes)
     finally:
         if pdf_path is not None:
-            # convert_office_to_pdf returns file inside a temp out_dir — remove parent
             shutil.rmtree(pdf_path.parent, ignore_errors=True)
         shutil.rmtree(tmp_dir, ignore_errors=True)

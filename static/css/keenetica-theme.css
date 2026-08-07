@@ -1795,6 +1795,18 @@ a.entity-tag.tone-neutral:hover {
     color: var(--kx-text-subtle);
 }
 
+.attachment-preview-thumb {
+    display: block;
+    width: 72px;
+    height: 96px;
+    object-fit: contain;
+    object-position: center top;
+    border: 1px solid var(--kx-border);
+    border-radius: 0.25rem;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
 .attachment-preview-badge {
     display: inline-flex;
     align-items: center;
@@ -1810,22 +1822,10 @@ a.entity-tag.tone-neutral:hover {
     white-space: nowrap;
 }
 
-.attachment-preview-badge:hover {
-    color: var(--kx-brand-dark);
-    border-color: var(--kx-brand-soft-strong);
-    background: var(--kx-brand-soft);
-}
-
 .attachment-preview-badge--excel {
     background: #e8f5e9;
     color: #2e7d32;
     border-color: #c8e6c9;
-}
-
-.attachment-preview-badge--pdf {
-    background: var(--tone-coral-bg);
-    color: var(--tone-coral-text);
-    border-color: #f5c6bb;
 }
 
 .attachment-preview-badge--pending {

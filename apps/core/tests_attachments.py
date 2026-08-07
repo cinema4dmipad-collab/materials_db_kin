@@ -2,6 +2,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -19,9 +20,19 @@ from apps.workspaces.test_utils import (
     create_test_sample,
     create_test_scan,
 )
-from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
+# Minimal one-page PDF accepted by pypdfium2.
+MINIMAL_PDF = (
+    b'%PDF-1.4\n'
+    b'1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n'
+    b'2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n'
+    b'3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n'
+    b'xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n'
+    b'0000000058 00000 n \n0000000115 00000 n \n'
+    b'trailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF'
+)
 
 
 class AttachmentKindTests(TestCase):
@@ -55,17 +66,20 @@ class AttachmentPreviewProcessingTests(TestCase):
     def tearDown(self):
         self.settings_override.disable()
 
-    def test_pdf_copies_to_preview(self):
+    def test_pdf_renders_preview_image(self):
         attachment = SampleAttachment.objects.create(
             sample=self.sample,
             title='PDF doc',
-            file=SimpleUploadedFile('note.pdf', b'%PDF-1.4 fake', content_type='application/pdf'),
+            file=SimpleUploadedFile('note.pdf', MINIMAL_PDF, content_type='application/pdf'),
         )
         process_attachment_preview(attachment)
         attachment.refresh_from_db()
         self.assertEqual(attachment.preview_status, PREVIEW_READY)
-        self.assertTrue(attachment.preview_pdf)
-        self.assertTrue(attachment.preview_pdf.storage.exists(attachment.preview_pdf.name))
+        self.assertTrue(attachment.preview_image)
+        self.assertTrue(attachment.preview_image.name.lower().endswith('.png'))
+        self.assertTrue(attachment.preview_image.storage.exists(attachment.preview_image.name))
+        with attachment.preview_image.open('rb') as handle:
+            self.assertEqual(handle.read(8), b'\x89PNG\r\n\x1a\n')
 
     def test_excel_skipped(self):
         attachment = SampleAttachment.objects.create(
@@ -80,13 +94,13 @@ class AttachmentPreviewProcessingTests(TestCase):
         process_attachment_preview(attachment)
         attachment.refresh_from_db()
         self.assertEqual(attachment.preview_status, PREVIEW_SKIPPED)
-        self.assertFalse(attachment.preview_pdf)
+        self.assertFalse(attachment.preview_image)
 
     @patch('apps.core.attachments.processing.convert_office_to_pdf')
     def test_word_uses_libreoffice(self, convert_mock):
         pdf_dir = Path(tempfile.mkdtemp())
         pdf_path = pdf_dir / 'out.pdf'
-        pdf_path.write_bytes(b'%PDF-1.4 from-lo')
+        pdf_path.write_bytes(MINIMAL_PDF)
         convert_mock.return_value = pdf_path
 
         attachment = SampleAttachment.objects.create(
@@ -101,7 +115,8 @@ class AttachmentPreviewProcessingTests(TestCase):
         process_attachment_preview(attachment)
         attachment.refresh_from_db()
         self.assertEqual(attachment.preview_status, PREVIEW_READY)
-        self.assertTrue(attachment.preview_pdf)
+        self.assertTrue(attachment.preview_image)
+        self.assertTrue(attachment.preview_image.name.lower().endswith('.png'))
         convert_mock.assert_called_once()
 
     def test_word_failure_marks_failed(self):
@@ -162,7 +177,7 @@ class ScanAttachmentViewsTests(TestCase):
                     'attachment-description': '',
                     'attachment-file': SimpleUploadedFile(
                         'protocol.pdf',
-                        b'%PDF-1.4 scan-att',
+                        MINIMAL_PDF,
                         content_type='application/pdf',
                     ),
                 },
@@ -183,3 +198,7 @@ class ScanAttachmentViewsTests(TestCase):
             )
         )
         self.assertEqual(preview.status_code, 200)
+        content_type = preview.get('Content-Type', '')
+        self.assertIn('image/png', content_type)
+        body = b''.join(preview.streaming_content)
+        self.assertTrue(body.startswith(b'\x89PNG'))

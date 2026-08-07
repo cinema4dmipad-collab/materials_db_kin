@@ -4,7 +4,7 @@
     <span>Excel</span>
 </span>
 {% elif is_pending %}
-<span class="attachment-preview-badge attachment-preview-badge--pending" title="Готовим PDF-превью…">
+<span class="attachment-preview-badge attachment-preview-badge--pending" title="Готовим миниатюру…">
     <i class="bi bi-hourglass-split" aria-hidden="true"></i>
     <span>Обработка</span>
 </span>
@@ -14,14 +14,12 @@
     <span>Ошибка</span>
 </span>
 {% elif preview_url %}
-<a href="{{ preview_url }}"
-   class="attachment-preview-badge attachment-preview-badge--pdf"
-   target="_blank"
-   rel="noopener"
-   title="Открыть превью PDF">
-    <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
-    <span>Превью</span>
-</a>
+<img class="attachment-preview-thumb"
+     src="{{ preview_url }}"
+     alt="Превью первой страницы"
+     width="72"
+     height="96"
+     loading="lazy">
 {% elif is_pdf or is_word %}
 <span class="attachment-preview-badge" title="{{ kind_label }}">
     <i class="bi bi-file-earmark{% if is_pdf %}-pdf{% elif is_word %}-word{% endif %}" aria-hidden="true"></i>

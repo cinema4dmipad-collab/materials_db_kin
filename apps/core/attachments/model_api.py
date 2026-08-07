@@ -17,13 +17,13 @@ def attachment_kind_label(attachment) -> str:
 def attachment_has_preview(attachment) -> bool:
     return bool(
         getattr(attachment, 'preview_status', None) == PREVIEW_READY
-        and getattr(attachment, 'preview_pdf', None)
-        and attachment.preview_pdf
+        and getattr(attachment, 'preview_image', None)
+        and attachment.preview_image
     )
 
 
 def delete_attachment_files(attachment) -> None:
     if attachment.file:
         attachment.file.delete(save=False)
-    if getattr(attachment, 'preview_pdf', None) and attachment.preview_pdf:
-        attachment.preview_pdf.delete(save=False)
+    if getattr(attachment, 'preview_image', None) and attachment.preview_image:
+        attachment.preview_image.delete(save=False)

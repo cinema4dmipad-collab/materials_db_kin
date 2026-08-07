@@ -9,16 +9,18 @@
 ## Хранение
 
 * `file` — оригинал (скачивание всегда отдаёт его);
-* `preview_pdf` — PDF для просмотра в браузере;
+* `preview_image` — PNG-миниатюра первой страницы для списка;
 * `preview_status` — `none` / `skipped` / `pending` / `ready` / `failed`.
 
 | Тип | Превью |
 |-----|--------|
-| PDF | копия в `preview_pdf` |
-| Word (.doc/.docx/.odt/.rtf) | LibreOffice → PDF |
+| PDF | первая страница → PNG |
+| Word (.doc/.docx/.odt/.rtf) | LibreOffice → PDF → первая страница → PNG |
 | Excel (.xls/.xlsx/…) | иконка, статус `skipped` |
 | прочее | без превью |
 
-Общий слой: `apps/core/attachments/` (`kinds`, `convert`, `processing`).
+Полный документ для просмотра не хранится и не открывается из колонки «Превью» — только миниатюра в списке.
 
-В Docker установлен `libreoffice-writer-nogui`. Локально: установить LibreOffice или задать `LIBREOFFICE_PATH`.
+Общий слой: `apps/core/attachments/` (`kinds`, `convert`, `thumbnail`, `processing`).
+
+В Docker установлен `libreoffice-writer-nogui`. Рендер PDF: `pypdfium2` + Pillow. Локально: LibreOffice или `LIBREOFFICE_PATH`.

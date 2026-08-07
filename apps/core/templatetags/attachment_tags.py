@@ -14,7 +14,7 @@ register = template.Library()
 
 @register.inclusion_tag('includes/attachment_preview_cell.html')
 def attachment_preview_cell(attachment, preview_url=''):
-    """Render preview icon / PDF link for an attachment row."""
+    """Render first-page thumbnail or status badge for an attachment row."""
     kind = attachment_kind(attachment)
     status = getattr(attachment, 'preview_status', 'none')
     href = preview_url if preview_url and attachment_has_preview(attachment) else ''

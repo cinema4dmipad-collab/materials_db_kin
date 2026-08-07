@@ -139,11 +139,11 @@ class ScanAttachmentDownloadView(AppViewMixin, ScanAttachmentMixin, View):
 class ScanAttachmentPreviewView(AppViewMixin, ScanAttachmentMixin, View):
     def get(self, request, *args, **kwargs):
         attachment = get_object_or_404(self.scan.attachments.all(), pk=kwargs['pk'])
-        if not attachment.preview_pdf:
+        if not attachment.preview_image:
             raise Http404('Превью не найдено')
-        filename = attachment.preview_pdf.name.rsplit('/', 1)[-1]
+        filename = attachment.preview_image.name.rsplit('/', 1)[-1]
         return build_file_download_response(
-            attachment.preview_pdf,
+            attachment.preview_image,
             filename=filename,
             as_attachment=False,
         )
