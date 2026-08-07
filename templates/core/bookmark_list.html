@@ -37,7 +37,7 @@
                 {% for item in bookmarks %}
                 <tr>
                     <td class="text-nowrap">
-                        <i class="{{ item.icon }} me-1 text-muted" aria-hidden="true"></i>
+                        <i class="{{ item.icon }} me-1{% if not item.icon_color %} text-muted{% endif %}"{% if item.icon_color %} style="color: {{ item.icon_color }};"{% endif %} aria-hidden="true"></i>
                         {{ item.entity_type_label }}
                     </td>
                     <td style="max-width: 18rem;">

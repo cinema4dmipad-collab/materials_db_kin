@@ -57,7 +57,7 @@
                        class="workspace-sidebar__link{% if item.active %} is-active{% endif %}{% if item.is_footer_link %} workspace-sidebar__link--muted{% endif %}{% if item.remove_url %} workspace-sidebar__link--bookmark{% endif %}"
                        title="{% if item.subtitle %}{{ item.label }} · {{ item.subtitle }}{% else %}{{ item.label }}{% endif %}"
                        aria-label="{{ item.label }}">
-                        <i class="{{ item.icon }} workspace-sidebar__icon" aria-hidden="true"></i>
+                        <i class="{{ item.icon }} workspace-sidebar__icon"{% if item.icon_color %} style="color: {{ item.icon_color }};"{% endif %} aria-hidden="true"></i>
                         <span class="workspace-sidebar__link-text">{{ item.label }}</span>
                     </a>
                     {% if item.remove_url %}

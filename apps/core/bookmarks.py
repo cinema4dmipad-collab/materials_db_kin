@@ -7,10 +7,11 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode, urlparse, urlunparse
 
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.urls import reverse
 
 from apps.core.models import BookmarkEntityType, UserBookmark
+from apps.core.tag_utils import HEX_COLOR_RE, validate_tag_color
 from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm
 
 
@@ -51,6 +52,64 @@ PAGE_BOOKMARK_ICONS = (
     'bi-link-45deg',
 )
 DEFAULT_PAGE_BOOKMARK_ICON = 'bi-bookmark'
+# Empty icon_color → sidebar/list use the default muted icon tone.
+DEFAULT_PAGE_BOOKMARK_ICON_COLOR = ''
+PAGE_BOOKMARK_COLOR_PRESETS = (
+    ('#E76F51', 'Коралловый'),
+    ('#F59E0B', 'Янтарный'),
+    ('#10B981', 'Зелёный'),
+    ('#6A8FC0', 'Синий'),
+    ('#8B5CF6', 'Фиолетовый'),
+    ('#F43F5E', 'Розовый'),
+    ('#007679', 'Бирюзовый'),
+    ('#999999', 'Серый'),
+)
+
+STOCK_NAV_BOOKMARK_BLOCK_MESSAGE = (
+    'Этот раздел уже есть в боковом меню — отдельная закладка не нужна.'
+)
+
+
+def stock_navigation_urls(workspace=None) -> frozenset[str]:
+    """Built-in sidebar URLs (sections / workspace / admin) that cannot be page bookmarks."""
+    raw_urls: list[str] = [
+        reverse('core:dashboard'),
+        reverse('materials:list'),
+        reverse('materials:import'),
+        reverse('materials:import_review'),
+        reverse('references:list'),
+        reverse('references:dictionary_hub'),
+        reverse('core:tag_list'),
+        reverse('structures:select_type'),
+        reverse('samples:list'),
+        reverse('scans_all'),
+        reverse('core:help'),
+        reverse('administration:backups'),
+        reverse('administration:admin_users'),
+        reverse('administration:admin_workspaces'),
+    ]
+    if workspace is not None and getattr(workspace, 'pk', None) is not None:
+        raw_urls.extend(
+            [
+                reverse('workspaces:settings', kwargs={'pk': workspace.pk}),
+                reverse('workspaces:members', kwargs={'pk': workspace.pk}),
+                reverse('workspaces:groups', kwargs={'pk': workspace.pk}),
+            ]
+        )
+    normalized: set[str] = set()
+    for url in raw_urls:
+        try:
+            normalized.add(normalize_page_bookmark_url(url))
+        except ValueError:
+            continue
+    return frozenset(normalized)
+
+
+def is_stock_navigation_url(raw_url: str, workspace=None) -> bool:
+    try:
+        return normalize_page_bookmark_url(raw_url) in stock_navigation_urls(workspace)
+    except ValueError:
+        return False
 
 
 @dataclass(frozen=True)
@@ -67,6 +126,7 @@ class ResolvedBookmark:
     icon: str
     entity_type_label: str
     subtitle: str
+    icon_color: str = ''
 
 
 def _require_view_perm(user, workspace, entity_type: str) -> None:
@@ -128,6 +188,79 @@ def _page_bookmarks_matching_url(*, user, workspace, normalized_url: str) -> lis
     return matches
 
 
+def find_page_bookmark(*, user, workspace, raw_url: str) -> UserBookmark | None:
+    """Return the newest page bookmark for this URL, or None."""
+    if user is None or not getattr(user, 'is_authenticated', False) or workspace is None:
+        return None
+    try:
+        normalized_url = normalize_page_bookmark_url(raw_url)
+    except ValueError:
+        return None
+    matches = _page_bookmarks_matching_url(
+        user=user,
+        workspace=workspace,
+        normalized_url=normalized_url,
+    )
+    if not matches:
+        return None
+    matches.sort(key=lambda row: row.created_at, reverse=True)
+    return matches[0]
+
+
+def find_bookmark_covering_url(*, user, workspace, raw_url: str) -> UserBookmark | None:
+    """
+    Any bookmark (page or entity) that opens this URL.
+    Used so «В закладки» does not offer a duplicate pin for the same page.
+    """
+    page = find_page_bookmark(user=user, workspace=workspace, raw_url=raw_url)
+    if page is not None:
+        return page
+    if user is None or not getattr(user, 'is_authenticated', False) or workspace is None:
+        return None
+    try:
+        normalized_url = normalize_page_bookmark_url(raw_url)
+    except ValueError:
+        return None
+    for bookmark in (
+        UserBookmark.objects.filter(user=user, workspace=workspace)
+        .exclude(entity_type=BookmarkEntityType.PAGE)
+        .order_by('-created_at')
+    ):
+        resolved = resolve_bookmark(bookmark, workspace=workspace)
+        if resolved is None:
+            continue
+        try:
+            if normalize_page_bookmark_url(resolved.url) == normalized_url:
+                return bookmark
+        except ValueError:
+            continue
+    return None
+
+
+def bookmarked_page_urls(*, user, workspace) -> set[str]:
+    """Normalized page URLs currently bookmarked for this user/workspace."""
+    if user is None or not getattr(user, 'is_authenticated', False) or workspace is None:
+        return set()
+    urls: set[str] = set()
+    for bookmark in UserBookmark.objects.filter(
+        user=user,
+        workspace=workspace,
+        entity_type=BookmarkEntityType.PAGE,
+    ).only('url', 'entity_id'):
+        try:
+            urls.add(normalize_page_bookmark_url(bookmark.url or ''))
+        except ValueError:
+            continue
+    return urls
+
+
+def is_page_url_bookmarked(raw_url: str, bookmarked_urls: set[str]) -> bool:
+    try:
+        return normalize_page_bookmark_url(raw_url) in bookmarked_urls
+    except ValueError:
+        return False
+
+
 @dataclass(frozen=True)
 class PageBookmarkSaveResult:
     bookmark: UserBookmark
@@ -144,6 +277,20 @@ def normalize_page_bookmark_icon(raw_icon: str | None) -> str:
     return icon
 
 
+def normalize_page_bookmark_icon_color(raw_color: str | None) -> str:
+    """Return uppercase #RRGGBB or empty string (default sidebar tone)."""
+    color = (raw_color or '').strip()
+    if not color:
+        return DEFAULT_PAGE_BOOKMARK_ICON_COLOR
+    try:
+        validate_tag_color(color)
+    except ValidationError as exc:
+        raise ValueError('Укажите цвет в формате #RRGGBB.') from exc
+    if not HEX_COLOR_RE.fullmatch(color):
+        raise ValueError('Укажите цвет в формате #RRGGBB.')
+    return color.upper()
+
+
 def save_page_bookmark(
     *,
     user,
@@ -151,22 +298,35 @@ def save_page_bookmark(
     url: str,
     label: str,
     icon: str = '',
+    icon_color: str = '',
 ) -> PageBookmarkSaveResult:
     if workspace is None:
         raise ValueError('Пространство не выбрано.')
     normalized_url = normalize_page_bookmark_url(url)
+    if is_stock_navigation_url(normalized_url, workspace=workspace):
+        raise ValueError(STOCK_NAV_BOOKMARK_BLOCK_MESSAGE)
     name = (label or '').strip()
     if not name:
         raise ValueError('Укажите название закладки.')
     if len(name) > 300:
         raise ValueError('Название закладки слишком длинное.')
     chosen_icon = normalize_page_bookmark_icon(icon)
+    chosen_color = normalize_page_bookmark_icon_color(icon_color)
     entity_id = page_bookmark_entity_id(normalized_url)
     matches = _page_bookmarks_matching_url(
         user=user,
         workspace=workspace,
         normalized_url=normalized_url,
     )
+    if not matches:
+        # Same destination already pinned as material/sample/… — do not add a second card.
+        covering = find_bookmark_covering_url(
+            user=user,
+            workspace=workspace,
+            raw_url=normalized_url,
+        )
+        if covering is not None and covering.entity_type != BookmarkEntityType.PAGE:
+            raise ValueError('Эта страница уже есть в закладках.')
     if matches:
         # Keep newest; drop slash/# duplicates of the same page.
         matches.sort(key=lambda row: row.created_at, reverse=True)
@@ -177,8 +337,9 @@ def save_page_bookmark(
         existing.label = name
         existing.url = normalized_url
         existing.icon = chosen_icon
+        existing.icon_color = chosen_color
         # Rebuild entity_id if an older slash-variant row was kept.
-        update_fields = ['label', 'url', 'icon']
+        update_fields = ['label', 'url', 'icon', 'icon_color']
         if existing.entity_id != entity_id:
             existing.entity_id = entity_id
             update_fields.append('entity_id')
@@ -191,6 +352,7 @@ def save_page_bookmark(
         entity_id=entity_id,
         url=normalized_url,
         icon=chosen_icon,
+        icon_color=chosen_color,
         label=name,
     )
     return PageBookmarkSaveResult(bookmark=bookmark, created=True, updated=False)
@@ -453,6 +615,10 @@ def resolve_bookmark(bookmark: UserBookmark, *, workspace) -> ResolvedBookmark |
         except ValueError:
             return None
         icon = bookmark.icon if bookmark.icon in PAGE_BOOKMARK_ICONS else DEFAULT_PAGE_BOOKMARK_ICON
+        try:
+            icon_color = normalize_page_bookmark_icon_color(bookmark.icon_color)
+        except ValueError:
+            icon_color = DEFAULT_PAGE_BOOKMARK_ICON_COLOR
         return ResolvedBookmark(
             bookmark=bookmark,
             label=(bookmark.label or url).strip() or url,
@@ -460,6 +626,7 @@ def resolve_bookmark(bookmark: UserBookmark, *, workspace) -> ResolvedBookmark |
             icon=icon,
             entity_type_label=bookmark.get_entity_type_display(),
             subtitle=url,
+            icon_color=icon_color,
         )
 
     entity = _load_entity(
@@ -488,10 +655,11 @@ def resolve_bookmark(bookmark: UserBookmark, *, workspace) -> ResolvedBookmark |
 def list_resolved_bookmarks(*, user, workspace) -> list[ResolvedBookmark]:
     if user is None or not getattr(user, 'is_authenticated', False) or workspace is None:
         return []
-    bookmarks = UserBookmark.objects.filter(user=user, workspace=workspace)
+    bookmarks = UserBookmark.objects.filter(user=user, workspace=workspace).order_by('-created_at')
     resolved: list[ResolvedBookmark] = []
     stale_ids: list = []
-    seen_page_urls: set[str] = set()
+    seen_urls: set[str] = set()
+    stock_urls = stock_navigation_urls(workspace)
     for bookmark in bookmarks:
         if bookmark.entity_type == BookmarkEntityType.PAGE:
             try:
@@ -499,14 +667,24 @@ def list_resolved_bookmarks(*, user, workspace) -> list[ResolvedBookmark]:
             except ValueError:
                 stale_ids.append(bookmark.pk)
                 continue
-            if page_key in seen_page_urls:
+            # Built-in menu sections are always available — drop redundant page pins.
+            if page_key in stock_urls:
                 stale_ids.append(bookmark.pk)
                 continue
-            seen_page_urls.add(page_key)
         item = resolve_bookmark(bookmark, workspace=workspace)
         if item is None:
             stale_ids.append(bookmark.pk)
             continue
+        try:
+            url_key = normalize_page_bookmark_url(item.url)
+        except ValueError:
+            url_key = (item.url or '').rstrip('/')
+        if url_key in seen_urls:
+            # Prefer the newest pin; drop older PAGE duplicates of the same destination.
+            if bookmark.entity_type == BookmarkEntityType.PAGE:
+                stale_ids.append(bookmark.pk)
+            continue
+        seen_urls.add(url_key)
         resolved.append(item)
     if stale_ids:
         UserBookmark.objects.filter(pk__in=stale_ids).delete()
@@ -534,6 +712,7 @@ def sidebar_bookmark_items(
             {
                 'label': resolved.label,
                 'icon': resolved.icon,
+                'icon_color': resolved.icon_color,
                 'url': resolved.url,
                 'visible': True,
                 'active': _path_is_active(request_path=request_path, target_url=resolved.url),

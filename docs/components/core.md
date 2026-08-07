@@ -44,10 +44,11 @@ Templates: `includes/list_filter_bar.html`, `includes/client_filter_bar.html`, `
 
 ## Bookmarks
 
-* Model: `UserBookmark` — per-user pins for materials, samples, scans, structure records, structure types, and **pages** (`url` + optional Bootstrap Icons `icon`)
+* Model: `UserBookmark` — per-user pins for materials, samples, scans, structure records, structure types, and **pages** (`url` + optional Bootstrap Icons `icon` + optional `icon_color` hex)
 * Resolve/create: `apps/core/bookmarks.py`, views in `bookmark_views.py`
 * UI: header button «В закладки» + modal (`includes/bookmark_page_button.html`, `bookmark_page_modal.html`); sidebar section + `/bookmarks/` list
-* Page bookmarks store the current path (query kept; fragment ignored); duplicate URLs are normalized/merged
+* Stock sidebar destinations (main sections, workspace settings/members/groups, administration) cannot be page-bookmarked — header shows «В меню»
+* Same destination already pinned (page or entity) → header «В закладках», save blocked; duplicate URLs normalized/merged
 * Legacy structure-type bookmarks still open material create with `struct_type` pre-selected when present
 
 ## Forms and Helpers

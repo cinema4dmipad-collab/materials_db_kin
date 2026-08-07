@@ -139,6 +139,12 @@ class UserBookmark(models.Model):
         verbose_name='Иконка',
         help_text='Класс Bootstrap Icons, например bi-bookmark.',
     )
+    icon_color = models.CharField(
+        max_length=7,
+        blank=True,
+        verbose_name='Цвет иконки',
+        help_text='HEX #RRGGBB для иконки закладки страницы; пусто — цвет по умолчанию.',
+    )
     label = models.CharField(max_length=300, blank=True, verbose_name='Подпись')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создана')
 
