@@ -62,10 +62,15 @@
                 <dd class="col-sm-9">{{ scan.filename }}</dd>
             </dl>
             <aside class="scan-detail-layout__preview" aria-label="Превью C-скана">
-                {% include 'includes/scan_preview_thumb.html' with scan=scan size='detail' %}
-                {% if not scan.preview %}
-                <p class="text-muted small mb-0 mt-2">Превью C-скана не загружено.</p>
-                {% endif %}
+                <div class="scan-preview-frame{% if not scan.preview %} scan-preview-frame--empty{% endif %}">
+                    <div class="scan-preview-frame__label">Превью C-скана</div>
+                    <div class="scan-preview-frame__media">
+                        {% include 'includes/scan_preview_thumb.html' with scan=scan size='detail' %}
+                    </div>
+                    {% if not scan.preview %}
+                    <p class="scan-preview-frame__hint mb-0">Не загружено</p>
+                    {% endif %}
+                </div>
             </aside>
         </div>
     </div>
