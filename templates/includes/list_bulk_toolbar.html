@@ -1,0 +1,22 @@
+{# Expects: form opens outside; unique_id optional #}
+{# bulk_show_delete: default True; set False when selection is for export only #}
+<div class="list-bulk-toolbar px-3 py-2 border-bottom bg-body-tertiary" data-list-bulk-toolbar hidden>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="form-check mb-0">
+            <input class="form-check-input" type="checkbox"
+                   id="list-bulk-select-page{% if bulk_id %}-{{ bulk_id }}{% endif %}"
+                   data-list-bulk-select-page>
+            <label class="form-check-label"
+                   for="list-bulk-select-page{% if bulk_id %}-{{ bulk_id }}{% endif %}">На странице</label>
+        </div>
+        <span class="small text-muted" data-list-bulk-count>Выбрано: 0</span>
+        {% if bulk_show_delete != False %}
+        <button type="submit" class="btn btn-danger btn-sm" data-list-bulk-submit disabled>
+            Удалить выбранные
+        </button>
+        {% endif %}
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-list-bulk-cancel>
+            Отмена
+        </button>
+    </div>
+</div>

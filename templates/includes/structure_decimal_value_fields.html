@@ -1,0 +1,52 @@
+{% with is_range_on=group.is_range.value is_tolerance_on=group.is_tolerance.value %}
+<div class="property-number-value{% if is_range_on %} property-number-value--range{% elif is_tolerance_on %} property-number-value--tolerance{% endif %}" data-property-number-value>
+    {{ group.value_kind }}
+    <div class="property-number-value__scalar{% if is_range_on or is_tolerance_on %} d-none{% endif %}" data-property-number-scalar>
+        {{ group.value }}
+    </div>
+    <div class="property-number-value__range{% if not is_range_on %} d-none{% endif %}" data-property-number-range>
+        <div class="property-number-value__range-inputs">
+            <div class="property-number-value__range-field">
+                {{ group.value_min.as_widget }}
+            </div>
+            <span class="property-number-value__range-sep" aria-hidden="true">–</span>
+            <div class="property-number-value__range-field">
+                {{ group.value_max.as_widget }}
+            </div>
+        </div>
+    </div>
+    <div class="property-number-value__tolerance{% if not is_tolerance_on %} d-none{% endif %}" data-property-number-tolerance>
+        <div class="property-number-value__tolerance-inputs">
+            <div class="property-number-value__range-field">
+                {{ group.value.as_widget }}
+            </div>
+            <span class="property-number-value__range-sep" aria-hidden="true">±</span>
+            <div class="property-number-value__range-field">
+                {{ group.value_tolerance.as_widget }}
+            </div>
+        </div>
+    </div>
+    <div class="property-number-value__toggles">
+        <label class="property-number-value__toggle form-check form-check-inline mb-0">
+            {{ group.is_range }}
+            <span class="form-check-label">Диапазон</span>
+        </label>
+        <label class="property-number-value__toggle form-check form-check-inline mb-0">
+            {{ group.is_tolerance }}
+            <span class="form-check-label">±</span>
+        </label>
+    </div>
+</div>
+{% endwith %}
+{% if group.value.errors %}
+<div class="text-danger small">{{ group.value.errors }}</div>
+{% endif %}
+{% if group.value_min.errors %}
+<div class="text-danger small">{{ group.value_min.errors }}</div>
+{% endif %}
+{% if group.value_max.errors %}
+<div class="text-danger small">{{ group.value_max.errors }}</div>
+{% endif %}
+{% if group.value_tolerance.errors %}
+<div class="text-danger small">{{ group.value_tolerance.errors }}</div>
+{% endif %}

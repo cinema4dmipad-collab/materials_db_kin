@@ -1,6 +1,13 @@
 from django import forms
 
-from apps.core.tag_utils import assign_tags, format_tags_for_input, parse_tag_input, validate_tag_names
+from apps.core.tag_utils import (
+    active_tags_queryset,
+    assign_tags,
+    dedupe_tag_suggestion_rows,
+    format_tags_for_input,
+    parse_tag_input,
+    validate_tag_names,
+)
 from apps.core.widgets import TagNamesWidget
 
 
@@ -21,8 +28,18 @@ class TagNamesFormMixin:
         if self.tag_workspace is not None:
             from apps.workspaces.services import tags_in_workspace
 
-            widget_kwargs['tag_suggestions'] = list(
-                tags_in_workspace(self.tag_workspace).values('name', 'slug')
+            widget_kwargs['tag_suggestions'] = dedupe_tag_suggestion_rows(
+                list(
+                    active_tags_queryset(tags_in_workspace(self.tag_workspace))
+                    .order_by('name')
+                    .values(
+                        'name',
+                        'slug',
+                        'color',
+                        'description',
+                        'workspace_id',
+                    )
+                )
             )
 
         self.fields[self.tag_field_name] = forms.CharField(

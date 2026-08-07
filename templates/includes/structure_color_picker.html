@@ -1,16 +1,30 @@
-<ul class="structure-color-picker list-unstyled mb-0">
-    {% for value, label in field.field.choices %}
-    <li class="structure-color-picker__item">
-        <label class="structure-color-picker__label">
-            <input type="radio"
-                   name="{{ field.html_name }}"
-                   value="{{ value }}"
-                   {% if field.value|stringformat:'s' == value|stringformat:'s' %}checked{% endif %}>
-            <span class="type-pill {{ value }}">
-                <span class="type-pill__dot" aria-hidden="true"></span>
-                <span class="type-pill__label">{{ label }}</span>
-            </span>
-        </label>
-    </li>
-    {% endfor %}
-</ul>
+{% load ui_tags %}
+{% get_structure_color_presets as structure_color_presets %}
+<div class="structure-color-picker" data-structure-color-picker>
+    <div class="structure-color-picker__presets" role="group" aria-label="Быстрый выбор цвета">
+        {% for preset_color, preset_label in structure_color_presets %}
+        <button type="button"
+                class="structure-color-picker__preset"
+                data-color="{{ preset_color }}"
+                title="{{ preset_label }}"
+                aria-label="{{ preset_label }}"
+                style="background-color: {{ preset_color }};">
+        </button>
+        {% endfor %}
+    </div>
+    <div class="d-flex align-items-center gap-2 mt-2">
+        <input type="color"
+               class="form-control form-control-color structure-color-picker__native"
+               value="{{ field.value|default:'#007679' }}"
+               title="Выбрать цвет">
+        <input type="text"
+               name="{{ field.html_name }}"
+               id="{{ field.id_for_label }}"
+               class="form-control structure-color-picker__text"
+               value="{{ field.value|default:'#007679' }}"
+               maxlength="7"
+               placeholder="#007679"
+               autocomplete="off"
+               spellcheck="false">
+    </div>
+</div>

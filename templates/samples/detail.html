@@ -12,9 +12,15 @@
             <h1 class="h4 mb-1">{{ sample.name }}</h1>
             <p class="text-muted mb-0 small">Код: <strong>{{ sample.code }}</strong></p>
         </div>
-        <div class="text-nowrap">
+        <div class="text-nowrap d-inline-flex align-items-center gap-1">
+            {% if sample_is_editable %}
             <a href="{% url 'samples:edit' sample.pk %}" class="btn btn-outline-primary btn-sm">Изменить</a>
-            <a href="{% url 'samples:delete' sample.pk %}" class="btn btn-outline-danger btn-sm">Удалить</a>
+            <a href="{% url 'samples:delete' sample.pk %}"
+               class="btn btn-outline-danger btn-sm"
+               data-confirm-delete
+               data-confirm-title="Удаление образца"
+               data-confirm-message="Удалить образец «{{ sample.code }} — {{ sample.name }}» вместе со сканами и вложениями? Действие нельзя отменить.">Удалить</a>
+            {% endif %}
             <a href="{% url 'samples:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
         </div>
     </div>
@@ -30,7 +36,15 @@
                 {% include 'includes/type_badge.html' with label=sample.get_object_type_display value=sample.object_type use_object_type_filter=True filter_base_path=samples_list_url %}
             </dd>
             <dt class="col-sm-3">Теги</dt>
-            <dd class="col-sm-9">{% url 'samples:list' as samples_list_url %}{% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}</dd>
+            <dd class="col-sm-9">
+                {% if tags_form %}
+                {% url 'samples:tags' sample.pk as sample_tags_url %}
+                {% include 'includes/entity_tags_form.html' with tags_form=tags_form tags_form_action=sample_tags_url %}
+                {% else %}
+                {% url 'samples:list' as samples_list_url %}
+                {% include 'includes/tag_badges.html' with tags=sample.tags.all filter_url=samples_list_url %}
+                {% endif %}
+            </dd>
             <dt class="col-sm-3">Создал</dt>
             <dd class="col-sm-9">{{ sample|creator_display }}</dd>
             <dt class="col-sm-3">Создан</dt>
@@ -64,8 +78,9 @@
                 <thead>
                     <tr>
                         <th scope="col">Свойство</th>
-                        <th scope="col">Значение</th>
-                        <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                        <th scope="col" class="material-properties-table__value-col">Значение</th>
+                        <th scope="col" class="material-properties-table__unit-col">Ед.</th>
+                        <th scope="col" class="material-properties-table__spacer-col" aria-hidden="true"></th>
                     </tr>
                 </thead>
                 {% if structure_properties or structure_message %}
@@ -74,13 +89,16 @@
                 {% if material_properties %}
                 <tbody class="material-props-section">
                     <tr class="material-props-section__header">
-                        <th scope="colgroup" colspan="3">Из свойств материала</th>
+                        <th scope="colgroup" colspan="4">Из свойств материала</th>
                     </tr>
                     {% for sp in material_properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ sp.property.label_with_unit }}</th>
-                        <td class="material-props-section__value">{% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}</td>
-                        <td class="material-props-section__unit">{{ sp.property.unit|default:"—" }}</td>
+                        <th scope="row" class="material-props-section__name">{{ sp.property.base_display_name }}</th>
+                        <td class="material-props-section__value">
+                            {% if sp.property.data_type == 'number' %}{{ sp.display_value }}{% else %}{{ sp.value }}{% endif %}
+                        </td>
+                        <td class="material-props-section__unit">{{ sp.property.effective_unit }}</td>
+                        <td class="material-props-section__spacer" aria-hidden="true"></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -88,13 +106,16 @@
                 {% if extra_properties %}
                 <tbody class="material-props-section">
                     <tr class="material-props-section__header">
-                        <th scope="colgroup" colspan="3">Дополнительные свойства</th>
+                        <th scope="colgroup" colspan="4">Дополнительные свойства</th>
                     </tr>
                     {% for sp in extra_properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ sp.property.label_with_unit }}</th>
-                        <td class="material-props-section__value">{% if sp.property.data_type == 'number' %}{{ sp.value|decimal_comma }}{% else %}{{ sp.value }}{% endif %}</td>
-                        <td class="material-props-section__unit">{{ sp.property.unit|default:"—" }}</td>
+                        <th scope="row" class="material-props-section__name">{{ sp.property.base_display_name }}</th>
+                        <td class="material-props-section__value">
+                            {% if sp.property.data_type == 'number' %}{{ sp.display_value }}{% else %}{{ sp.value }}{% endif %}
+                        </td>
+                        <td class="material-props-section__unit">{{ sp.property.effective_unit }}</td>
+                        <td class="material-props-section__spacer" aria-hidden="true"></td>
                     </tr>
                     {% endfor %}
                 </tbody>

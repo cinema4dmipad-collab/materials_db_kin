@@ -2,7 +2,7 @@ from django.contrib import messages
 
 from django.contrib.auth import get_user_model
 
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
 
 from django.db.models import Count
 
@@ -20,11 +20,19 @@ from django.views.generic import CreateView, DeleteView, ListView, TemplateView,
 
 from apps.workspaces.forms import (
 
+    UserAdminUpdateForm,
+
     UserCreateForm,
 
     UserMembershipAssignForm,
 
+    UserPasswordChangeForm,
+
+    UserProfileForm,
+
     WorkspaceForm,
+
+    WorkspaceLoginForm,
 
     WorkspaceGroupForm,
 
@@ -47,6 +55,8 @@ from apps.workspaces.mixins import (
 
     PermissionRequiredMixin,
 
+    GlobalUserAdminRequiredMixin,
+
     SystemAdminRequiredMixin,
 
     WorkspaceGroupManageMixin,
@@ -58,8 +68,6 @@ from apps.workspaces.mixins import (
 from apps.workspaces.models import Workspace, WorkspaceGroup, WorkspaceGroupMembership
 
 from apps.workspaces.permissions import (
-
-    PERMISSION_SECTIONS,
 
     WorkspacePerm,
 
@@ -98,6 +106,8 @@ User = get_user_model()
 class WorkspaceLoginView(LoginView):
 
     template_name = 'registration/login.html'
+
+    form_class = WorkspaceLoginForm
 
     redirect_authenticated_user = True
 
@@ -139,6 +149,88 @@ class UserProfileView(LoginRequiredMixin, TemplateView):
             workspace_rows.append({'workspace': workspace, 'groups': groups})
 
         context['workspace_rows'] = workspace_rows
+
+        from dmr.security.token.app.models import Token
+
+        from apps.api.token_forms import ApiTokenCreateForm
+
+        context['api_tokens'] = Token.objects.filter(user=user).order_by('-created_at')
+        context['api_token_form'] = ApiTokenCreateForm()
+        # Одноразовый flash: отдаём секрет в этот ответ и сразу убираем из сессии,
+        # иначе модалка снова открывается при каждом возврате в профиль.
+        context['api_token_plaintext'] = self.request.session.pop('api_token_plaintext', None)
+        context['api_token_name'] = self.request.session.pop('api_token_name', None)
+        context['api_token_id'] = self.request.session.pop('api_token_id', None)
+
+        return context
+
+
+
+
+
+class UserProfileUpdateView(LoginRequiredMixin, UpdateView):
+
+    model = User
+
+    form_class = UserProfileForm
+
+    template_name = 'accounts/profile_edit.html'
+
+    success_url = reverse_lazy('accounts:profile')
+
+
+
+    def get_object(self, queryset=None):
+
+        return self.request.user
+
+
+
+    def form_valid(self, form):
+
+        messages.success(self.request, 'Профиль обновлён.')
+
+        return super().form_valid(form)
+
+
+
+    def get_context_data(self, **kwargs):
+
+        context = super().get_context_data(**kwargs)
+
+        context['page_title'] = 'Редактирование профиля'
+
+        return context
+
+
+
+
+
+class UserPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
+
+    form_class = UserPasswordChangeForm
+
+    template_name = 'accounts/password_change.html'
+
+    success_url = reverse_lazy('accounts:profile')
+
+
+
+    def form_valid(self, form):
+
+        response = super().form_valid(form)
+
+        messages.success(self.request, 'Пароль изменён.')
+
+        return response
+
+
+
+    def get_context_data(self, **kwargs):
+
+        context = super().get_context_data(**kwargs)
+
+        context['page_title'] = 'Смена пароля'
 
         return context
 
@@ -200,7 +292,7 @@ class WorkspaceSwitchView(LoginRequiredMixin, View):
 
 
 
-class WorkspaceCreateView(SystemAdminRequiredMixin, CreateView):
+class WorkspaceCreateView(GlobalUserAdminRequiredMixin, CreateView):
 
     model = Workspace
 
@@ -630,8 +722,6 @@ class WorkspaceGroupCreateView(WorkspaceGroupManageMixin, CreateView):
 
         context['submit_label'] = 'Создать'
 
-        context['permission_sections'] = PERMISSION_SECTIONS
-
         return context
 
 
@@ -689,8 +779,6 @@ class WorkspaceGroupUpdateView(WorkspaceGroupManageMixin, UpdateView):
         context['page_title'] = 'Редактирование группы'
 
         context['submit_label'] = 'Сохранить'
-
-        context['permission_sections'] = PERMISSION_SECTIONS
 
         return context
 
@@ -804,7 +892,7 @@ class WorkspaceSettingsView(AppViewMixin, PermissionRequiredMixin, UpdateView):
 
 
 
-class AdminWorkspaceListView(SystemAdminRequiredMixin, ListView):
+class AdminWorkspaceListView(GlobalUserAdminRequiredMixin, ListView):
 
     model = Workspace
 
@@ -828,7 +916,7 @@ class AdminWorkspaceListView(SystemAdminRequiredMixin, ListView):
 
 
 
-class AdminWorkspaceUpdateView(SystemAdminRequiredMixin, UpdateView):
+class AdminWorkspaceUpdateView(GlobalUserAdminRequiredMixin, UpdateView):
 
     model = Workspace
 
@@ -870,7 +958,7 @@ class AdminWorkspaceUpdateView(SystemAdminRequiredMixin, UpdateView):
 
 
 
-class AdminWorkspaceDeleteView(SystemAdminRequiredMixin, DeleteView):
+class AdminWorkspaceDeleteView(GlobalUserAdminRequiredMixin, DeleteView):
 
     model = Workspace
 
@@ -928,7 +1016,7 @@ class AdminWorkspaceDeleteView(SystemAdminRequiredMixin, DeleteView):
 
 
 
-class AdminUserListView(SystemAdminRequiredMixin, ListView):
+class AdminUserListView(GlobalUserAdminRequiredMixin, ListView):
 
     model = User
 
@@ -948,7 +1036,7 @@ class AdminUserListView(SystemAdminRequiredMixin, ListView):
 
 
 
-class AdminUserCreateView(SystemAdminRequiredMixin, CreateView):
+class AdminUserCreateView(GlobalUserAdminRequiredMixin, CreateView):
 
     model = User
 
@@ -980,37 +1068,15 @@ class AdminUserCreateView(SystemAdminRequiredMixin, CreateView):
 
 
 
-class AdminUserUpdateView(SystemAdminRequiredMixin, UpdateView):
+class AdminUserUpdateView(GlobalUserAdminRequiredMixin, UpdateView):
 
     model = User
 
-    fields = ('username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_superuser')
+    form_class = UserAdminUpdateForm
 
     template_name = 'administration/users/form.html'
 
     success_url = reverse_lazy('administration:admin_users')
-
-
-
-    def get_form(self, form_class=None):
-
-        form = super().get_form(form_class)
-
-        form.fields['username'].label = 'Логин'
-
-        form.fields['email'].label = 'E-mail'
-
-        form.fields['first_name'].label = 'Имя'
-
-        form.fields['last_name'].label = 'Фамилия'
-
-        form.fields['is_active'].label = 'Активен'
-
-        form.fields['is_staff'].label = 'Доступ в админку Django'
-
-        form.fields['is_superuser'].label = 'Системный администратор'
-
-        return form
 
 
 
@@ -1057,7 +1123,7 @@ def _admin_user_workspace_rows(target_user):
     return rows
 
 
-class AdminUserMembershipView(SystemAdminRequiredMixin, View):
+class AdminUserMembershipView(GlobalUserAdminRequiredMixin, View):
 
     template_name = 'administration/users/memberships.html'
 

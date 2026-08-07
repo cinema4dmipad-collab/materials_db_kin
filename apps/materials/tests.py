@@ -15,7 +15,7 @@ from apps.core.tag_utils import assign_tags
 from apps.materials.admin import CompositeLayerInline, MaterialAdmin, MaterialForm
 from apps.materials.forms import CompositeLayerFormSet, MaterialForm as PublicMaterialForm
 from apps.materials.models import Material, MaterialProperty
-from apps.references.models import Property, PropertyGroup
+from apps.references.models import Availability, Manufacturer, Property, PropertyGroup, Technology
 from apps.structures.models import StructureField, StructureType
 from apps.structures.sql_executor import SQLExecutor
 from apps.workspaces.services import ensure_legacy_workspace
@@ -109,9 +109,39 @@ class MaterialStructureLinkTests(TransactionTestCase):
             'skin_material': '',
         }
         data.update(overrides)
+        payload = {}
+        for field in structure_type.fields.exclude(field_type='ForeignKey'):
+            if field.field_type == 'DecimalField':
+                value = data[field.name]
+                base = f'structure_field_{field.pk}'
+                if isinstance(value, dict):
+                    payload.update(value)
+                    payload.setdefault(base, value.get('value', ''))
+                else:
+                    payload[base] = value
+                    payload[f'{base}__b'] = ''
+                    payload[f'{base}__kind'] = 'scalar'
+            else:
+                payload[f'structure_field_{field.pk}'] = data[field.name]
+        return payload
+
+    def structure_decimal_range_data(self, structure_type, field_name, *, min_value, max_value):
+        field = structure_type.fields.get(name=field_name)
+        base = f'structure_field_{field.pk}'
         return {
-            f'structure_field_{field.pk}': data[field.name]
-            for field in structure_type.fields.exclude(field_type='ForeignKey')
+            base: '',
+            f'{base}__min': min_value,
+            f'{base}__max': max_value,
+            f'{base}__is_range': 'on',
+        }
+
+    def structure_decimal_tolerance_data(self, structure_type, field_name, *, nominal, tolerance):
+        field = structure_type.fields.get(name=field_name)
+        base = f'structure_field_{field.pk}'
+        return {
+            base: nominal,
+            f'{base}__tolerance': tolerance,
+            f'{base}__is_tolerance': 'on',
         }
 
     def insert_structure_row(self, **overrides):
@@ -120,6 +150,19 @@ class MaterialStructureLinkTests(TransactionTestCase):
         result = SQLExecutor.insert(self.structure_type, data)
         self.assertTrue(result['success'], result.get('error'))
         return result['id']
+
+    def test_structure_property_item_extracts_unit_from_label(self):
+        from apps.materials.structure_display import build_structure_property_item
+
+        field = StructureField(
+            label='Объемное содержание волокна, %',
+            name='fiber_vol',
+            field_type='DecimalField',
+            decimal_places=4,
+        )
+        item = build_structure_property_item(field, {'fiber_vol': '32.0'})
+        self.assertEqual(item['unit'], '%')
+        self.assertEqual(item['label'], 'Объемное содержание волокна')
 
     def test_get_structure_params_returns_dynamic_row(self):
         row_id = self.insert_structure_row(title='Laminate')
@@ -143,6 +186,32 @@ class MaterialStructureLinkTests(TransactionTestCase):
         material.struct_type = self.structure_type
         material.struct_props_id = uuid.uuid4()
         self.assertIsNone(material.get_structure_params())
+
+    def test_create_from_template_prefills_structure_params(self):
+        row_id = self.insert_structure_row(title='Template panel', thickness='6.75')
+        template = self.create_material(
+            code='MAT-TEMPLATE',
+            name='Template material',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        form = PublicMaterialForm(
+            instance=Material(),
+            initial={'struct_type': template.struct_type_id},
+            template_material=template,
+        )
+        title_field = self.structure_type.fields.get(name='title')
+        thickness_field = self.structure_type.fields.get(name='thickness')
+
+        self.assertEqual(
+            form.fields[f'structure_field_{title_field.pk}'].initial,
+            'Template panel',
+        )
+        self.assertEqual(
+            str(form.fields[f'structure_field_{thickness_field.pk}'].initial),
+            '6.75',
+        )
 
     def test_material_type_proxy_flags_reflect_structure_and_layers(self):
         plain_material = self.create_material(code='MAT-TYPE-001', name='Plain material')
@@ -275,9 +344,10 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Свойства')
         self.assertContains(response, 'Из параметров структуры')
         self.assertContains(response, 'Дополнительные свойства')
-        self.assertContains(response, 'Density, g/cm3')
+        self.assertContains(response, 'Density')
         self.assertContains(response, '1,55')
         self.assertContains(response, 'g/cm3')
+        self.assertContains(response, 'material-props-section__unit')
         self.assertContains(response, 'Test Panel')
         self.assertContains(response, 'Title')
         self.assertContains(response, 'Laminate panel')
@@ -298,6 +368,26 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'Все пространства')
         self.assertContains(response, 'Настроить видимость')
         self.assertContains(response, reverse('materials:visibility', kwargs={'pk': material.pk}))
+
+    def test_detail_page_allows_inline_tag_edit_and_save(self):
+        material = self.create_material(
+            code='MAT-TAGS-DETAIL',
+            name='Tagged from detail',
+        )
+        detail_url = reverse('materials:detail', kwargs={'pk': material.pk})
+        tags_url = reverse('materials:tags', kwargs={'pk': material.pk})
+
+        response = self.client.get(detail_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, tags_url)
+        self.assertContains(response, 'Сохранить теги')
+        self.assertContains(response, 'tag-input-widget')
+
+        response = self.client.post(tags_url, {'tag_names': 'пилот, тип::баг'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, detail_url)
+        tag_names = set(material.tags.values_list('name', flat=True))
+        self.assertEqual(tag_names, {'пилот', 'тип::баг'})
 
     def test_sample_detail_inherits_material_structure_properties(self):
         from apps.samples.models import Sample
@@ -352,8 +442,8 @@ class MaterialStructureLinkTests(TransactionTestCase):
                 INSERT INTO structures_structurefield
                     (structure_type_id, name, label, field_type, is_required, default_value,
                      help_text, sort_order, max_digits, decimal_places, max_length,
-                     foreign_key_model)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     choice_options, foreign_key_model)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 [
                     self.structure_type.pk,
@@ -367,6 +457,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
                     10,
                     2,
                     255,
+                    '[]',
                     'materials.Material',
                 ],
             )
@@ -458,6 +549,146 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'type-pill-link')
         self.assertContains(response, 'Test Panel')
 
+    def test_material_list_filters_by_import_source(self):
+        self.create_material(code='MAT-SRC-001', name='Manual material')
+        self.create_material(
+            code='MAT-SRC-002',
+            name='From summary',
+            import_source_filename='Сводная по материалам.xlsx',
+        )
+        self.create_material(
+            code='MAT-SRC-003',
+            name='From other file',
+            import_source_filename='other.csv',
+        )
+
+        list_page = self.client.get(reverse('materials:list'))
+        self.assertEqual(list_page.status_code, 200)
+        self.assertContains(list_page, 'Источник импорта')
+        self.assertContains(list_page, 'Сводная по материалам.xlsx')
+        self.assertContains(list_page, 'Выгрузить в Excel')
+        self.assertContains(list_page, 'data-materials-export')
+        self.assertContains(list_page, 'materials-export-need-select-modal')
+
+        filtered = self.client.get(
+            reverse('materials:list'),
+            {'import_source': 'Сводная по материалам.xlsx'},
+        )
+        self.assertEqual(filtered.status_code, 200)
+        self.assertContains(filtered, 'MAT-SRC-002')
+        self.assertNotContains(filtered, 'MAT-SRC-001')
+        self.assertNotContains(filtered, 'MAT-SRC-003')
+
+    def test_material_export_single_structure_with_structure_fields(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from apps.core.tag_utils import assign_tags
+        from apps.references.models import Property
+
+        density = Property.objects.create(
+            name='density_export',
+            display_name='Density',
+            data_type='number',
+            unit='g/cm3',
+            decimal_places=2,
+        )
+        row_a = self.insert_structure_row(title='Panel A', thickness='12.50')
+        row_b = self.insert_structure_row(title='Panel B', thickness='3.00')
+        with_props = self.create_material(
+            code='MAT-EXP-001',
+            name='Exportable',
+            struct_type=self.structure_type,
+            struct_props_id=row_a,
+            import_source_filename='export-demo.xlsx',
+        )
+        assign_tags(with_props, ['export-tag'], workspace=self.legacy_workspace)
+        MaterialProperty.objects.create(material=with_props, property=density, value='1.55')
+        other_same_type = self.create_material(
+            code='MAT-EXP-002',
+            name='Same type',
+            struct_type=self.structure_type,
+            struct_props_id=row_b,
+        )
+        other_type = self.create_structure_type()
+        other_row = SQLExecutor.insert(
+            other_type,
+            {'title': 'Other', 'thickness': '1.00'},
+        )
+        self.assertTrue(other_row.get('success'), other_row.get('error'))
+        mixed = self.create_material(
+            code='MAT-EXP-003',
+            name='Other structure',
+            struct_type=other_type,
+            struct_props_id=other_row['id'],
+        )
+        plain = self.create_material(code='MAT-EXP-004', name='No structure')
+
+        get_response = self.client.get(reverse('materials:export'))
+        self.assertEqual(get_response.status_code, 302)
+
+        empty_post = self.client.post(reverse('materials:export'), {})
+        self.assertEqual(empty_post.status_code, 302)
+
+        mixed_post = self.client.post(
+            reverse('materials:export'),
+            {'ids': [str(with_props.pk), str(mixed.pk)], 'scope': 'workspace'},
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(mixed_post.status_code, 400)
+        self.assertIn('error', mixed_post.json())
+
+        no_struct_post = self.client.post(
+            reverse('materials:export'),
+            {'ids': [str(plain.pk)], 'scope': 'workspace'},
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(no_struct_post.status_code, 400)
+
+        empty_json = self.client.post(
+            reverse('materials:export'),
+            {},
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(empty_json.status_code, 400)
+
+        response = self.client.post(
+            reverse('materials:export'),
+            {'ids': [str(with_props.pk), str(other_same_type.pk)], 'scope': 'workspace'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            response['Content-Type'],
+        )
+        self.assertTrue(response.content[:2] == b'PK')
+        wb = load_workbook(BytesIO(response.content))
+        ws = wb['Материалы']
+        headers = [cell.value for cell in ws[1]]
+        self.assertIn('Код', headers)
+        self.assertIn('Название', headers)
+        self.assertIn('Title', headers)
+        self.assertIn('Thickness', headers)
+        self.assertIn('Skin material', headers)
+        self.assertIn('Density', headers)
+        self.assertIn('Тип структуры', headers)
+        self.assertNotIn('Создал', headers)
+        self.assertNotIn('Дата создания', headers)
+        codes = [row[0].value for row in ws.iter_rows(min_row=2) if row[0].value]
+        self.assertEqual(codes, ['MAT-EXP-001', 'MAT-EXP-002'])
+        data_row = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
+        row_by_header = dict(zip(headers, data_row))
+        self.assertEqual(row_by_header['Название'], 'Exportable')
+        self.assertEqual(row_by_header['Title'], 'Panel A')
+        self.assertEqual(row_by_header['Thickness'], '12,50')
+        self.assertEqual(row_by_header['Density'], '1,55')
+        self.assertNotIn('Теги', headers)
+        header_cell = ws['A1']
+        self.assertEqual(header_cell.border.left.color.rgb, '00000000')
+        self.assertEqual(header_cell.border.left.style, 'thin')
+        self.assertTrue(header_cell.font.bold)
+
     def test_material_list_combines_structure_type_search_with_multiple_tags(self):
         tagged = self.create_material(
             code='MAT-LIST-TAGGED',
@@ -489,7 +720,11 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'MAT-LIST-TAGGED')
         self.assertNotContains(response, 'MAT-LIST-001')
         self.assertNotContains(response, 'MAT-LIST-002')
-        self.assertContains(response, 'list-filter-chip--removable', count=3)
+        # Search chip keeps list-filter-chip--removable; tags use entity-tag chips.
+        self.assertContains(response, 'list-filter-chip--removable', count=1)
+        self.assertContains(response, 'data-tag-slug="prepreg"', count=1)
+        self.assertContains(response, 'data-tag-slug="lab"', count=1)
+        self.assertContains(response, 'list-filter-active-tag__remove', count=2)
 
 
 class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
@@ -639,7 +874,11 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
     def _property_formset_data(self, property_obj, prefix='properties-0', **overrides):
         data = {
             f'{prefix}-property': str(property_obj.pk),
+            f'{prefix}-value_kind': 'scalar',
             f'{prefix}-value': '1.55',
+            f'{prefix}-value_min': '',
+            f'{prefix}-value_max': '',
+            f'{prefix}-value_tolerance': '',
         }
         data.update(overrides)
         return data
@@ -658,6 +897,89 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         data.update(self._layer_formset_management_data(total='0'))
         data.update(overrides)
         return data
+
+    def test_dictionary_fields_are_separate_from_base_bound_fields(self):
+        form = PublicMaterialForm(workspace=self.legacy_workspace)
+        base_names = {field.name for field in form.base_bound_fields}
+        dictionary_names = [field.name for field in form.dictionary_bound_fields]
+        self.assertEqual(dictionary_names, ['manufacturer', 'availability', 'technology'])
+        self.assertTrue({'manufacturer', 'availability', 'technology'}.isdisjoint(base_names))
+
+    def test_create_form_hides_empty_dictionary_rows(self):
+        response = self.client.get(reverse('materials:create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Справочные свойства')
+        self.assertContains(response, 'material-dictionary-fields')
+        self.assertContains(response, 'data-dictionary-row="manufacturer"')
+        self.assertContains(response, 'material-dictionary-row mb-3 d-none')
+        self.assertContains(response, 'material_dictionary_fields.js')
+        self.assertContains(response, 'data-choice-picker')
+        form = response.context['form']
+        self.assertEqual(
+            form.fields['manufacturer'].widget.attrs.get('data-choice-picker'),
+            'true',
+        )
+        self.assertEqual(
+            form.fields['availability'].widget.attrs.get('data-choice-picker'),
+            'true',
+        )
+        self.assertEqual(
+            form.fields['technology'].widget.attrs.get('data-choice-picker'),
+            'true',
+        )
+
+    def test_create_view_saves_dictionary_fields(self):
+        manufacturer = Manufacturer.objects.create(name='Hexcel Test', code='hexcel_test')
+        availability = Availability.objects.create(name='In stock test', code='in_stock_test')
+        technology = Technology.objects.create(name='Prepreg test', code='prepreg_test')
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                manufacturer=str(manufacturer.pk),
+                availability=str(availability.pk),
+                technology=str(technology.pk),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        self.assertEqual(material.manufacturer_id, manufacturer.pk)
+        self.assertEqual(material.availability_id, availability.pk)
+        self.assertEqual(material.technology_id, technology.pk)
+
+    def test_edit_form_shows_filled_dictionary_row(self):
+        manufacturer = Manufacturer.objects.create(name='Solvay Shown', code='solvay_shown')
+        material = self.create_material(
+            code='MAT-DICT-EDIT',
+            name='Dict edit material',
+            manufacturer=manufacturer,
+        )
+        response = self.client.get(reverse('materials:edit', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-dictionary-row="manufacturer"')
+        self.assertContains(response, 'data-dictionary-active="1"')
+        self.assertContains(response, 'Solvay Shown')
+
+    def test_detail_hides_empty_dictionary_fields(self):
+        manufacturer = Manufacturer.objects.create(name='Only Maker', code='only_maker')
+        with_maker = self.create_material(
+            code='MAT-DICT-SHOW',
+            name='Has manufacturer',
+            manufacturer=manufacturer,
+        )
+        without = self.create_material(code='MAT-DICT-HIDE', name='No dictionaries')
+
+        shown = self.client.get(reverse('materials:detail', kwargs={'pk': with_maker.pk}))
+        self.assertEqual(shown.status_code, 200)
+        self.assertContains(shown, 'Производитель')
+        self.assertContains(shown, 'Only Maker')
+        self.assertNotContains(shown, 'Доступность')
+        self.assertNotContains(shown, 'Технология')
+
+        hidden = self.client.get(reverse('materials:detail', kwargs={'pk': without.pk}))
+        self.assertEqual(hidden.status_code, 200)
+        self.assertNotContains(hidden, 'Производитель')
+        self.assertNotContains(hidden, 'Доступность')
+        self.assertNotContains(hidden, 'Технология')
 
     def test_public_material_form_includes_structure_fields_not_props_id(self):
         from apps.materials.picker_data import materials_for_picker_queryset
@@ -865,8 +1187,9 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'material-properties-table')
         self.assertContains(response, 'material-props-section__name')
-        self.assertContains(response, 'Readonly density, g/cm3')
+        self.assertContains(response, 'Readonly density')
         self.assertContains(response, 'g/cm3')
+        self.assertContains(response, 'material-props-section__unit')
         self.assertContains(response, 'id="add-property-btn"')
         self.assertContains(response, 'reference-properties-modal')
         self.assertNotContains(response, 'id="id_properties-0-property" class="form-select"')
@@ -898,7 +1221,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
         self.assertEqual(response.status_code, 302)
         link = MaterialProperty.objects.get(material=material, property=density)
-        self.assertEqual(link.value, '2.10')
+        self.assertEqual(link.value, '2.1')
 
     def test_public_material_form_accepts_comma_in_number_property_value(self):
         density = Property.objects.create(
@@ -920,6 +1243,131 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             MaterialProperty.objects.get(material=material, property=density).value,
             '1.62',
         )
+
+    def test_material_property_form_saves_material_link_as_uuid(self):
+        target = self.create_material(code='MAT-TARGET-LINK', name='Target link material')
+        link_prop = Property.objects.create(
+            name='base_material_link',
+            display_name='Базовый материал',
+            data_type='material_link',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._property_formset_management_data(),
+                **self._property_formset_data(
+                    link_prop,
+                    **{'properties-0-value': str(target.pk)},
+                ),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        link = MaterialProperty.objects.get(material=material, property=link_prop)
+        self.assertEqual(link.value, str(target.pk))
+        self.assertEqual(link.linked_material(), target)
+
+    def test_material_detail_renders_material_link_property(self):
+        target = self.create_material(code='MAT-DETAIL-LINK', name='Detail link target')
+        link_prop = Property.objects.create(
+            name='detail_material_link',
+            display_name='Связанный материал',
+            data_type='material_link',
+        )
+        material = self.create_material(code='MAT-WITH-LINK', name='Material with link')
+        MaterialProperty.objects.create(
+            material=material,
+            property=link_prop,
+            value=str(target.pk),
+        )
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Связанный материал')
+        self.assertContains(response, target.code)
+        self.assertContains(
+            response,
+            reverse('materials:detail', kwargs={'pk': target.pk}),
+        )
+
+    def test_material_edit_form_uses_material_picker_for_link_property(self):
+        target = self.create_material(code='MAT-EDIT-LINK', name='Edit link target')
+        link_prop = Property.objects.create(
+            name='edit_material_link',
+            display_name='Редактируемая ссылка',
+            data_type='material_link',
+        )
+        material = self.create_material(code='MAT-EDIT-WITH-LINK', name='Edit with link')
+        MaterialProperty.objects.create(
+            material=material,
+            property=link_prop,
+            value=str(target.pk),
+        )
+        response = self.client.get(reverse('materials:edit', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-material-picker="true"')
+        self.assertContains(response, str(target.pk))
+
+    def test_material_property_form_saves_choice_value(self):
+        from apps.references.models import PropertyChoice
+
+        choice_prop = Property.objects.create(
+            name='weave_type_mat',
+            display_name='Тип сплетения',
+            data_type='choice',
+        )
+        PropertyChoice.objects.create(
+            property=choice_prop,
+            label='Саржа',
+            value='twill',
+            sort_order=0,
+        )
+        PropertyChoice.objects.create(
+            property=choice_prop,
+            label='Полотно',
+            value='plain',
+            sort_order=1,
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(
+                **self._property_formset_management_data(),
+                **self._property_formset_data(
+                    choice_prop,
+                    **{'properties-0-value': 'twill'},
+                ),
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        saved = MaterialProperty.objects.get(material=material, property=choice_prop)
+        self.assertEqual(saved.value, 'twill')
+        self.assertEqual(saved.choice_display_value(), 'Саржа')
+
+    def test_material_detail_renders_choice_label(self):
+        from apps.references.models import PropertyChoice
+
+        choice_prop = Property.objects.create(
+            name='weave_type_detail',
+            display_name='Тип сплетения',
+            data_type='choice',
+        )
+        PropertyChoice.objects.create(
+            property=choice_prop,
+            label='Саржа 2/2',
+            value='twill_2_2',
+            sort_order=0,
+        )
+        material = self.create_material(code='MAT-WITH-CHOICE', name='Material with choice')
+        MaterialProperty.objects.create(
+            material=material,
+            property=choice_prop,
+            value='twill_2_2',
+        )
+        response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Тип сплетения')
+        self.assertContains(response, 'Саржа 2/2')
+        self.assertNotContains(response, 'twill_2_2')
 
     def test_public_material_create_view_saves_layer_formset_and_detail_shows_layers(self):
         layer_material = self.create_material(
@@ -982,7 +1430,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             self._post_data(
                 **self.structure_field_data(
                     self.structure_type,
-                    **{f'structure_field_{thickness_field.pk}': '12,50'},
+                    thickness='12,50',
                 ),
             ),
         )
@@ -993,6 +1441,84 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
 
         detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
         self.assertContains(detail_response, '12,50')
+
+    def test_public_material_create_saves_structure_decimal_range(self):
+        range_data = self.structure_decimal_range_data(
+            self.structure_type,
+            'thickness',
+            min_value='900',
+            max_value='1900',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(**range_data),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        params = material.get_structure_params()
+        self.assertEqual(params['thickness__kind'], 'range')
+        self.assertEqual(str(params['thickness']), '900.00')
+        self.assertEqual(str(params['thickness__b']), '1900.00')
+
+        detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertContains(detail_response, '900,00')
+        self.assertContains(detail_response, '1900,00')
+
+    def test_public_material_create_saves_structure_decimal_tolerance(self):
+        tolerance_data = self.structure_decimal_tolerance_data(
+            self.structure_type,
+            'thickness',
+            nominal='0,27',
+            tolerance='0,03',
+        )
+        response = self.client.post(
+            reverse('materials:create'),
+            self._post_data(**tolerance_data),
+        )
+        self.assertEqual(response.status_code, 302)
+        material = Material.objects.get(code='MAT-PUBLIC-001')
+        params = material.get_structure_params()
+        self.assertEqual(params['thickness__kind'], 'tolerance')
+        self.assertEqual(str(params['thickness']), '0.27')
+        self.assertEqual(str(params['thickness__b']), '0.03')
+
+        detail_response = self.client.get(reverse('materials:detail', kwargs={'pk': material.pk}))
+        self.assertContains(detail_response, '0,27±0,03')
+
+    def test_material_properties_json_includes_structure_decimal_range(self):
+        from apps.core.property_number_value import VALUE_KIND_RANGE
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        packed = pack_decimal_field_data(
+            'thickness',
+            value_kind=VALUE_KIND_RANGE,
+            value='900',
+            value_b='1900',
+        )
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'JSON range panel', **packed},
+        )['id']
+        material = self.create_material(
+            code='MAT-JSON-RANGE',
+            name='Material with range structure',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.get(
+            reverse('materials:properties_json', kwargs={'pk': material.pk}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        thickness = next(
+            item for item in response.json()['structure_properties'] if item['name'] == 'thickness'
+        )
+        self.assertEqual(thickness['value_kind'], 'range')
+        self.assertEqual(thickness['value'], '900.00')
+        self.assertEqual(thickness['value_b'], '1900.00')
+        self.assertIn('900', thickness['display_value'])
+        self.assertIn('900', thickness['display_value'].replace('\xa0', ''))
 
     def test_public_material_create_view_auto_numbers_multiple_layers(self):
         first_layer_material = self.create_material(
@@ -1708,3 +2234,87 @@ class MaterialAttachmentViewsTests(TestCase):
         self.material.delete()
         self.assertFalse(MaterialAttachment.objects.filter(title='To delete').exists())
         self.assertFalse(attachment.file.storage.exists(file_name))
+
+class MaterialBulkDeleteTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.workspaces.models import BUILTIN_GROUP_MANAGER, Workspace
+        from apps.workspaces.services import assign_user_to_groups, ensure_default_groups
+        from apps.workspaces.test_utils import login_test_client
+
+        User = get_user_model()
+        self.workspace = Workspace.objects.create(slug='bulk-ws', name='Bulk WS')
+        ensure_default_groups(self.workspace)
+        self.user = User.objects.create_user('bulk-mgr', password='pass-123')
+        assign_user_to_groups(self.user, self.workspace, [BUILTIN_GROUP_MANAGER])
+        login_test_client(
+            self.client, user=self.user, workspace=self.workspace, password='pass-123'
+        )
+        self.layer_type = StructureType.objects.create(
+            name='Bulk panel',
+            code='bulk_panel',
+            table_name='structures_bulk_panel',
+            allow_layers=True,
+            is_created=True,
+        )
+        self.m1 = Material.objects.create(
+            code='BULK-1', name='One', home_workspace=self.workspace
+        )
+        self.m2 = Material.objects.create(
+            code='BULK-2', name='Two', home_workspace=self.workspace
+        )
+        self.m3 = Material.objects.create(
+            code='BULK-3',
+            name='Three',
+            home_workspace=self.workspace,
+            struct_type=self.layer_type,
+        )
+
+    def test_list_shows_select_controls(self):
+        response = self.client.get(reverse('materials:list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-list-bulk-toggle')
+        self.assertContains(response, 'name="ids"')
+        self.assertContains(response, reverse('materials:bulk_delete'))
+
+    def test_bulk_delete_confirm_then_delete(self):
+        confirm = self.client.post(
+            reverse('materials:bulk_delete'),
+            {'ids': [str(self.m1.pk), str(self.m2.pk)]},
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, 'BULK-1')
+        self.assertContains(confirm, 'BULK-2')
+        self.assertContains(confirm, 'Удалить выбранные')
+
+        done = self.client.post(
+            reverse('materials:bulk_delete'),
+            {
+                'ids': [str(self.m1.pk), str(self.m2.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('materials:list'))
+        self.assertFalse(Material.objects.filter(pk=self.m1.pk).exists())
+        self.assertFalse(Material.objects.filter(pk=self.m2.pk).exists())
+        self.assertTrue(Material.objects.filter(pk=self.m3.pk).exists())
+
+    def test_bulk_delete_skips_layer_material(self):
+        CompositeLayer.objects.create(
+            parent_material=self.m3,
+            material=self.m1,
+            layer_number=1,
+            angle=0,
+            thickness=0.2,
+        )
+        done = self.client.post(
+            reverse('materials:bulk_delete'),
+            {
+                'ids': [str(self.m1.pk), str(self.m2.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('materials:list'))
+        self.assertTrue(Material.objects.filter(pk=self.m1.pk).exists())
+        self.assertFalse(Material.objects.filter(pk=self.m2.pk).exists())

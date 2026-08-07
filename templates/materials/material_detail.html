@@ -12,11 +12,7 @@
 {% block content %}
 {% include 'materials/includes/material_tabs.html' %}
 
-{% if material_is_readonly %}
-<div class="alert alert-info" role="status">
-    Материал опубликован из другого пространства. Редактирование недоступно.
-</div>
-{% endif %}
+{% include 'materials/includes/material_status_notice.html' %}
 
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -29,22 +25,40 @@
             {% url 'materials:edit' material.pk as material_edit_url %}
             {% include 'includes/table_action_icon.html' with action='edit' url=material_edit_url title='Изменить' %}
             {% endif %}
-            {% if can_clone_material %}
-            {% url 'materials:clone' material.pk as material_clone_url %}
-            {% include 'includes/table_action_icon.html' with action='clone' url=material_clone_url title='Клонировать в пространство' method='post' %}
+            {% if can_link_material %}
+            {% url 'materials:link' material.pk as material_link_url %}
+            {% include 'includes/table_action_icon.html' with action='link' url=material_link_url title='Добавить в пространство' method='post' %}
             {% endif %}
             {% if can_delete_material %}
             {% url 'materials:delete' material.pk as material_delete_url %}
-            {% include 'includes/table_action_icon.html' with action='delete' url=material_delete_url title='Удалить' %}
+            {% include 'includes/table_action_icon.html' with action='delete' url=material_delete_url title='Удалить' confirm_title='Удаление материала' confirm='Удалить этот материал вместе со свойствами, образцами и сканами? Действие нельзя отменить.' %}
             {% endif %}
             <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm ms-1">К списку</a>
         </div>
     </div>
     <div class="card-body">
         {% include 'materials/includes/material_visibility_panel.html' %}
+        {% if material.import_source_filename %}
+        <div class="alert alert-info py-2 small mb-3">
+            Источник импорта:
+            <strong>{{ material.import_source_filename }}</strong>
+        </div>
+        {% endif %}
         <dl class="row mb-0">
             <dt class="col-sm-3">Описание</dt>
-            <dd class="col-sm-9">{{ material.description|default:"—" }}</dd>
+            <dd class="col-sm-9">{{ material.description_display|default:"—" }}</dd>
+            {% if material.manufacturer_id %}
+            <dt class="col-sm-3">Производитель</dt>
+            <dd class="col-sm-9">{{ material.manufacturer }}</dd>
+            {% endif %}
+            {% if material.availability_id %}
+            <dt class="col-sm-3">Доступность</dt>
+            <dd class="col-sm-9">{{ material.availability }}</dd>
+            {% endif %}
+            {% if material.technology_id %}
+            <dt class="col-sm-3">Технология</dt>
+            <dd class="col-sm-9">{{ material.technology }}</dd>
+            {% endif %}
             <dt class="col-sm-3">Создал</dt>
             <dd class="col-sm-9">{{ material|creator_display }}</dd>
             <dt class="col-sm-3">Создан</dt>
@@ -60,7 +74,15 @@
                 <a href="{% url 'material_samples:list' material.pk %}">{{ sample_count }}</a>
             </dd>
             <dt class="col-sm-3">Теги</dt>
-            <dd class="col-sm-9">{% url 'materials:list' as materials_list_url %}{% include 'includes/tag_badges.html' with tags=material.tags.all filter_url=materials_list_url %}</dd>
+            <dd class="col-sm-9">
+                {% if tags_form %}
+                {% url 'materials:tags' material.pk as material_tags_url %}
+                {% include 'includes/entity_tags_form.html' with tags_form=tags_form tags_form_action=material_tags_url %}
+                {% else %}
+                {% url 'materials:list' as materials_list_url %}
+                {% include 'includes/tag_badges.html' with tags=material.tags.all filter_url=materials_list_url %}
+                {% endif %}
+            </dd>
         </dl>
     </div>
 </div>
@@ -82,8 +104,9 @@
                 <thead>
                     <tr>
                         <th scope="col">Свойство</th>
-                        <th scope="col">Значение</th>
-                        <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                        <th scope="col" class="material-properties-table__value-col">Значение</th>
+                        <th scope="col" class="material-properties-table__unit-col">Ед.</th>
+                        <th scope="col" class="material-properties-table__spacer-col" aria-hidden="true"></th>
                     </tr>
                 </thead>
                 {% if structure_properties or structure_message %}
@@ -92,13 +115,30 @@
                 {% if properties %}
                 <tbody class="material-props-section">
                     <tr class="material-props-section__header">
-                        <th scope="colgroup" colspan="3">Дополнительные свойства</th>
+                        <th scope="colgroup" colspan="4">Дополнительные свойства</th>
                     </tr>
                     {% for mp in properties %}
                     <tr>
-                        <th scope="row" class="material-props-section__name">{{ mp.property.label_with_unit }}</th>
-                        <td class="material-props-section__value">{% if mp.property.data_type == 'number' %}{{ mp.value|decimal_comma }}{% else %}{{ mp.value }}{% endif %}</td>
-                        <td class="material-props-section__unit">{{ mp.property.unit|default:"—" }}</td>
+                        <th scope="row" class="material-props-section__name">{{ mp.property.base_display_name }}</th>
+                        <td class="material-props-section__value">
+                            {% if mp.property.data_type == 'number' %}
+                            {{ mp.display_value }}
+                            {% elif mp.property.data_type == 'material_link' %}
+                            {% with linked=mp.linked_material %}
+                            {% if linked %}
+                            <a href="{% url 'materials:detail' linked.pk %}">{{ linked.code }} — {{ linked.name }}</a>
+                            {% else %}
+                            {{ mp.value|default:"—" }}
+                            {% endif %}
+                            {% endwith %}
+                            {% elif mp.property.data_type == 'choice' %}
+                            {{ mp.choice_display_value|default:"—" }}
+                            {% else %}
+                            {{ mp.value }}
+                            {% endif %}
+                        </td>
+                        <td class="material-props-section__unit">{{ mp.property.effective_unit }}</td>
+                        <td class="material-props-section__spacer" aria-hidden="true"></td>
                     </tr>
                     {% endfor %}
                 </tbody>

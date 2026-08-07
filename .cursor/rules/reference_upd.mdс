@@ -1,0 +1,126 @@
+---
+description: Проверка и обновление справки (docs/, help, AGENTS.md) перед MR — по diff ветки
+alwaysApply: false
+---
+
+# Актуализация справки перед MR
+
+При **create-mr**, **/create-mr** или явной просьбе «создай MR» — **до `git push`** проверь, что документация соответствует изменениям в ветке.
+
+Скилл `create-mr` задаёт общий workflow (changelog, push, API). **Это правило** — политика справки **этого репозитория**.
+
+## Когда проверять
+
+1. Получи diff ветки относительно target (обычно `develop`):
+   ```bash
+   git diff develop..HEAD --stat
+   git diff develop..HEAD -- . ':!poetry.lock'
+   ```
+2. Если diff пустой — MR не создавай.
+3. Пройди чеклист ниже по затронутым областям.
+
+## Что обновлять (карта код → docs)
+
+| Изменения в | Проверить / обновить |
+|-------------|---------------------|
+| `apps/workspaces/` | `docs/architecture/workspaces-rbac.md`, `docs/architecture/workspaces-permissions.md` |
+| `apps/materials/` | `docs/components/materials.md` |
+| `apps/references/` | `docs/components/references.md` |
+| `apps/structures/` | `docs/components/structures.md` |
+| `apps/samples/` | `docs/components/samples.md` |
+| `apps/scans/` | `docs/components/scans.md` |
+| `apps/composites/` | `docs/components/composites.md` |
+| `apps/core/` (теги, help, фильтры) | `docs/components/core.md` |
+| Новый app или крупный модуль | `docs/components/index.md`, при необходимости новый `docs/components/<name>.md` |
+| `config/`, deploy, `.env.example` | `docs/configuration/`, `docs/examples/deployment.md`, `AGENTS.md` |
+| Архитектура, multi-tenancy, RBAC | `docs/architecture/index.md` |
+| Новые доменные термины | `docs/terms.md` |
+| Поведение для оператора / релиз | `CHANGELOG.md` → `## [Unreleased]` (см. также скилл create-mr) |
+| Соглашения для агентов и CI | `AGENTS.md` |
+| **Любые user-facing изменения** (UI, workflow, права, типы данных) | **`templates/core/help.html`** — см. раздел ниже |
+
+## Страница «Справка» (`/help/`)
+
+In-app справка для операторов: шаблон `templates/core/help.html`, URL `/help/` (`apps/core/views.py` → `help_page`).
+
+**Обязательно** проверять и при необходимости обновлять help, если diff затрагивает то, что видит пользователь на сайте (формы, списки, права, типы свойств, структуры, workspaces, материалы, образцы, сканы, теги).
+
+### Карта diff → раздел help
+
+| Изменения | Раздел help (`#…`) |
+|-----------|-------------------|
+| Workspaces, sidebar, профиль, роли | `#interface` |
+| Справочник свойств, типы данных (`choice`, `material_link`, …) | `#properties` |
+| Материалы, свойства, слои, вкладки, видимость | `#materials` |
+| Типы структур, SQL-таблицы, поля из справочника | `#structures` |
+| Образцы | `#samples` |
+| Сканы, вложения | `#scans` |
+| Фильтры, поиск | `#search` |
+| Теги | `#tags` |
+| Общий workflow данных | `#overview`, `#tips` |
+
+Help — **краткая операторская** версия: без внутренних деталей кода, но с актуальными кнопками, ограничениями и типами полей. Тон и язык — **русский**, как в текущем шаблоне.
+
+### Как проверять help (обязательный минимум)
+
+1. **Прочитать** `templates/core/help.html` и сверить затронутые разделы с diff (не только `docs/`).
+2. **Запустить тест рендера:**
+   ```bash
+   poetry run python manage.py test apps.core.tests.HelpPageTests --verbosity 1
+   ```
+3. **Проверить страницу на работающем сервере** (если доступен локальный `runserver` или staging URL от пользователя):
+   - открыть `http://127.0.0.1:8000/help/` (или переданный base URL);
+   - убедиться, что страница отдаёт 200 и в HTML есть обновлённые формулировки (поиск по ключевым фразам из diff);
+   - при изменении якорей/оглавления — что ссылки «Содержание» ведут на существующие `#id`.
+   - Если сервер недоступен — явно указать в MR: «help: проверено по шаблону + HelpPageTests, без просмотра в браузере».
+
+   Без браузера можно:
+   ```bash
+   curl -s -o NUL -w "%{http_code}" http://127.0.0.1:8000/help/
+   ```
+   и при необходимости `curl -s http://127.0.0.1:8000/help/ | findstr /i "ключевая фраза"`.
+
+4. **После правок help** — при добавлении новых user-facing терминов/разделов расширить `HelpPageTests` (`assertContains` на характерную фразу), чтобы CI ловил регрессии.
+
+### Синхронизация help ↔ docs
+
+- Сначала актуализируй `docs/components/*` (или architecture), затем **сожми** то же для оператора в help — не копируй простыни из docs.
+- Если в help и docs одно и то же утверждение — формулировки не должны противоречить друг другу.
+- Устаревшие блоки в help (например «тип данных — только число/строка/дата», если уже есть «Выбор из списка») **удаляй или обновляй** в том же MR, что и код.
+
+## Когда **не** трогать docs/help
+
+- Только тесты, без изменения контракта поведения.
+- Внутренний рефактор без смены API, URL, прав, UI.
+- Чисто стиль/форматирование.
+- Временные скрипты, `.cursor/` tooling (если пользователь не просил документировать).
+
+Если сомневаешься — кратко уточни у пользователя; по умолчанию для **user-facing** фич обновляй **docs + help + changelog**.
+
+## Как проверять актуальность (docs)
+
+Для каждого затронутого doc-файла:
+
+1. Прочитай текущий текст (не полагайся на память из прошлых сессий).
+2. Сверь с diff: модели, URL, права, workflow, ограничения.
+3. Убери устаревшее (например статус «в реализации» для уже смерженных фич).
+4. **Один факт — одно место:** не дублируй между `CHANGELOG`, `AGENTS.md`, `docs/components/*` и help; changelog — история релиза, docs — описание системы, help — кратко для оператора на `/help/`, AGENTS — для агентов/CI.
+
+Язык: `docs/`, `CHANGELOG.md` и `templates/core/help.html` — **русский** (кроме имён файлов, codename, URL).
+
+## Коммит перед push
+
+Если нужны правки docs или help:
+
+1. Внеси изменения в файлы из карты и/или `templates/core/help.html`.
+2. Закоммить на **той же ветке**, что и код (отдельный commit `docs: ...` допустим).
+3. Затем push и create-mr.
+
+## Чеклист в описании MR
+
+В шаблоне GitLab отметь **Documentation updated**, только если docs/help/changelog/AGENTS реально обновлены или изменений для справки не было (тогда в Summary одной строкой: «docs/help: без изменений — test-only / internal»; если help не открывали в браузере — укажи это явно).
+
+## Связанные команды
+
+- `/new-docs <module>` — глубокая документация модуля (если фича большая и component-doc не хватает).
+- `AGENTS.md` — quick start, architecture summary для агентов.

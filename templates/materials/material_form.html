@@ -7,15 +7,35 @@
 
 {% block content %}
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
+<link href="{% static 'css/choice_picker.css' %}?v={{ app_version }}-dict1" rel="stylesheet">
 {% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}" rel="stylesheet">{% endif %}
 <div class="card mb-4 sticky-form-page">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h1 class="h4 mb-0">{% if material %}Редактирование материала{% else %}Новый материал{% endif %}</h1>
+        {% if show_create_based_on %}
+        <button type="button"
+                id="create-based-on-btn"
+                class="btn btn-outline-primary btn-sm"
+                data-create-url="{% url 'materials:create' %}">
+            Создать на основе
+        </button>
+        {% endif %}
     </div>
     <div class="card-body">
         <form method="post" novalidate id="material-form">
             {% csrf_token %}
             <input type="hidden" name="_apply_struct_type" value="" id="apply-struct-type-flag">
+            {% if template_material %}
+            <input type="hidden" name="based_on" value="{{ template_material.pk }}">
+            {% endif %}
+
+            {% if template_material %}
+            <div class="alert alert-info" role="status">
+                Создание на основе материала
+                <strong>{{ template_material.code }} — {{ template_material.name }}</strong>.
+                <a href="{% url 'materials:detail' template_material.pk %}">Открыть материал</a>
+            </div>
+            {% endif %}
 
             {% include 'includes/form_validation_summary.html' %}
 
@@ -63,6 +83,67 @@
             </div>
             {% endif %}
 
+            {% if form.dictionary_bound_fields %}
+            <div class="card mb-4" id="material-dictionary-fields" data-dictionary-fields>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2">
+                    <span>Справочные свойства</span>
+                    <div class="dropdown">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary"
+                                id="add-dictionary-field-btn"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-controls="add-dictionary-field-menu">
+                            Добавить
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" id="add-dictionary-field-menu">
+                            {% for field in form.dictionary_bound_fields %}
+                            <li>
+                                <button type="button"
+                                        class="dropdown-item"
+                                        data-dictionary-add="{{ field.name }}">
+                                    {{ field.label }}
+                                </button>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if 'Справочные свойства' in form_validation_sections %}
+                    <div class="alert alert-danger">Проверьте справочные свойства ниже.</div>
+                    {% endif %}
+                    <p class="text-muted small mb-3" data-dictionary-empty{% if form.has_active_dictionary_fields %} hidden{% endif %}>
+                        Не заданы — нажмите «Добавить», чтобы выбрать производителя, доступность или технологию.
+                    </p>
+                    {% for field in form.dictionary_bound_fields %}
+                    {% with has_value=field.value has_errors=field.errors %}
+                    <div class="material-dictionary-row mb-3{% if not has_value and not has_errors %} d-none{% endif %}"
+                         data-dictionary-row="{{ field.name }}"
+                         {% if has_value or has_errors %}data-dictionary-active="1"{% endif %}>
+                        <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                            <label for="{{ field.id_for_label }}" class="form-label mb-0">{{ field.label }}</label>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger"
+                                    data-dictionary-remove="{{ field.name }}"
+                                    title="Убрать поле">
+                                Убрать
+                            </button>
+                        </div>
+                        {{ field }}
+                        {% if field.errors %}
+                        <div class="invalid-feedback d-block">{{ field.errors }}</div>
+                        {% endif %}
+                        {% if field.help_text %}
+                        <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
+                    </div>
+                    {% endwith %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <div class="card mb-4">
                 <div class="card-header">Параметры структуры</div>
                 <div class="card-body">
@@ -72,7 +153,10 @@
                     {% if form.structure_bound_fields %}
                     {% for field in form.structure_bound_fields %}
                     <div class="mb-3">
-                        {% if field.field.widget.input_type == 'checkbox' %}
+                        {% if field.structure_field %}
+                        <label class="form-label">{{ field.value.label }}</label>
+                        {% include 'includes/structure_decimal_value_fields.html' with group=field %}
+                        {% elif field.field.widget.input_type == 'checkbox' %}
                         <div class="form-check">
                             {{ field }}
                             <label for="{{ field.id_for_label }}" class="form-check-label">{{ field.label }}</label>
@@ -113,7 +197,7 @@
                                 <tr>
                                     <th scope="col">Свойство</th>
                                     <th scope="col">Значение</th>
-                                    <th scope="col" class="material-properties-table__unit-col">Единица</th>
+                                    <th scope="col" class="material-properties-table__unit-col">Ед.</th>
                                     <th scope="col" class="text-end">Действия</th>
                                 </tr>
                             </thead>
@@ -134,8 +218,10 @@
                         <tr class="property-form-row">
                             {% for hidden in property_form.hidden_fields %}{{ hidden }}{% endfor %}
                             <th scope="row" class="material-props-section__name">—</th>
-                            <td class="material-props-section__value">{{ property_form.value }}</td>
-                            <td class="material-props-section__unit">—</td>
+                            <td class="material-props-section__value">
+                                {% include 'includes/property_number_value_fields.html' %}
+                            </td>
+                            <td class="material-props-section__unit"></td>
                             <td class="text-end text-nowrap">
                                 {% if formset.can_delete %}
                                 <span class="visually-hidden">{{ property_form.DELETE }}</span>
@@ -271,12 +357,19 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/property_number_value.js' %}"></script>
 <script src="{% static 'js/material_form.js' %}"></script>
+{% if show_create_based_on %}
+<script src="{% static 'js/material_create_based_on.js' %}"></script>
+{% endif %}
 <script src="{% static 'js/reference_properties_picker.js' %}"></script>
 <script src="{% static 'js/reference_materials_picker.js' %}"></script>
 <script src="{% static 'js/reference_structure_types_picker.js' %}"></script>
 <script src="{% static 'js/structure_type_picker_field.js' %}"></script>
 <script src="{% static 'js/material_picker_fields.js' %}"></script>
+<script src="{% static 'js/choice_picker_fields.js' %}"></script>
+<script src="{% static 'js/material_dictionary_fields.js' %}?v={{ app_version }}-dict1"></script>
+<script src="{% static 'js/property_number_value.js' %}"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
 <script src="{% static 'js/composite_layer_diagram_live.js' %}"></script>
 <script src="{% static 'js/composite_layers_formset.js' %}"></script>

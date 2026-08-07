@@ -1,19 +1,22 @@
 from django import forms
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
+from django.template.response import TemplateResponse
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.core.bulk import parse_bulk_ids
 from apps.core.creator import assign_creator
 from apps.core.file_download import build_file_download_response
 
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
     CREATOR_SEARCH_SCOPE,
-    DEFAULT_CREATOR_FILTER,
+    CREATOR_WITH_LABEL_FILTER,
     OBJECT_TYPE_SEARCH_SCOPE,
     TAG_SEARCH_SCOPE,
     UPLOADED_BY_CREATOR_FILTER,
@@ -23,12 +26,18 @@ from apps.core.list_filters import (
 from apps.materials.models import Material
 from apps.materials.structure_display import get_material_structure_context
 from apps.core.property_form_display import enrich_property_form_display
-from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyFormSet
+from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyFormSet, SampleTagsForm
 from apps.samples.models import Sample, SampleAttachment
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.property_mapping import reference_properties_for_picker
 from apps.workspaces.mixins import AppViewMixin
-from apps.workspaces.services import materials_visible_in, samples_in_workspace
+from apps.workspaces.services import materials_visible_in, samples_in_workspace, samples_visible_in
+
+
+def sample_is_editable_in_workspace(sample, workspace) -> bool:
+    if sample is None or workspace is None:
+        return False
+    return sample.workspace_id == workspace.pk
 
 
 def warn_extra_sample_properties(request, sample):
@@ -97,7 +106,11 @@ def _split_sample_property_formset(formset, material_property_ids):
 class SampleFormsetMixin:
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs['workspace'] = self.request.active_workspace
+        instance = getattr(self, 'object', None)
+        if instance is not None and getattr(instance, 'workspace_id', None):
+            kwargs['workspace'] = instance.workspace
+        else:
+            kwargs['workspace'] = self.request.active_workspace
         return kwargs
 
     def get_formset(self):
@@ -212,7 +225,7 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
 
     def get_queryset(self):
         return self.filter_queryset(
-            samples_in_workspace(self.request.active_workspace)
+            samples_visible_in(self.request.active_workspace)
             .select_related('material', 'material__struct_type', 'created_by_user')
             .prefetch_related('tags')
         )
@@ -226,7 +239,7 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
                 Sample.OBJECT_TYPES,
                 'object_type',
             ),
-            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
+            CREATOR_SEARCH_SCOPE: CREATOR_WITH_LABEL_FILTER,
         }
 
 
@@ -238,14 +251,21 @@ class SampleDetailView(AppViewMixin, DetailView):
 
     def get_queryset(self):
         return (
-            samples_in_workspace(self.request.active_workspace)
+            samples_visible_in(self.request.active_workspace)
             .select_related('material', 'material__struct_type', 'created_by_user')
             .prefetch_related('tags')
         )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        active_ws = self.request.active_workspace
         context['active_tab'] = self.active_tab
+        context['sample_is_editable'] = sample_is_editable_in_workspace(self.object, active_ws)
+        if context['sample_is_editable']:
+            context['tags_form'] = SampleTagsForm(
+                instance=self.object,
+                workspace=self.object.workspace or active_ws,
+            )
         context['scan_count'] = self.object.scans.count()
         context['attachment_count'] = self.object.attachments.count()
         context['scans'] = self.object.scans.all()[:5]
@@ -266,7 +286,50 @@ class SampleDetailView(AppViewMixin, DetailView):
             item for item in sample_properties if item.property_id not in material_property_ids
         ]
         context.update(get_material_structure_context(self.object.material))
+        from apps.core.bookmarks import bookmark_context
+        from apps.core.models import BookmarkEntityType
+
+        context.update(
+            bookmark_context(
+                self.request,
+                entity_type=BookmarkEntityType.SAMPLE,
+                entity=self.object,
+            )
+        )
         return context
+
+
+class SampleTagsUpdateView(AppViewMixin, UpdateView):
+    """Сохранение тегов с карточки образца без полной формы редактирования."""
+
+    model = Sample
+    form_class = SampleTagsForm
+    http_method_names = ['post']
+    context_object_name = 'sample'
+
+    def get_queryset(self):
+        return samples_visible_in(self.request.active_workspace)
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not sample_is_editable_in_workspace(obj, self.request.active_workspace):
+            raise PermissionDenied
+        return obj
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['workspace'] = self.object.workspace or self.request.active_workspace
+        return kwargs
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, 'Теги образца сохранены.')
+        return redirect('samples:detail', pk=self.object.pk)
+
+    def form_invalid(self, form):
+        for error in form.errors.get('tag_names', form.non_field_errors()):
+            messages.error(self.request, error)
+        return redirect('samples:detail', pk=self.object.pk)
 
 
 class SampleCreateView(AppViewMixin, SampleFormsetMixin, CreateView):
@@ -307,6 +370,9 @@ class SampleUpdateView(AppViewMixin, SampleFormsetMixin, UpdateView):
     def get_success_url(self):
         return reverse('samples:detail', kwargs={'pk': self.object.pk})
 
+    def get_queryset(self):
+        return samples_in_workspace(self.request.active_workspace)
+
 
 class SampleDeleteView(AppViewMixin, DeleteView):
     model = Sample
@@ -323,12 +389,63 @@ class SampleDeleteView(AppViewMixin, DeleteView):
         return samples_in_workspace(self.request.active_workspace)
 
 
+class SampleBulkDeleteView(AppViewMixin, View):
+    template_name = 'includes/bulk_confirm_delete.html'
+    max_items = 100
+
+    def get(self, request, *args, **kwargs):
+        return redirect('samples:list')
+
+    def post(self, request, *args, **kwargs):
+        ids = parse_bulk_ids(request, max_items=self.max_items)
+        if not ids:
+            messages.warning(request, 'Не выбрано ни одного образца.')
+            return redirect('samples:list')
+
+        workspace = request.active_workspace
+        samples = list(
+            samples_in_workspace(workspace).filter(pk__in=ids).select_related('material')
+        )
+        by_pk = {str(s.pk): s for s in samples}
+        deletable = [by_pk[i] for i in ids if i in by_pk]
+
+        if request.POST.get('confirm') != '1':
+            return TemplateResponse(
+                request,
+                self.template_name,
+                {
+                    'page_title': 'Удаление выбранных образцов',
+                    'warning_text': (
+                        f'Будут удалены <strong>{len(deletable)}</strong> образец(ов) '
+                        'вместе со сканами и вложениями.'
+                    ),
+                    'deletable': [
+                        {'label': s.name, 'code': s.code} for s in deletable
+                    ],
+                    'blocked': [],
+                    'ids': [str(s.pk) for s in deletable],
+                    'cancel_url': reverse('samples:list'),
+                },
+            )
+
+        if not deletable:
+            messages.warning(request, 'Нет образцов для удаления.')
+            return redirect('samples:list')
+
+        deleted = 0
+        for sample in deletable:
+            sample.delete()
+            deleted += 1
+        messages.success(request, f'Удалено образцов: {deleted}.')
+        return redirect('samples:list')
+
+
 class SampleAttachmentMixin:
     active_tab = 'attachments'
 
     def dispatch(self, request, *args, **kwargs):
         self.sample = get_object_or_404(
-            samples_in_workspace(request.active_workspace).select_related('material'),
+            samples_visible_in(request.active_workspace).select_related('material'),
             pk=kwargs['sample_pk'],
         )
         return super().dispatch(request, *args, **kwargs)

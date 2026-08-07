@@ -1,12 +1,18 @@
 from django.urls import path
 
 from apps.materials.views import (
-    MaterialCloneView,
+    MaterialBulkDeleteView,
     MaterialCreateView,
     MaterialDeleteView,
     MaterialDetailView,
+    MaterialExportView,
+    MaterialImportExampleView,
+    MaterialImportReviewView,
+    MaterialImportView,
+    MaterialLinkView,
     MaterialListView,
     MaterialPropertiesJSONView,
+    MaterialTagsUpdateView,
     MaterialUpdateView,
     MaterialVisibilityView,
 )
@@ -15,9 +21,15 @@ app_name = 'materials'
 
 urlpatterns = [
     path('', MaterialListView.as_view(), name='list'),
+    path('export/', MaterialExportView.as_view(), name='export'),
     path('create/', MaterialCreateView.as_view(), name='create'),
-    path('<uuid:pk>/clone/', MaterialCloneView.as_view(), name='clone'),
+    path('import/', MaterialImportView.as_view(), name='import'),
+    path('import/review/', MaterialImportReviewView.as_view(), name='import_review'),
+    path('import/example.csv', MaterialImportExampleView.as_view(), name='import_example'),
+    path('bulk-delete/', MaterialBulkDeleteView.as_view(), name='bulk_delete'),
+    path('<uuid:pk>/link/', MaterialLinkView.as_view(), name='link'),
     path('<uuid:pk>/edit/', MaterialUpdateView.as_view(), name='edit'),
+    path('<uuid:pk>/tags/', MaterialTagsUpdateView.as_view(), name='tags'),
     path('<uuid:pk>/delete/', MaterialDeleteView.as_view(), name='delete'),
     path('<uuid:pk>/visibility/', MaterialVisibilityView.as_view(), name='visibility'),
     path('<uuid:pk>/properties.json/', MaterialPropertiesJSONView.as_view(), name='properties_json'),

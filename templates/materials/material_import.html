@@ -1,0 +1,900 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Импорт материалов — База композитов{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-tags4" rel="stylesheet">
+<link href="{% static 'css/reference_properties_picker.css' %}?v={{ app_version }}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4{% if step == 'mapping' %} import-map-page{% endif %}">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h1 class="h4 mb-0">Импорт материалов</h1>
+        <div class="d-flex flex-wrap gap-2">
+            {% if has_staged_file %}
+            <a href="{% url 'materials:import' %}?cancel=1" class="btn btn-outline-danger btn-sm">Отменить импорт</a>
+            {% endif %}
+            <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
+        </div>
+    </div>
+    <div class="card-body">
+        {% include 'materials/includes/import_debug_undo.html' %}
+        {% if step == 'upload' or not has_staged_file %}
+        <p class="text-muted mb-3">
+            Гибкий импорт в пространство <strong>{{ workspace.name }}</strong>:
+            сопоставление колонок, черновик с проверкой сомнительных значений, запись только после подтверждения.
+        </p>
+        {% endif %}
+
+        <div class="import-wizard-steps mb-4"
+             id="import-wizard-progress"
+             role="progressbar"
+             aria-valuemin="1"
+             aria-valuemax="{{ wizard_step_total }}"
+             aria-valuenow="{{ wizard_step_num }}"
+             aria-label="Прогресс мастера импорта: {{ wizard_step_label }}">
+            <ol class="import-wizard-steps__list">
+                {% for item in wizard_steps %}
+                <li class="import-wizard-steps__item{% if forloop.counter < wizard_step_num %} is-done{% elif forloop.counter == wizard_step_num %} is-current{% endif %}{% if item.status == 'error' %} is-error{% elif item.status == 'warning' %} is-warning{% endif %}">
+                    {% if not forloop.first %}
+                    <span class="import-wizard-steps__line" aria-hidden="true"></span>
+                    {% endif %}
+                    <span class="import-wizard-steps__dot" aria-hidden="true">
+                        {% if item.status == 'error' %}!
+                        {% elif item.status == 'warning' %}!
+                        {% elif forloop.counter < wizard_step_num %}✓
+                        {% else %}{{ forloop.counter }}{% endif %}
+                    </span>
+                    <span class="import-wizard-steps__label">{{ item.label }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+        </div>
+
+        {% if step == 'upload' or not has_staged_file %}
+        {% if has_staged_file %}
+        <div class="alert alert-secondary py-2 small">
+            Сейчас загружен файл <strong>{{ staged_filename }}</strong>.
+            Выберите другой файл, чтобы заменить его, или
+            <a href="{% url 'materials:import' %}?step=configure">вернитесь к настройке листа</a>.
+        </div>
+        {% endif %}
+        <form method="post" enctype="multipart/form-data" novalidate data-native-file-upload="1">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="upload">
+            {% include 'materials/includes/import_wizard_nav.html' with hide_back=True forward_label='Вперёд' hint='Выберите файл и нажмите «Вперёд».' %}
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.file.id_for_label }}">
+                    {{ form.file.label }} <span class="text-danger">*</span>
+                    <span class="import-help__trigger" tabindex="0" aria-label="Подсказка по файлу">
+                        <span class="import-help__mark" aria-hidden="true">?</span>
+                        <span class="import-help__tip import-help__tip--start" role="tooltip">
+                            {% if form.file.help_text %}{{ form.file.help_text }}{% endif %}
+                            {% if form.file.help_text %}<br>{% endif %}
+                            Для Excel-примера: строка групп = <strong>1</strong>, строка заголовков = <strong>2</strong>,
+                            «Наименование» → «Название», «Марка» → теги. Поля вроде «Плотность пов» сопоставьте
+                            с полями выбранного типа структуры (если таких полей нет — пропустите или заведите в типе).
+                        </span>
+                    </span>
+                </label>
+                {{ form.file }}
+                {% for error in form.file.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </form>
+        <p class="small text-muted mt-3 mb-0">
+            Примеры для проверки:
+            <a href="{% url 'materials:import_example' %}">большая таблица Excel</a>
+            ·
+            <a href="{% url 'materials:import_example' %}?kind=csv">то же CSV</a>
+            ·
+            <a href="{% url 'materials:import_example' %}?kind=cli">формат CLI</a>
+        </p>
+        {% endif %}
+
+        {% if has_staged_file and step == 'configure' %}
+        <p class="small text-muted mb-2">Файл: <strong>{{ staged_filename }}</strong></p>
+        <form method="post" class="import-configure-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="configure">
+            {% include 'materials/includes/import_wizard_nav.html' %}
+
+            <div class="import-schema" aria-label="Схема: файл и база данных">
+                <section class="import-schema__pane import-schema__pane--file" aria-labelledby="import-schema-file-title">
+                    <header class="import-schema__pane-head">
+                        <div class="import-schema__pane-eyebrow">Источник</div>
+                        <h2 class="import-schema__pane-title" id="import-schema-file-title">Файл</h2>
+                    </header>
+
+                    <div class="import-schema__controls">
+                        {% if sheet_names %}
+                        <div class="import-schema__control import-schema__control--sheet">
+                            <label class="form-label" for="import-sheet">
+                                Лист
+                                <span class="import-help__trigger" tabindex="0" aria-label="Подсказка">
+                                    <span class="import-help__mark" aria-hidden="true">?</span>
+                                    <span class="import-help__tip" role="tooltip">
+                                        Выберите лист Excel. Схема таблицы обновится автоматически.
+                                    </span>
+                                </span>
+                            </label>
+                            <select name="sheet" id="import-sheet" class="form-select form-select-sm" data-import-sheet-refresh="1">
+                                {% for name in sheet_names %}
+                                <option value="{{ name }}"{% if config.sheet == name %} selected{% endif %}>{{ name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+
+                        <div class="import-schema__stats" aria-label="Статистика по листу">
+                            <div class="import-schema__stats-label">Статистика по листу</div>
+                            {% if layout_schema %}
+                            <ul class="import-schema__stats-list">
+                                <li>Заголовки · строка {{ layout_schema.header_row }}</li>
+                                {% if layout_schema.has_groups %}
+                                <li>Группы · строка {{ layout_schema.group_row }}</li>
+                                {% else %}
+                                <li>Групп колонок нет</li>
+                                {% endif %}
+                                <li>
+                                    Колонок:
+                                    {{ layout_schema.cols_shown }}{% if layout_schema.cols_total > layout_schema.cols_shown %}/{{ layout_schema.cols_total }}{% endif %}
+                                </li>
+                                {% if layout_schema.data_rows_shown %}
+                                <li>Строк данных: {{ layout_schema.data_rows_shown }}</li>
+                                {% endif %}
+                            </ul>
+                            {% elif layout_hint %}
+                            <p class="import-schema__stats-fallback mb-0">{{ layout_hint }}</p>
+                            {% else %}
+                            <p class="import-schema__stats-fallback mb-0 text-muted">Выберите лист, чтобы увидеть разметку.</p>
+                            {% endif %}
+                        </div>
+
+                        {% if show_header_layout_fields %}
+                        <div class="import-schema__control import-schema__control--header">
+                            <label class="form-label" for="import-header-row">
+                                Строка заголовков
+                                <span class="import-help__trigger" tabindex="0" aria-label="Подсказка">
+                                    <span class="import-help__mark" aria-hidden="true">?</span>
+                                    <span class="import-help__tip" role="tooltip">
+                                        Для большой таблицы Excel часто <strong>2</strong> (Наименование, Марка…).
+                                    </span>
+                                </span>
+                            </label>
+                            <input type="number" min="1" name="header_row" id="import-header-row"
+                                   class="form-control form-control-sm" data-import-layout-refresh="1"
+                                   value="{{ layout_form_header_row }}">
+                        </div>
+                        <div class="import-schema__control import-schema__control--group">
+                            <label class="form-label" for="import-group-row">
+                                Строка групп
+                                <span class="import-help__trigger" tabindex="0" aria-label="Подсказка">
+                                    <span class="import-help__mark" aria-hidden="true">?</span>
+                                    <span class="import-help__tip" role="tooltip">
+                                        Если сверху есть группы колонок — обычно <strong>1</strong> («Ткань / Волокно…»).
+                                        <strong>0</strong> — без строки групп.
+                                    </span>
+                                </span>
+                            </label>
+                            <input type="number" min="0" name="group_row" id="import-group-row"
+                                   class="form-control form-control-sm" data-import-layout-refresh="1"
+                                   value="{{ layout_form_group_row }}">
+                        </div>
+                        {% else %}
+                        <input type="hidden" name="header_row" value="1">
+                        <input type="hidden" name="group_row" value="0">
+                        {% endif %}
+                    </div>
+
+                    <div class="import-schema__table">
+                        <div class="import-schema__table-label">
+                            Таблица
+                            <span class="import-help__trigger" tabindex="0" aria-label="Подсказка по таблице">
+                                <span class="import-help__mark" aria-hidden="true">?</span>
+                                <span class="import-help__tip import-help__tip--start" role="tooltip">
+                                    {% if layout_schema and layout_schema.has_groups %}
+                                    Сначала строка <strong>групп</strong>, затем строка <strong>заголовков</strong>, ниже — материалы.
+                                    {% else %}
+                                    Строка <strong>заголовков</strong> колонок, ниже — данные материалов.
+                                    {% endif %}
+                                    Схема обновляется при смене листа и номеров строк.
+                                    {% if layout_hint %}<br>{{ layout_hint }}{% endif %}
+                                </span>
+                            </span>
+                        </div>
+                        {% if layout_schema %}
+                        {% include 'materials/includes/import_layout_schema.html' %}
+                        {% else %}
+                        <p class="import-schema__table-empty mb-0 text-muted">Превью шапки появится после выбора листа.</p>
+                        {% endif %}
+                    </div>
+                </section>
+
+                <div class="import-schema__arrow" aria-hidden="true">
+                    <span class="import-schema__arrow-glyph">→</span>
+                </div>
+
+                <section class="import-schema__pane import-schema__pane--db{% if show_structure_type_error %} is-invalid{% endif %}"
+                         aria-labelledby="import-schema-db-title">
+                    <header class="import-schema__pane-head">
+                        <div class="import-schema__pane-eyebrow">Назначение</div>
+                        <h2 class="import-schema__pane-title" id="import-schema-db-title">База данных</h2>
+                    </header>
+
+                    <div class="import-schema__db-stack">
+                        <div class="import-schema__control import-schema__control--structure">
+                            <label class="form-label" for="import-structure-type">
+                                Структура <span class="text-danger">*</span>
+                                <span class="import-help__trigger" tabindex="0" aria-label="Подсказка по типу структуры">
+                                    <span class="import-help__mark" aria-hidden="true">?</span>
+                                    <span class="import-help__tip import-help__tip--end" role="tooltip">
+                                        Колонки файла затем сопоставятся с полями этого типа.
+                                    </span>
+                                </span>
+                            </label>
+                            {% if structure_types %}
+                            <select name="structure_type_id"
+                                    id="import-structure-type"
+                                    class="form-select structure-type-picker-select{% if show_structure_type_error %} is-invalid{% endif %}"
+                                    data-structure-type-picker="true"
+                                    data-allow-empty="false"
+                                    required>
+                                <option value="">— выберите тип —</option>
+                                {% for st in structure_types %}
+                                <option value="{{ st.pk }}"{% if config.structure_type_id == st.pk|stringformat:"s" %} selected{% endif %}>{{ st.name }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <div class="alert alert-warning py-2 small mb-0">
+                                Нет активных типов структуры с созданной таблицей.
+                                <a href="{% url 'structures:select_type' %}">Открыть типы структур</a>
+                                или <a href="{% url 'structures:type_create' %}">создайте новый</a>.
+                            </div>
+                            {% endif %}
+                            {% if show_structure_type_error %}
+                            <div class="invalid-feedback d-block">Выберите тип структуры — без него нельзя продолжить.</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="import-schema__control import-schema__control--dicts">
+                            <div class="form-check mb-0">
+                                <input type="checkbox" class="form-check-input" name="create_missing_dictionaries"
+                                       value="1" id="import-create-missing-dictionaries"
+                                       {% if config.create_missing_dictionaries %}checked{% endif %}>
+                                <label class="form-check-label" for="import-create-missing-dictionaries">
+                                    Использовать справочники
+                                    <span class="import-help__trigger" tabindex="0" aria-label="Подсказка">
+                                        <span class="import-help__mark" aria-hidden="true">?</span>
+                                        <span class="import-help__tip import-help__tip--start" role="tooltip">
+                                            Если включено: неизвестные значения производителя / доступности / технологии
+                                            создаются в справочнике (с проверкой дубликатов). В отчёте проверки будет список.
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                            <p class="import-schema__control-note mb-0">
+                                Создавать отсутствующие значения при импорте
+                            </p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </form>
+        {% if structure_types %}
+        {% include 'includes/reference_structure_types_modal.html' %}
+        {% endif %}
+        {% endif %}
+
+        {% if has_staged_file and step == 'mapping' and wide_table %}
+        <p class="small text-muted mb-3">
+            Файл: <strong>{{ staged_filename }}</strong>
+            {% if wide_table.sheet_name %} · лист «{{ wide_table.sheet_name }}»{% endif %}
+            · заголовок, строка {{ config.header_row }}{% if config.group_row %}, группы, строка {{ config.group_row }}{% endif %}
+            · строк: {{ wide_table.rows|length }}
+        </p>
+
+        <div class="import-wizard-nav-bar mb-3" role="region" aria-label="Навигация сопоставления">
+            <nav class="import-wizard-nav">
+                <div class="import-wizard-nav__back">
+                    {% if wizard_back_url %}
+                    <a href="{{ wizard_back_url }}" class="btn btn-outline-secondary import-wizard-nav__back-btn">
+                        ← {{ wizard_back_label|default:"Назад" }}
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="import-wizard-nav__forward d-flex flex-wrap gap-2">
+                    <button type="submit"
+                            form="import-map-form"
+                            name="action"
+                            value="map_preview"
+                            class="btn btn-primary import-map-continue import-wizard-nav__forward-btn"
+                            {% if duplicate_mapping_targets or missing_required_targets %}disabled{% endif %}>
+                        {{ wizard_forward_label|default:"Вперёд" }} →
+                    </button>
+                    <button type="submit"
+                            form="import-map-form"
+                            name="action"
+                            value="map_iterate"
+                            class="btn btn-outline-primary import-map-continue"
+                            {% if duplicate_mapping_targets or missing_required_targets %}disabled{% endif %}>
+                        Построчно
+                    </button>
+                </div>
+            </nav>
+        </div>
+
+        {% include 'materials/includes/import_templates_load_form.html' %}
+        {% include 'materials/includes/import_templates_panel.html' %}
+
+        {{ file_columns|json_script:"import-file-columns" }}
+        <form method="post"
+              id="import-map-form"
+              class="import-map-constructor-form"
+              data-required-targets="{% for target, label in required_import_targets %}{{ target }}{% if not forloop.last %},{% endif %}{% endfor %}">
+            {% csrf_token %}
+
+            <div class="alert alert-danger py-2 small{% if not missing_required_targets %} d-none{% endif %}"
+             id="import-missing-required"
+             role="alert">
+            <div class="fw-semibold mb-1">Нельзя продолжить: не сопоставлено обязательное поле</div>
+            <p class="mb-1">
+                Назначьте колонку файла на поле
+                {% for target, label in missing_required_targets %}
+                «{{ label }}»{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                «Название»
+                {% endfor %}
+                — иначе материалы не создать.
+            </p>
+            <ul class="mb-0 ps-3" id="import-missing-required-list">
+                {% for target, label in missing_required_targets %}
+                <li data-target="{{ target }}">{{ label }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+            <div class="alert alert-danger py-2 small{% if not duplicate_mapping_targets %} d-none{% endif %}"
+             id="import-duplicate-targets"
+             role="alert">
+            <div class="fw-semibold mb-1">Нельзя продолжить: одна колонка назначена нескольким полям</div>
+            <p class="mb-1">Каждую колонку файла можно назначить только одному полю.</p>
+            <ul class="mb-0 ps-3" id="import-duplicate-list">
+                {% for item in duplicate_mapping_targets %}
+                <li data-target="{{ item.target }}">
+                    <code>{{ item.target }}</code>:
+                    {% for col in item.columns %}«{{ col }}»{% if not forloop.last %}, {% endif %}{% endfor %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+            {# Hidden column→target inputs synced by JS from field rows #}
+            <div id="import-map-hidden-inputs" class="d-none" aria-hidden="true">
+                {% for item in mapping_rows %}
+                <input type="hidden" name="map_{{ item.column.index }}" value="{{ item.target }}"
+                       data-map-index="{{ item.column.index }}">
+                <input type="hidden" name="parse_{{ item.column.index }}" value="{{ item.parse }}"
+                       data-parse-index="{{ item.column.index }}">
+                {% endfor %}
+            </div>
+            <div id="import-map-tag-columns" class="d-none" aria-hidden="true">
+                {% for item in field_mapping_rows %}
+                {% if item.is_tag and item.column_index != None %}
+                <input type="hidden" name="tag_col" value="{{ item.column_index }}">
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <div class="import-map-constructor mb-3">
+                <section class="import-map-panel import-map-constructor__main" aria-label="Сопоставление полей">
+                    <div class="import-map-panel__head">
+                        <div>
+                            <div class="import-map-panel__title">Поля для записи</div>
+                            <p class="import-map-panel__hint mb-0">Сюда кладутся колонки из файла →</p>
+                        </div>
+                        <div class="import-map-constructor__toolbar">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="import-map-clear-row">
+                                Очистить строку
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="import-map-reset-all">
+                                Сбросить всё
+                            </button>
+                        </div>
+                    </div>
+                    <div class="import-map-table-wrap">
+                        <table class="table table-sm align-middle mb-0 import-map-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Поле</th>
+                                    <th scope="col">Колонка файла</th>
+                                    <th scope="col" class="import-map-table__parse-col">Тип поля</th>
+                                    <th scope="col" class="import-map-table__actions-col"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="import-map-section"
+                                   data-map-section="primary"
+                                   id="import-map-section-primary">
+                                <tr class="import-map-section__header">
+                                    <th scope="colgroup" colspan="4">
+                                        <button type="button"
+                                                class="import-map-section__toggle"
+                                                data-map-section-toggle
+                                                aria-expanded="true"
+                                                aria-controls="import-map-field-rows-primary">
+                                            <span class="import-map-section__chevron" aria-hidden="true"></span>
+                                            <span class="import-map-section__title">Из структуры</span>
+                                            <span class="badge text-bg-light border import-map-section__count"
+                                                  data-map-section-count>0</span>
+                                        </button>
+                                    </th>
+                                </tr>
+                                {% for item in field_mapping_rows %}
+                                {% if item.is_primary %}
+                                {% include 'materials/includes/import_map_field_row.html' with item=item %}
+                                {% endif %}
+                                {% endfor %}
+                            </tbody>
+                            <tbody class="import-map-section"
+                                   data-map-section="material"
+                                   id="import-map-section-material">
+                                <tr class="import-map-section__header">
+                                    <th scope="colgroup" colspan="4">
+                                        <div class="import-map-section__bar">
+                                            <button type="button"
+                                                    class="import-map-section__toggle"
+                                                    data-map-section-toggle
+                                                    aria-expanded="true"
+                                                    aria-controls="import-map-field-rows-material">
+                                                <span class="import-map-section__chevron" aria-hidden="true"></span>
+                                                <span class="import-map-section__title">Справочники</span>
+                                                <span class="badge text-bg-light border import-map-section__count"
+                                                      data-map-section-count>0</span>
+                                            </button>
+                                            <div class="dropdown" id="import-map-addon-dropdown">
+                                                <button type="button"
+                                                        class="btn btn-outline-primary btn-sm dropdown-toggle import-map-section__add"
+                                                        id="import-map-add-field"
+                                                        data-bs-toggle="dropdown"
+                                                        data-bs-auto-close="outside"
+                                                        aria-expanded="false"
+                                                        aria-controls="import-map-addon-menu"
+                                                        {% if not addon_catalog_groups %}disabled{% endif %}>
+                                                    Поле материала
+                                                </button>
+                                                <div class="dropdown-menu dropdown-menu-end import-map-addon-menu"
+                                                     id="import-map-addon-menu"
+                                                     aria-labelledby="import-map-add-field">
+                                                    <div class="import-map-addon-menu__search px-2 pb-2">
+                                                        <input type="search"
+                                                               class="form-control form-control-sm"
+                                                               id="import-map-addon-search"
+                                                               placeholder="Поиск…"
+                                                               autocomplete="off"
+                                                               aria-label="Поиск поля материала">
+                                                    </div>
+                                                    <div class="import-map-addon-menu__body" id="import-map-addon-catalog">
+                                                        {% for group in addon_catalog_groups %}
+                                                        <section class="import-map-addon-menu__group" data-addon-group="{{ group.id }}">
+                                                            <h3 class="dropdown-header import-map-addon-menu__group-title">{{ group.label }}</h3>
+                                                            {% for item in group.items %}
+                                                            <button type="button"
+                                                                    class="dropdown-item import-map-addon-item"
+                                                                    data-target="{{ item.target }}"
+                                                                    data-label="{{ item.label|escape }}"
+                                                                    data-catalog-label="{{ item.label|lower }}">
+                                                                {{ item.label }}
+                                                            </button>
+                                                            {% endfor %}
+                                                        </section>
+                                                        {% empty %}
+                                                        <div class="dropdown-item-text text-muted small px-3 py-2">
+                                                            Все поля уже добавлены
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </th>
+                                </tr>
+                                {% for item in field_mapping_rows %}
+                                {% if item.is_material %}
+                                {% include 'materials/includes/import_map_field_row.html' with item=item %}
+                                {% endif %}
+                                {% endfor %}
+                                <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_material %} d-none{% endif %}{% endfor %}"
+                                    data-map-section-empty>
+                                    <td colspan="4" class="text-muted small">
+                                        Нет полей справочников — нажмите «Поле материала».
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody class="import-map-section"
+                                   data-map-section="addon"
+                                   id="import-map-section-addon">
+                                <tr class="import-map-section__header">
+                                    <th scope="colgroup" colspan="4">
+                                        <div class="import-map-section__bar">
+                                            <button type="button"
+                                                    class="import-map-section__toggle"
+                                                    data-map-section-toggle
+                                                    aria-expanded="true"
+                                                    aria-controls="import-map-field-rows-addon">
+                                                <span class="import-map-section__chevron" aria-hidden="true"></span>
+                                                <span class="import-map-section__title">Дополнительные свойства</span>
+                                                <span class="badge text-bg-light border import-map-section__count"
+                                                      data-map-section-count>0</span>
+                                            </button>
+                                            <button type="button"
+                                                    class="btn btn-outline-primary btn-sm import-map-section__add"
+                                                    id="import-map-add-property">
+                                                Добавить свойство
+                                            </button>
+                                        </div>
+                                    </th>
+                                </tr>
+                                {% for item in field_mapping_rows %}
+                                {% if item.is_property %}
+                                {% include 'materials/includes/import_map_field_row.html' with item=item %}
+                                {% endif %}
+                                {% endfor %}
+                                <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_property %} d-none{% endif %}{% endfor %}"
+                                    data-map-section-empty>
+                                    <td colspan="4" class="text-muted small">
+                                        Нет дополнительных свойств — нажмите «Добавить свойство».
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody class="import-map-section"
+                                   data-map-section="tag"
+                                   id="import-map-section-tag">
+                                <tr class="import-map-section__header">
+                                    <th scope="colgroup" colspan="4">
+                                        <button type="button"
+                                                class="import-map-section__toggle"
+                                                data-map-section-toggle
+                                                aria-expanded="true"
+                                                aria-controls="import-map-field-rows-tag">
+                                            <span class="import-map-section__chevron" aria-hidden="true"></span>
+                                            <span class="import-map-section__title">Теги</span>
+                                            <span class="badge text-bg-light border import-map-section__count"
+                                                  data-map-section-count>0</span>
+                                        </button>
+                                    </th>
+                                </tr>
+                                {% for item in field_mapping_rows %}
+                                {% if item.is_tag %}
+                                {% include 'materials/includes/import_map_field_row.html' with item=item %}
+                                {% endif %}
+                                {% endfor %}
+                                <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_tag %} d-none{% endif %}{% endfor %}"
+                                    data-map-section-empty>
+                                    <td colspan="4" class="text-muted small">
+                                        Перетащите колонки из каталога или значение/колонку из полей выше.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <aside class="import-map-panel import-map-catalog" aria-label="Колонки файла" id="import-map-catalog">
+                    <div class="import-map-panel__head import-map-catalog__head">
+                        <div>
+                            <div class="import-map-panel__title">Колонки файла</div>
+                            <p class="import-map-panel__hint mb-0">Перетащите в поля слева ←</p>
+                        </div>
+                        <input type="search"
+                               class="form-control form-control-sm import-map-catalog__search"
+                               id="import-map-catalog-search"
+                               placeholder="Поиск…"
+                               autocomplete="off"
+                               aria-label="Поиск в каталоге колонок">
+                    </div>
+                    <div class="import-map-catalog__body">
+                        <section class="import-map-catalog__group" data-catalog-group="columns">
+                            <h3 class="import-map-catalog__group-title">Тяните или кликайте</h3>
+                            <ul class="import-map-catalog__list list-unstyled mb-0" id="import-map-column-catalog-list">
+                                {% for col in file_columns %}
+                                <li class="import-map-catalog__item" data-catalog-label="{{ col.label|lower }}">
+                                    <button type="button"
+                                            class="import-map-catalog-item"
+                                            draggable="true"
+                                            data-column-index="{{ col.index }}"
+                                            data-label="{{ col.label|escape }}"
+                                            data-sample="{{ col.sample|escape }}"
+                                            title="Клик или перетащите в «Колонка файла»">
+                                        <span class="import-map-catalog-item__mark" aria-hidden="true"></span>
+                                        <span class="import-map-catalog-item__text">{{ col.label }}</span>
+                                    </button>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </section>
+                    </div>
+                </aside>
+            </div>
+
+            {% include 'materials/includes/import_default_tags.html' %}
+        </form>
+
+        {% include 'includes/reference_properties_modal.html' %}
+        {% endif %}
+
+        {% if has_staged_file and step == 'review' %}
+        <p class="small text-muted mb-3">
+            Файл: <strong>{{ staged_filename }}</strong>
+            {% if selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
+        </p>
+
+        {% include 'materials/includes/import_review_grid.html' %}
+        {% endif %}
+
+        {% if has_staged_file and step == 'iterate' and iterate_draft %}
+        <p class="small text-muted mb-3">
+            Файл: <strong>{{ staged_filename }}</strong>
+            · построчно <strong>{{ iterate_position }}</strong> / {{ iterate_total }}
+            · обработано {{ iterate_done }}
+            {% if selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
+        </p>
+        <div class="progress mb-3" role="progressbar"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ iterate_percent }}"
+             aria-label="Прогресс построчного импорта">
+            <div class="progress-bar" style="width: {{ iterate_percent }}%"></div>
+        </div>
+
+        <div class="card border-primary mb-3">
+            <div class="card-header d-flex flex-wrap justify-content-between gap-2">
+                <div>
+                    Строка Excel <strong>{{ iterate_draft.source_row }}</strong>
+                </div>
+                <div>
+                    {% if iterate_draft.action == 'update' %}
+                    <span class="badge text-bg-info">обновить</span>
+                    {% else %}
+                    <span class="badge text-bg-success">создать</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                {% if iterate_draft.description %}
+                <p class="small text-muted">{{ iterate_draft.description }}</p>
+                {% endif %}
+                {% if iterate_draft.tags %}
+                <p class="small"><span class="text-muted">теги:</span> {{ iterate_draft.tags }}</p>
+                {% endif %}
+                {% if iterate_draft.warnings %}
+                <div class="alert alert-warning py-2 small">
+                    {% for w in iterate_draft.warnings %}{{ w }}{% if not forloop.last %}; {% endif %}{% endfor %}
+                </div>
+                {% endif %}
+
+                <form method="post" class="mb-3" id="import-iterate-form">
+                    {% csrf_token %}
+                    <div class="import-wizard-nav-bar mb-3" role="region" aria-label="Навигация построчного импорта">
+                        <nav class="import-wizard-nav">
+                            <div class="import-wizard-nav__back d-flex flex-wrap gap-2">
+                                <button type="submit" name="action" value="iterate_back_review" class="btn btn-outline-secondary"
+                                        data-import-busy="0" formnovalidate>
+                                    ← Назад
+                                </button>
+                                <button type="submit" name="action" value="iterate_skip" class="btn btn-outline-secondary">
+                                    Пропустить
+                                </button>
+                            </div>
+                            <div class="import-wizard-nav__forward d-flex flex-wrap gap-2">
+                                <button type="submit" name="action" value="iterate_apply" class="btn btn-success import-wizard-nav__forward-btn">
+                                    Вперёд → записать
+                                </button>
+                                <button type="submit" name="action" value="iterate_finish" class="btn btn-outline-danger"
+                                        data-import-busy="0"
+                                        onclick="return confirm('Завершить построчный импорт? Уже записанные строки останутся.');">
+                                    Завершить
+                                </button>
+                            </div>
+                        </nav>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-8">
+                            <label class="form-label" for="iterate-name">
+                                Название <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="name" id="iterate-name" class="form-control"
+                                   value="{{ iterate_draft.name }}" maxlength="1000"
+                                   {% if iterate_draft.action != 'update' %}required{% endif %}
+                                   placeholder="Название материала">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="iterate-code">Код</label>
+                            <input type="text" name="code" id="iterate-code" class="form-control font-monospace"
+                                   value="{{ iterate_draft.code }}" maxlength="50"
+                                   placeholder="необязательно">
+                        </div>
+                    </div>
+                    {% if iterate_draft.structure_values or iterate_draft.properties %}
+                    <div class="small mb-3">
+                        {% for struct in iterate_draft.structure_values %}
+                        <div class="border-bottom py-1">
+                            <label class="d-flex gap-2 align-items-start mb-0">
+                                <input type="checkbox" name="include_struct_{{ forloop.counter0 }}" value="1"
+                                       {% if struct.include %}checked{% endif %}>
+                                <span>
+                                    <strong>{{ struct.column_label }}</strong>
+                                    → структура {{ struct.field_label }}:
+                                    {% if struct.note == 'пусто' or not struct.value and not struct.value_b %}
+                                    <span class="text-muted fst-italic">пусто</span>
+                                    {% else %}
+                                    {{ struct.value }}{% if struct.value_b %} / {{ struct.value_b }}{% endif %}
+                                    {% endif %}
+                                </span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                        {% for prop in iterate_draft.properties %}
+                        <div class="border-bottom py-1">
+                            <label class="d-flex gap-2 align-items-start mb-0">
+                                <input type="checkbox" name="include_{{ forloop.counter0 }}" value="1"
+                                       {% if prop.include %}checked{% endif %}>
+                                <span>
+                                    <strong>{{ prop.column_label }}</strong>
+                                    → доп. {{ prop.property_name }}:
+                                    {% if prop.note == 'пусто' or not prop.value and not prop.value_b %}
+                                    <span class="text-muted fst-italic">пусто</span>
+                                    {% else %}
+                                    {{ prop.value }}{% if prop.value_b %} / {{ prop.value_b }}{% endif %}
+                                    {% endif %}
+                                </span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if iterate_report and iterate_report.errors %}
+                    <div class="alert alert-danger small">
+                        {% for error in iterate_report.errors %}
+                        <div>{{ error.message }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+
+        {% if iterate_log %}
+        <div class="card mb-0">
+            <div class="card-header py-2"><strong class="small">Журнал построчного импорта</strong></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>Строка</th><th>Код</th><th>Статус</th><th>Комментарий</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for item in iterate_log %}
+                            <tr class="{% if item.status == 'error' %}table-danger{% elif item.status == 'skipped' %}table-secondary{% else %}table-success{% endif %}">
+                                <td>{{ item.source_row }}</td>
+                                <td><code>{{ item.code }}</code></td>
+                                <td>{{ item.status }}</td>
+                                <td class="small">{{ item.message }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+{% if import_report and step == 'review' and not has_unrecognized %}
+<div class="card mb-4" id="import-validation-report">
+    <div class="card-header">
+        <h2 class="h5 mb-0">{% if import_report.dry_run %}Проверка перед записью{% else %}Результат{% endif %}</h2>
+    </div>
+    <div class="card-body">
+        <ul class="mb-3">
+            {% for line in import_report.summary_lines %}
+            <li>{{ line }}</li>
+            {% endfor %}
+        </ul>
+        {% if import_report.errors %}
+        <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0">
+                <thead><tr><th>Строка</th><th>Колонка</th><th>Ошибка</th></tr></thead>
+                <tbody>
+                    {% for error in import_report.errors %}
+                    <tr class="table-danger">
+                        <td>{{ error.row|default:"—" }}</td>
+                        <td>{% if error.column %}<code>{{ error.column }}</code>{% else %}—{% endif %}</td>
+                        <td class="text-danger">{{ error.message }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% elif import_report.ok %}
+        <p class="text-success mb-0">Ошибок валидации нет.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div id="import-busy" class="import-busy" aria-live="assertive" aria-busy="false" hidden>
+    <div class="import-busy__panel" role="status">
+        <div class="import-busy__title">Обработка импорта</div>
+        <div class="import-busy__meta">Подождите…</div>
+        <div class="progress" role="progressbar" aria-valuetext="Загрузка">
+            <div class="progress-bar progress-bar-striped progress-bar-animated"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/import_busy.js' %}?v={{ app_version }}-map4"></script>
+<script src="{% static 'js/import_help_tips.js' %}?v={{ app_version }}-hints4"></script>
+{% if step == 'configure' %}
+<script src="{% static 'js/reference_structure_types_picker.js' %}?v={{ app_version }}"></script>
+<script src="{% static 'js/structure_type_picker_field.js' %}?v={{ app_version }}"></script>
+<script>
+(function () {
+    var form = document.querySelector('form input[name="action"][value="configure"]');
+    form = form && form.closest('form');
+    if (!form) return;
+
+    var timer = null;
+    var DEBOUNCE_MS = 450;
+
+    function ensureRefreshFlag() {
+        var flag = form.querySelector('input[name="refresh_layout"]');
+        if (!flag) {
+            flag = document.createElement('input');
+            flag.type = 'hidden';
+            flag.name = 'refresh_layout';
+            form.appendChild(flag);
+        }
+        flag.value = '1';
+        return flag;
+    }
+
+    function submitRefresh() {
+        ensureRefreshFlag();
+        // form.submit() — без HTML5-валидации (тип структуры ещё может быть пустым).
+        form.submit();
+    }
+
+    function scheduleRefresh() {
+        if (timer) window.clearTimeout(timer);
+        timer = window.setTimeout(submitRefresh, DEBOUNCE_MS);
+    }
+
+    var sheet = form.querySelector('[data-import-sheet-refresh]');
+    if (sheet) {
+        sheet.addEventListener('change', function () {
+            if (timer) window.clearTimeout(timer);
+            submitRefresh();
+        });
+    }
+
+    form.querySelectorAll('[data-import-layout-refresh]').forEach(function (el) {
+        el.addEventListener('change', scheduleRefresh);
+        el.addEventListener('input', scheduleRefresh);
+    });
+})();
+</script>
+{% endif %}
+{% if step == 'mapping' %}
+<script src="{% static 'js/reference_properties_picker.js' %}?v={{ app_version }}"></script>
+<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map22"></script>
+{% endif %}
+{% if step == 'review' %}
+<script src="{% static 'js/import_fix_grid.js' %}?v={{ app_version }}-fixgrid13"></script>
+{% endif %}
+{% endblock %}

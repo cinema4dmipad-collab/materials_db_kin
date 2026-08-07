@@ -30,35 +30,42 @@
             {% regroup widget.group_items by workspace as workspace_sections %}
             {% for section in workspace_sections %}
             <div class="group-picker-section">
-                <div class="tag-input-existing__label">{{ section.grouper }}</div>
-                <div class="tag-input-existing__list">
+                <div class="tag-input-existing__head">
+                    <span class="tag-input-existing__label">{{ section.grouper }}</span>
+                </div>
+                <div class="tag-input-existing__list" role="listbox" aria-label="{{ section.grouper }}">
                     {% for group in section.list %}
                     <button type="button"
                             class="entity-tag tone-tag tag-input-pick group-picker-pick"
                             data-group-id="{{ group.id }}"
                             data-group-name="{{ group.name }}"
-                            title="Добавить или убрать группу «{{ group.name }}»">
-                        {{ group.name }}
+                            title="Добавить группу «{{ group.name }}»"
+                            role="option">
+                        <span class="entity-tag__text">{{ group.name }}</span>
                     </button>
                     {% endfor %}
                 </div>
             </div>
             {% endfor %}
         {% else %}
-            <div class="tag-input-existing__label">Доступные группы</div>
-            <div class="tag-input-existing__list">
+            <div class="tag-input-existing__head">
+                <span class="tag-input-existing__label">Доступные группы</span>
+                <span class="tag-input-existing__hint">нажмите, чтобы добавить</span>
+            </div>
+            <div class="tag-input-existing__list" role="listbox" aria-label="Доступные группы">
                 {% for group in widget.group_items %}
                 <button type="button"
                         class="entity-tag tone-tag tag-input-pick group-picker-pick"
                         data-group-id="{{ group.id }}"
                         data-group-name="{{ group.name }}"
-                        title="Добавить или убрать группу «{{ group.name }}»">
-                    {{ group.name }}
+                        title="Добавить группу «{{ group.name }}»"
+                        role="option">
+                    <span class="entity-tag__text">{{ group.name }}</span>
                 </button>
                 {% endfor %}
             </div>
         {% endif %}
-        <p class="tag-input-existing__empty text-muted small mb-0" hidden>Группа не найдена</p>
+        <p class="tag-input-existing__empty" hidden>Группа не найдена</p>
     </div>
     {% endif %}
 </div>

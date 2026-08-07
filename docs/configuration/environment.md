@@ -16,12 +16,22 @@ Copy from [`.env.example`](../../.env.example) or [`.env.prod.example`](../../.e
 | `DB_PORT` | `5432` | Port |
 | `DB_WAIT_TIMEOUT` | `60` | Seconds to wait for DB in entrypoint |
 
+## Backups
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BACKUP_DIR` | `<BASE_DIR>/backups` / `/backups` in Docker | Directory for scheduled Postgres dumps |
+| `BACKUP_UPLOAD_MAX_BYTES` | `536870912` (512 MiB) | Max dump size for UI restore |
+
+See [`deploy/BACKUP.md`](../../deploy/BACKUP.md). Only PostgreSQL is backed up; SeaweedFS is not.
+
 ## Django
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SECRET_KEY` | — | Required when `DEBUG=False` |
 | `DEBUG` | `False` | `True` for local development |
+| `IMPORT_BATCH_UNDO` | same as `DEBUG` | Show «удалить результат последнего импорта». On staging set `true` without full `DEBUG` |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma-separated hosts |
 | `CSRF_TRUSTED_ORIGINS` | — | Comma-separated origins with scheme |
 | `SESSION_COOKIE_SECURE` | `false` | Set `true` with HTTPS |

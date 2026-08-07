@@ -1,60 +1,96 @@
 {% extends 'base.html' %}
-{% load ui_tags %}
+{% load static ui_tags %}
 
 {% block title %}Свойства — База композитов{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+<div class="card{% if is_system_admin %} list-bulk{% endif %}"{% if is_system_admin %} data-list-bulk{% endif %}>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h1 class="h4 mb-0">Справочник свойств</h1>
         {% if is_system_admin %}
-        <a href="{% url 'references:create' %}" class="btn btn-primary btn-sm">Создать</a>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            {% if properties %}
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm"
+                    data-list-bulk-toggle
+                    aria-pressed="false">
+                Выбрать
+            </button>
+            {% endif %}
+            <a href="{% url 'references:create' %}" class="btn btn-primary btn-sm">Создать</a>
+        </div>
         {% endif %}
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
         {% if properties %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
-                <thead>
-                    <tr>
-                        <th>Название</th>
-                        <th>Системное имя</th>
-                        <th>Единица</th>
-                        <th>Тип</th>
-                        <th>Группа</th>
-                        <th>Создал</th>
-                        <th>Материалов</th>
-                        <th class="text-end">Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for property in properties %}
-                    <tr>
-                        <td>{{ property.display_name }}</td>
-                        <td><code>{{ property.name }}</code></td>
-                        <td>{{ property.unit|default:"—" }}</td>
-                        <td>{% include 'includes/type_badge.html' with label=property.get_data_type_display value=property.data_type %}</td>
-                        <td>{{ property.group.name|default:"—" }}</td>
-                        <td>{% include 'includes/creator_filter_link.html' with obj=property %}</td>
-                        <td>{{ property.material_count }}</td>
-                        <td class="text-end">
+        {% if is_system_admin %}<form method="post"
+              action="{% url 'references:bulk_delete' %}"
+              data-list-bulk-form
+              data-confirm-title="Удаление свойств"
+              data-confirm-message="Удалить выбранные свойства ({count})? Значения у материалов и образцов также будут удалены."
+              data-confirm-submit="Удалить выбранные">
+            {% csrf_token %}
+            {% include 'includes/list_bulk_toolbar.html' with bulk_id='properties' %}
+        {% endif %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                    <thead>
+                        <tr>
                             {% if is_system_admin %}
-                            <div class="table-actions">
-                            {% url 'references:edit' property.pk as property_edit_url %}
-                            {% include 'includes/table_action_icon.html' with action='edit' url=property_edit_url title='Изменить' %}
-                            {% url 'references:delete' property.pk as property_delete_url %}
-                            {% include 'includes/table_action_icon.html' with action='delete' url=property_delete_url title='Удалить' %}
-                            </div>
-                            {% else %}
-                            —
+                            <th class="list-bulk-col" scope="col">
+                                <span class="visually-hidden">Выбор</span>
+                            </th>
                             {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                            <th>Название</th>
+                            <th>Системное имя</th>
+                            <th>Единица</th>
+                            <th>Тип</th>
+                            <th>Группа</th>
+                            <th>Создал</th>
+                            <th>Материалов</th>
+                            <th class="text-end">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for property in properties %}
+                        <tr>
+                            {% if is_system_admin %}
+                            <td class="list-bulk-col">
+                                <input type="checkbox"
+                                       class="form-check-input"
+                                       name="ids"
+                                       value="{{ property.pk }}"
+                                       data-list-bulk-item
+                                       disabled
+                                       aria-label="Выбрать {{ property.display_name }}">
+                            </td>
+                            {% endif %}
+                            <td>{{ property.display_name }}</td>
+                            <td><code>{{ property.name }}</code></td>
+                            <td>{{ property.unit }}</td>
+                            <td>{% include 'includes/type_badge.html' with label=property.get_data_type_display value=property.data_type %}</td>
+                            <td>{{ property.group.name|default:"—" }}</td>
+                            <td>{% include 'includes/creator_filter_link.html' with obj=property %}</td>
+                            <td>{{ property.material_count }}</td>
+                            <td class="text-end">
+                                {% if is_system_admin %}
+                                <div class="table-actions">
+                                {% url 'references:edit' property.pk as property_edit_url %}
+                                {% include 'includes/table_action_icon.html' with action='edit' url=property_edit_url title='Изменить' %}
+                                {% url 'references:delete' property.pk as property_delete_url %}
+                                {% include 'includes/table_action_icon.html' with action='delete' url=property_delete_url title='Удалить' %}
+                                </div>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% if is_system_admin %}</form>{% endif %}
 
         <div class="p-3">
         {% include 'includes/pagination.html' %}
@@ -73,4 +109,10 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if is_system_admin %}
+<script src="{% static 'js/list_bulk_select.js' %}?v={{ app_version }}-bulk2"></script>
+{% endif %}
 {% endblock %}

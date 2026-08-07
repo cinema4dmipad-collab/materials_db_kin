@@ -4,7 +4,14 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
 
-from apps.core.list_filters import ALL_SEARCH_SCOPE, CREATOR_SEARCH_SCOPE, DEFAULT_CREATOR_FILTER, QuerySetFilterMixin
+from apps.core.list_filters import (
+    ALL_SEARCH_SCOPE,
+    CREATOR_SEARCH_SCOPE,
+    CREATOR_WITH_LABEL_FILTER,
+    DEFAULT_CREATOR_FILTER,
+    TAG_SEARCH_SCOPE,
+    QuerySetFilterMixin,
+)
 
 from apps.core.creator import creator_label
 from apps.materials.picker_data import materials_for_picker
@@ -15,6 +22,8 @@ from apps.structures.table_storage import (
     count_linked_materials,
     get_display_values,
     get_row,
+    linked_materials_for_record,
+    linked_materials_display_label,
     structure_record_label,
 )
 from apps.workspaces.mixins import AppViewMixin
@@ -78,75 +87,128 @@ class StructureTypeSelectView(AppViewMixin, QuerySetFilterMixin, ListView):
             .order_by('name')
         )
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from apps.core.bookmarks import bookmarked_entity_ids, structure_type_bookmark_entity_id
+        from apps.core.models import BookmarkEntityType
 
-class StructureRecordListView(AppViewMixin, CreatedTableRequiredMixin, QuerySetFilterMixin, TemplateView):
+        bookmarked_ids = bookmarked_entity_ids(
+            user=self.request.user,
+            workspace=self.request.active_workspace,
+            entity_type=BookmarkEntityType.STRUCTURE_TYPE,
+        )
+        for structure_type in context.get('types') or []:
+            structure_type.bookmark_entity_id = structure_type_bookmark_entity_id(structure_type.code)
+            structure_type.is_bookmarked = str(structure_type.bookmark_entity_id) in bookmarked_ids
+        context['structure_type_bookmark_entity_type'] = BookmarkEntityType.STRUCTURE_TYPE
+        return context
+
+
+class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMixin, TemplateView):
     template_name = 'structures/list.html'
-    search_fields = ('label',)
+    enable_tag_filter = True
+    search_fields = (
+        'code',
+        'name',
+        'description',
+        'manufacturer__name',
+        'availability__name',
+        'technology__name',
+        'import_source_filename',
+    )
     search_scopes = (
-        (ALL_SEARCH_SCOPE, 'Везде', ('label',)),
-        ('label', 'Название', ('label',)),
+        (
+            ALL_SEARCH_SCOPE,
+            'Везде',
+            (
+                'code',
+                'name',
+                'description',
+                'manufacturer__name',
+                'availability__name',
+                'technology__name',
+                'import_source_filename',
+            ),
+        ),
+        ('code', 'Код', ('code',)),
+        ('name', 'Название', ('name',)),
+        ('description', 'Описание', ('description',)),
+        (CREATOR_SEARCH_SCOPE, 'Создал', ()),
+        (TAG_SEARCH_SCOPE, 'Тег', ()),
     )
     search_placeholder = 'Введите текст для поиска...'
 
-    def _build_records(self, raw_records):
-        return [
-            {
-                'id': record['id'],
-                'created_at': record.get('created_at'),
-                'created_by': record.get('created_by') or '',
-                'label': structure_record_label(record, self.structure_type),
-            }
-            for record in raw_records
-        ]
+    def get_custom_search_scope_filters(self):
+        return {
+            CREATOR_SEARCH_SCOPE: CREATOR_WITH_LABEL_FILTER,
+        }
 
-    def _filter_records(self, records, query, active_scopes):
-        if not query:
-            return records
-        if active_scopes and 'label' not in active_scopes:
-            return records
-        query_lower = query.lower()
-        return [
-            record for record in records
-            if query_lower in record['label'].lower()
-        ]
+    def _materials_queryset(self):
+        # Only home-workspace materials — shared/published rows from other spaces
+        # break tag search and mix unrelated data into the structure matrix.
+        from apps.workspaces.services import materials_owned_by
+
+        return self.filter_queryset(
+            materials_owned_by(self.request.active_workspace)
+            .filter(struct_type=self.structure_type)
+            .select_related('manufacturer', 'availability', 'technology', 'created_by_user')
+            .order_by('code', 'name')
+        )
 
     def get_context_data(self, **kwargs):
+        from apps.structures.materials_grid import build_structure_materials_grid
+
         context = super().get_context_data(**kwargs)
-        search_query = self.request.GET.get(self.search_param, '').strip()
-        active_scopes = self._get_active_search_scope_values()
         page_number = self.request.GET.get('page', 1)
         try:
             page_number = max(int(page_number), 1)
         except (TypeError, ValueError):
             page_number = 1
 
-        if search_query:
-            result = SQLExecutor.get_all(self.structure_type, limit=None, offset=0)
-            raw_records = result.get('records', []) if result.get('success') else []
-            records = self._build_records(raw_records)
-            records = self._filter_records(records, search_query, active_scopes)
-            total = len(records)
-            offset = (page_number - 1) * self.paginate_by
-            records = records[offset:offset + self.paginate_by]
+        materials_qs = self._materials_queryset()
+        total = materials_qs.count()
+        offset = (page_number - 1) * self.paginate_by
+        page_materials = list(materials_qs[offset:offset + self.paginate_by])
+        if self.structure_type.is_created:
+            grid = build_structure_materials_grid(self.structure_type, page_materials)
         else:
-            offset = (page_number - 1) * self.paginate_by
-            result = SQLExecutor.get_all(
-                self.structure_type,
-                limit=self.paginate_by,
-                offset=offset,
-            )
-            records = self._build_records(result.get('records', []) if result.get('success') else [])
-            total = result.get('total', 0) if result.get('success') else 0
+            from apps.structures.materials_grid import structure_data_fields, structure_field_headers
+
+            fields = structure_data_fields(self.structure_type)
+            grid = {
+                'columns': structure_field_headers(fields),
+                'rows': [
+                    {
+                        'material': material,
+                        'structure_record_id': material.struct_props_id,
+                        'cells': ['—'] * len(fields),
+                    }
+                    for material in page_materials
+                ],
+                'fields': fields,
+            }
 
         num_pages = max((total + self.paginate_by - 1) // self.paginate_by, 1)
 
-        context['records'] = records
+        context['materials_grid'] = grid
         context['page_number'] = page_number
         context['num_pages'] = num_pages
         context['total'] = total
         context['has_previous'] = page_number > 1
         context['has_next'] = page_number < num_pages
+        context['table_not_created'] = not self.structure_type.is_created
         context.update(self.get_filter_context())
+        from apps.core.bookmarks import bookmark_context
+        from apps.core.models import BookmarkEntityType
+
+        context.update(
+            bookmark_context(
+                self.request,
+                entity_type=BookmarkEntityType.STRUCTURE_TYPE,
+                entity=self.structure_type,
+                context_slug=self.structure_type.code,
+            )
+        )
         return context
 
 
@@ -199,6 +261,30 @@ class StructureRecordDetailView(AppViewMixin, CreatedTableRequiredMixin, DetailV
             context['linked_materials_count'] = count_linked_materials(
                 self.structure_type,
                 record['id'],
+            )
+            context['linked_materials'] = linked_materials_for_record(
+                self.structure_type,
+                record['id'],
+                workspace=self.request.active_workspace,
+            )
+            context['display_label'] = (
+                linked_materials_display_label(context['linked_materials'])
+                or context['record_label']
+            )
+            from apps.core.bookmarks import bookmark_context
+            from apps.core.models import BookmarkEntityType
+
+            context.update(
+                bookmark_context(
+                    self.request,
+                    entity_type=BookmarkEntityType.STRUCTURE_RECORD,
+                    entity={
+                        'structure_type': self.structure_type,
+                        'record': record,
+                    },
+                    entity_id=record['id'],
+                    context_slug=self.structure_type.code,
+                )
             )
         return context
 

@@ -52,7 +52,7 @@ poetry run python -c "from django.core.management.utils import get_random_secret
 3. **Application service** — Add Service → Docker Compose → point to repo `docker-compose.prod.yml`
 4. **Environment** — paste `.env` contents in Dokploy UI
 5. **Domain** — map to `nginx:80`
-6. **Deploy** — Dokploy builds/pulls images and starts stack
+6. **Deploy** — Dokploy builds/pulls images and starts stack (`web`, `nginx`, `backup-cron`)
 7. **First run** — exec migrate and createsuperuser in web container
 
 ```bash
@@ -60,6 +60,7 @@ docker compose exec web python manage.py migrate
 docker compose exec web python manage.py createsuperuser
 ```
 
+Postgres dumps: volume `backups` → `/backups`, schedule via **Администрирование → Бэкапы**. Details: [`deploy/BACKUP.md`](../../deploy/BACKUP.md).
 ## HTTPS
 
 When terminating TLS at reverse proxy:

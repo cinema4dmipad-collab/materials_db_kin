@@ -2,7 +2,7 @@
 
 This section describes the overall architecture of Materials DB: Django apps, dynamic structure storage, and request flow.
 
-**Related**: [Technology Stack](tech-stack.md) · [Testing](testing.md) · [Workspaces & RBAC](workspaces-rbac.md) · [Права пользователей (таблицы)](workspaces-permissions.md)
+**Related**: [Technology Stack](tech-stack.md) · [Testing](testing.md) · [Workspaces & RBAC](workspaces-rbac.md) · [Права пользователей (таблицы)](workspaces-permissions.md) · [Export / analytics draft](analytics-draft.md)
 
 ## System Architecture
 
@@ -54,7 +54,7 @@ Key modules:
 | `type_forms.py` / `type_views.py` | Public UI for type definition and table creation |
 | `property_mapping.py` | Map reference properties to structure fields |
 
-After a SQL table is created (`is_created=True`), field definitions are **immutable** until the table is dropped.
+After a SQL table is created (`is_created=True`), existing field definitions cannot be changed or deleted; new fields may still be added (`ALTER TABLE … ADD COLUMN`).
 
 ## Material ↔ Structure Link
 
@@ -71,7 +71,7 @@ Large HDF5 uploads stream to disk (`FILE_UPLOAD_MAX_MEMORY_SIZE` = 10 MB); Gunic
 
 ## UI Patterns
 
-* **Bootstrap 5** + KeenetiCA theme (`static/css/keenetica-theme.css`)
+* **Bootstrap 5** + Keenetica Lab theme (`static/css/keenetica-theme.css`)
 * **Formsets** — material properties, composite layers, structure fields
 * **Property picker** — modal selection from reference catalog (`reference_properties_picker.js`)
 * **List filter bar** — shared template `includes/list_filter_bar.html` and client filter JS

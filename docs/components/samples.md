@@ -8,7 +8,7 @@ Physical **specimens** derived from materials.
 
 **Sample** — code, name, material (FK), object type (test, control, product, …), tags, workspace, creator, description.
 
-**SampleProperty** — property values; copied from material on create, editable per sample.
+**SampleProperty** — property values; copied from material on create, editable per sample. Numeric properties support scalar / range / ± (same as materials).
 
 **SampleAttachment** — generic files linked to sample.
 
@@ -18,7 +18,8 @@ Physical **specimens** derived from materials.
 |-----|--------|
 | `/samples/` | List |
 | `/samples/create/` | Create (optional `?material=<uuid>` preselect) |
-| `/samples/<pk>/` | Detail — properties, scans tab, files tab |
+| `/samples/<pk>/` | Detail — properties, scans tab, files tab; inline tags when `sample.workspace` is active |
+| `/samples/<pk>/tags/` | POST — save tags from detail card |
 | `/samples/<pk>/edit/` | Edit |
 
 Attachments: `/samples/<pk>/attachments/`.

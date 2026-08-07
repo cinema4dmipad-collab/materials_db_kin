@@ -9,13 +9,24 @@ from apps.core.number_utils import normalize_decimal_input, parse_decimal
 
 from apps.materials.form_widgets import material_select_widget_attrs
 from apps.materials.models import Material
-from apps.structures.models import MATERIAL_LINK_FIELD_TYPE, StructureField
-from apps.structures.sql_executor import SQLExecutor
+from apps.structures.choice_options import choice_pairs, resolved_choice_options
+from apps.structures.models import CHOICE_FIELD_TYPE, MATERIAL_LINK_FIELD_TYPE, StructureField
 from apps.structures import table_storage
+from apps.structures.constants import STRUCTURE_FIELD_PREFIX
+from apps.structures.structure_decimal_forms import (
+    add_structure_decimal_fields,
+    apply_structure_decimal_initial,
+    clean_structure_decimal_fields,
+    collect_structure_decimal_sql_data,
+    is_structure_decimal_subfield,
+    structure_decimal_bound_group,
+    structure_decimal_field_names,
+)
 
 _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _BOOTSTRAP_CHECK = {'class': 'form-check-input'}
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
+_CHOICE_SELECT = {**_BOOTSTRAP_SELECT, 'data-choice-picker': 'true'}
 
 
 class MaterialChoiceField(forms.ModelChoiceField):
@@ -25,6 +36,19 @@ class MaterialChoiceField(forms.ModelChoiceField):
 
 def material_label(material: Material) -> str:
     return f'{material.code} - {material.name}'
+
+
+MATERIAL_LINK_MISSING_LABEL = 'Материал не найден'
+
+
+def material_link_display(value, *, missing_label: str = MATERIAL_LINK_MISSING_LABEL) -> str:
+    """Человекочитаемая подпись для MaterialLink; без сырого UUID."""
+    if value in (None, ''):
+        return '—'
+    material = material_from_value(value)
+    if material is not None:
+        return material_label(material)
+    return missing_label
 
 
 def material_from_value(value):
@@ -88,6 +112,19 @@ def _build_dynamic_field(structure_field: StructureField, workspace=None) -> for
             initial=initial,
             queryset=materials_for_picker_queryset(workspace),
             widget=forms.Select(attrs=material_select_widget_attrs()),
+        )
+    choice_options = resolved_choice_options(structure_field)
+    if structure_field.field_type == CHOICE_FIELD_TYPE or choice_options:
+        options = choice_pairs(choice_options)
+        if initial not in (None, '') and str(initial) not in {item[0] for item in options}:
+            options = [(str(initial), str(initial))] + options
+        return forms.ChoiceField(
+            label=label,
+            required=required,
+            help_text=help_text,
+            initial=initial if initial not in (None,) else '',
+            choices=[('', '---------')] + options,
+            widget=forms.Select(attrs=_CHOICE_SELECT),
         )
     if structure_field.field_type == 'CharField':
         return forms.CharField(
@@ -196,6 +233,8 @@ def get_dynamic_form(structure_type):
                     self._apply_initial_values(row_data)
 
         def save(self, created_by=''):
+            from apps.structures.sql_executor import SQLExecutor
+
             if not self.structure_type.is_created:
                 raise ValidationError('Таблица для этого типа ещё не создана в БД.')
             data = self.collect_data()
@@ -208,9 +247,6 @@ def get_dynamic_form(structure_type):
     return DynamicStructureForm
 
 
-STRUCTURE_FIELD_PREFIX = 'structure_field_'
-
-
 class StructureRecordForm(forms.Form):
     """Форма записи в SQL-таблице динамической структуры (публичный UI)."""
 
@@ -220,9 +256,14 @@ class StructureRecordForm(forms.Form):
         self.workspace = workspace
         super().__init__(*args, **kwargs)
         self.structure_fields = _supported_structure_fields(structure_type)
+        self.structure_decimal_fields = []
         for structure_field in self.structure_fields:
-            field = _build_dynamic_field(structure_field, workspace=workspace)
-            self.fields[self.field_name(structure_field)] = field
+            if structure_field.field_type == 'DecimalField':
+                add_structure_decimal_fields(self, structure_field)
+                self.structure_decimal_fields.append(structure_field)
+            else:
+                field = _build_dynamic_field(structure_field, workspace=workspace)
+                self.fields[self.field_name(structure_field)] = field
         if record:
             self._apply_initial_values(record)
 
@@ -232,10 +273,19 @@ class StructureRecordForm(forms.Form):
 
     @property
     def bound_structure_fields(self):
-        return [self[self.field_name(field)] for field in self.structure_fields]
+        bound = []
+        for structure_field in self.structure_fields:
+            if structure_field.field_type == 'DecimalField':
+                bound.append(structure_decimal_bound_group(self, structure_field))
+            else:
+                bound.append(self[self.field_name(structure_field)])
+        return bound
 
     def _apply_initial_values(self, record):
         for structure_field in self.structure_fields:
+            if structure_field.field_type == 'DecimalField':
+                apply_structure_decimal_initial(self, structure_field, record)
+                continue
             if structure_field.name not in record:
                 continue
             value = record[structure_field.name]
@@ -243,9 +293,27 @@ class StructureRecordForm(forms.Form):
                 value = material_from_value(value)
             self.fields[self.field_name(structure_field)].initial = value
 
+    def clean(self):
+        cleaned_data = super().clean()
+        for structure_field in self.structure_decimal_fields:
+            cleaned_data = clean_structure_decimal_fields(
+                self,
+                structure_field,
+                cleaned_data,
+            )
+        return cleaned_data
+
     def collect_data(self):
         data = {}
         for structure_field in self.structure_fields:
+            if structure_field.field_type == 'DecimalField':
+                data.update(
+                    collect_structure_decimal_sql_data(
+                        structure_field,
+                        self.cleaned_data,
+                    )
+                )
+                continue
             value = self.cleaned_data.get(self.field_name(structure_field))
             if value not in (None, '') or structure_field.is_required:
                 data[structure_field.name] = value

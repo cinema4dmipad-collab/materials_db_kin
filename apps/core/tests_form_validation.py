@@ -1,5 +1,6 @@
 from django import forms
 from django.test import SimpleTestCase
+from django.utils.safestring import mark_safe
 
 from apps.core.form_validation import (
     collect_form_errors,
@@ -24,6 +25,19 @@ class FormValidationTests(SimpleTestCase):
         self.assertEqual(len(summary), 2)
         self.assertEqual(summary[0]['section'], 'Материал')
         self.assertIn('Название:', summary[0]['message'])
+
+    def test_collect_form_errors_preserves_safe_html_messages(self):
+        form = ExampleForm(data={'name': 'ok', 'value': '1'})
+        form.add_error(
+            'name',
+            mark_safe('Уже есть. <a href="/materials/?scope=shared">Общие</a>.'),
+        )
+
+        summary = collect_form_errors(form, default_section='Материал')
+
+        self.assertEqual(len(summary), 1)
+        self.assertIn('<a href="/materials/?scope=shared">Общие</a>', summary[0]['message'])
+        self.assertNotIn('&lt;a href', summary[0]['message'])
 
     def test_validation_flash_message_for_single_section(self):
         summary = [{'section': 'Слои композита', 'message': 'Слой 1 — Толщина: ...'}]

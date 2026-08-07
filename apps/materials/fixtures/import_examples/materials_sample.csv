@@ -1,0 +1,4 @@
+code,name,description,tags,property_name,value_kind,value,value_b,notes
+IMP-MAT-001,Import demo laminate,Imported via CLI,lab;prepreg,density,scalar,1.55,,seed row
+IMP-MAT-001,Import demo laminate,,,tensile_strength,scalar,2200,,
+IMP-MAT-002,Second import material,,field,density,range,1.4,1.6,range example

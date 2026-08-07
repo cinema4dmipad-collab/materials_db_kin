@@ -4,8 +4,12 @@
 
 {% block content %}
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h1 class="h4 mb-0">Профиль пользователя</h1>
+        <div class="d-flex gap-2">
+            <a href="{% url 'accounts:profile_edit' %}" class="btn btn-sm btn-outline-primary">Редактировать</a>
+            <a href="{% url 'accounts:password_change' %}" class="btn btn-sm btn-outline-secondary">Сменить пароль</a>
+        </div>
     </div>
     <div class="card-body">
         <dl class="row mb-0">
@@ -35,6 +39,171 @@
             </dd>
             {% endif %}
         </dl>
+    </div>
+</div>
+
+<div class="card mb-4" id="keenetix-bridge-card">
+    <div class="card-header">
+        <h2 class="h5 mb-0">KeenetiX на этом ПК</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-0">
+            Запустите <strong>KeenetiX Pro</strong> с токеном API этого пользователя — в шапке
+            загорится индикатор <strong>KeenetiX</strong>. «Открыть в KeenetiX» отправит скан
+            в это приложение. Если подключится второй KeenetiX с тем же токеном, активным станет
+            последний.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h2 class="h5 mb-0">Токены API</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-3">
+            Создайте токен и сразу скопируйте секрет в KeenetiX.
+            Секрет показывается один раз; если закрыли окно без копирования — нажмите «Обновить секрет».
+        </p>
+        <form method="post" action="{% url 'accounts:token_create' %}" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <div class="col-md-4">
+                <label class="form-label" for="{{ api_token_form.name.id_for_label }}">{{ api_token_form.name.label }}</label>
+                {{ api_token_form.name }}
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="{{ api_token_form.expires_in_days.id_for_label }}">{{ api_token_form.expires_in_days.label }}</label>
+                {{ api_token_form.expires_in_days }}
+            </div>
+            <div class="col-md-2">
+                <div class="form-check mt-4">
+                    {{ api_token_form.never_expires }}
+                    <label class="form-check-label" for="{{ api_token_form.never_expires.id_for_label }}">{{ api_token_form.never_expires.label }}</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">Создать токен</button>
+            </div>
+        </form>
+    </div>
+    {% if api_tokens %}
+    <div class="table-responsive border-top">
+        <table class="table table-striped table-hover mb-0 align-middle app-data-table">
+            <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>Создан</th>
+                    <th>Истекает</th>
+                    <th>Последнее использование</th>
+                    <th>Статус</th>
+                    <th class="text-end">Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for token in api_tokens %}
+                <tr{% if token.revoked_at or token.is_expired %} class="text-muted"{% endif %}>
+                    <td>
+                        <button type="button"
+                                class="btn btn-link p-0 text-start text-decoration-none api-token-open"
+                                data-token-id="{{ token.pk }}"
+                                data-token-name="{{ token.name }}"
+                                {% if api_token_id == token.pk and api_token_plaintext %}data-token-secret="{{ api_token_plaintext }}"{% endif %}>
+                            <span class="d-inline-flex align-items-center gap-2">
+                                <i class="bi bi-key-fill text-muted" aria-hidden="true"></i>
+                                <span class="fw-semibold">{{ token.name }}</span>
+                            </span>
+                        </button>
+                    </td>
+                    <td class="text-nowrap">
+                        <span class="small">{{ token.created_at|date:"d.m.Y H:i" }}</span>
+                    </td>
+                    <td class="text-nowrap">
+                        {% if token.expires_at %}
+                        <span class="small">{{ token.expires_at|date:"d.m.Y H:i" }}</span>
+                        {% else %}
+                        <span class="small text-muted">бессрочно</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        {% if token.last_used_at %}
+                        <span class="small">{{ token.last_used_at|date:"d.m.Y H:i" }}</span>
+                        {% else %}
+                        <span class="small text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if token.revoked_at %}
+                        <span class="status-badge badge-revoked">Отозван</span>
+                        {% elif token.is_expired %}
+                        <span class="status-badge badge-pending">Истёк</span>
+                        {% else %}
+                        <span class="status-badge badge-ready">Активен</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if not token.revoked_at %}
+                        <div class="table-actions">
+                            {% url 'accounts:token_update' token.pk as token_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=token_edit_url title='Изменить' %}
+                            {% url 'accounts:token_rotate' token.pk as token_rotate_url %}
+                            {% include 'includes/table_action_icon.html' with action='rotate' url=token_rotate_url title='Обновить секрет' method='post' confirm='Выпустить новый секрет? Старый перестанет работать.' confirm_title='Обновление секрета' confirm_submit='Обновить' %}
+                            {% url 'accounts:token_revoke' token.pk as token_revoke_url %}
+                            {% include 'includes/table_action_icon.html' with action='delete' url=token_revoke_url title='Отозвать' method='post' confirm='Отозвать токен? После отзыва он перестанет работать.' confirm_title='Отзыв токена' confirm_submit='Отозвать' %}
+                        </div>
+                        {% else %}
+                        <span class="small text-muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body border-top py-4 text-center text-muted">
+        <i class="bi bi-key display-6 d-block mb-2 opacity-50" aria-hidden="true"></i>
+        <p class="mb-0">Токенов пока нет — создайте первый выше.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="modal fade" id="api-token-secret-modal" tabindex="-1" aria-labelledby="api-token-secret-title" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="api-token-secret-title">Токен API</h2>
+                <button type="button" class="btn-close d-none" id="api-token-secret-close-x" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2"><strong id="api-token-secret-name"></strong></p>
+                <div id="api-token-secret-available" class="d-none">
+                    <p class="text-muted small mb-2">
+                        Секрет показывается один раз. Скопируйте его сейчас — без копирования закрыть окно нельзя.
+                        Если уйдёте со страницы без копирования, секрет пропадёт (нужно будет обновить секрет в таблице).
+                    </p>
+                    <div class="input-group">
+                        <input type="text" class="form-control font-monospace" id="api-token-secret-display" readonly autocomplete="off">
+                        <button type="button" class="btn btn-outline-secondary" id="api-token-secret-toggle" title="Показать / скрыть">
+                            <i class="bi bi-eye" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="btn btn-primary" id="api-token-secret-copy">
+                            <i class="bi bi-clipboard me-1" aria-hidden="true"></i>Скопировать
+                        </button>
+                    </div>
+                    <div class="form-text" id="api-token-secret-copy-status" aria-live="polite"></div>
+                </div>
+                <div id="api-token-secret-missing" class="d-none">
+                    <div class="alert alert-secondary mb-0">
+                        Секрет этого токена больше недоступен (хранится только хеш).
+                        Чтобы получить новый — нажмите «Обновить секрет» в таблице.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary d-none" id="api-token-secret-close" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary d-none" id="api-token-secret-done" disabled>Готово</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -71,4 +240,148 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    const modalEl = document.getElementById('api-token-secret-modal');
+    if (!modalEl || typeof bootstrap === 'undefined') {
+        return;
+    }
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
+        backdrop: 'static',
+        keyboard: false,
+    });
+    const nameEl = document.getElementById('api-token-secret-name');
+    const displayEl = document.getElementById('api-token-secret-display');
+    const availableEl = document.getElementById('api-token-secret-available');
+    const missingEl = document.getElementById('api-token-secret-missing');
+    const toggleBtn = document.getElementById('api-token-secret-toggle');
+    const copyBtn = document.getElementById('api-token-secret-copy');
+    const copyStatus = document.getElementById('api-token-secret-copy-status');
+    const doneBtn = document.getElementById('api-token-secret-done');
+    const closeBtn = document.getElementById('api-token-secret-close');
+    const closeXBtn = document.getElementById('api-token-secret-close-x');
+    let currentSecret = '';
+    let revealed = false;
+    let copied = false;
+    let requireCopy = false;
+
+    function maskSecret(value) {
+        if (!value) {
+            return '';
+        }
+        if (value.length <= 10) {
+            return value.slice(0, 2) + '•'.repeat(Math.max(value.length - 2, 4));
+        }
+        return value.slice(0, 4) + '•'.repeat(Math.min(value.length - 8, 24)) + value.slice(-4);
+    }
+
+    function renderSecret() {
+        displayEl.value = revealed ? currentSecret : maskSecret(currentSecret);
+        const icon = toggleBtn.querySelector('i');
+        if (icon) {
+            icon.className = revealed ? 'bi bi-eye-slash' : 'bi bi-eye';
+        }
+    }
+
+    function setCopiedState(isCopied) {
+        copied = isCopied;
+        doneBtn.disabled = requireCopy && !copied;
+        if (requireCopy && copied) {
+            copyStatus.textContent = 'Скопировано. Можно закрыть окно и вставить токен в KeenetiX.';
+        }
+    }
+
+    function openTokenModal({ name, secret }) {
+        nameEl.textContent = name || 'Токен API';
+        currentSecret = secret || '';
+        revealed = false;
+        copyStatus.textContent = '';
+        requireCopy = Boolean(currentSecret);
+        availableEl.classList.toggle('d-none', !requireCopy);
+        missingEl.classList.toggle('d-none', requireCopy);
+        doneBtn.classList.toggle('d-none', !requireCopy);
+        closeBtn.classList.toggle('d-none', requireCopy);
+        closeXBtn.classList.toggle('d-none', requireCopy);
+        setCopiedState(false);
+        if (requireCopy) {
+            renderSecret();
+        }
+        modal.show();
+    }
+
+    function clearSecretFromDom() {
+        currentSecret = '';
+        displayEl.value = '';
+        document.querySelectorAll('.api-token-open[data-token-secret]').forEach((btn) => {
+            delete btn.dataset.tokenSecret;
+        });
+    }
+
+    document.querySelectorAll('.api-token-open').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            openTokenModal({
+                name: btn.dataset.tokenName || '',
+                secret: btn.dataset.tokenSecret || '',
+            });
+        });
+    });
+
+    toggleBtn.addEventListener('click', () => {
+        if (!currentSecret) {
+            return;
+        }
+        revealed = !revealed;
+        renderSecret();
+    });
+
+    copyBtn.addEventListener('click', async () => {
+        if (!currentSecret) {
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(currentSecret);
+            setCopiedState(true);
+        } catch (err) {
+            displayEl.select();
+            document.execCommand('copy');
+            setCopiedState(true);
+        }
+    });
+
+    doneBtn.addEventListener('click', () => {
+        if (requireCopy && !copied) {
+            copyStatus.textContent = 'Сначала скопируйте секрет.';
+            return;
+        }
+        clearSecretFromDom();
+        requireCopy = false;
+        modal.hide();
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+        displayEl.value = '';
+        copyStatus.textContent = '';
+        if (document.activeElement && modalEl.contains(document.activeElement)) {
+            document.activeElement.blur();
+        }
+    });
+
+    window.addEventListener('beforeunload', (event) => {
+        if (requireCopy && !copied && modalEl.classList.contains('show')) {
+            event.preventDefault();
+            event.returnValue = '';
+        }
+    });
+
+    {% if api_token_plaintext and api_token_id %}
+    openTokenModal({
+        name: "{{ api_token_name|default_if_none:''|escapejs }}",
+        secret: "{{ api_token_plaintext|escapejs }}",
+    });
+    {% endif %}
+})();
+</script>
 {% endblock %}

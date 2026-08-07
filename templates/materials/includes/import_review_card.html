@@ -1,0 +1,29 @@
+{% load ui_tags %}
+<article class="import-review-card"
+         draggable="true"
+         data-material-id="{{ material.pk }}"
+         data-status="{{ status }}">
+    <div class="import-review-card__top">
+        <a href="{% url 'materials:detail' material.pk %}"
+           class="import-review-card__title"
+           draggable="false">
+            {{ material.name }}
+        </a>
+        {% if material.struct_type %}
+        <div class="import-review-card__type">
+            {% include 'includes/type_badge.html' with label=material.struct_type.name tone=material.struct_type.display_color %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="import-review-card__meta text-muted small">
+        {% if material.code %}<span>{{ material.code }}</span>{% endif %}
+        {% if material.import_source_filename %}
+        <span title="Файл импорта">{{ material.import_source_filename }}</span>
+        {% endif %}
+    </div>
+    {% if material.display_tags %}
+    <div class="import-review-card__tags mt-1">
+        {% include 'includes/tag_badges.html' with tags=material.display_tags %}
+    </div>
+    {% endif %}
+</article>

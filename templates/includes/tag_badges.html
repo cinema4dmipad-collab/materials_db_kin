@@ -1,14 +1,18 @@
 {% load list_filter_tags %}
-{% if tags %}
+{% with display_tags=tags|coalesce_tag_styles %}
+{% if display_tags %}
 <div class="entity-tags">
-    {% for tag in tags %}
+    {% for tag in display_tags %}
     {% if filter_url %}
-    <a href="{% tag_filter_link tag.slug filter_url %}" class="entity-tag tone-tag">{{ tag.name }}</a>
+    <a href="{% tag_filter_link tag.slug filter_url %}" class="entity-tag{% if tag.name|is_scoped_tag %} entity-tag--scoped{% endif %}{% if not tag.color %} tone-tag{% endif %}"
+       {% tag_badge_style tag %}{% if tag.description %} title="{{ tag.description }}"{% endif %}>{{ tag.name|scoped_tag_label }}</a>
     {% else %}
-    <span class="entity-tag tone-tag">{{ tag.name }}</span>
+    <span class="entity-tag{% if tag.name|is_scoped_tag %} entity-tag--scoped{% endif %}{% if not tag.color %} tone-tag{% endif %}"
+          {% tag_badge_style tag %}{% if tag.description %} title="{{ tag.description }}"{% endif %}>{{ tag.name|scoped_tag_label }}</span>
     {% endif %}
     {% endfor %}
 </div>
 {% else %}
 <span class="text-muted">—</span>
 {% endif %}
+{% endwith %}

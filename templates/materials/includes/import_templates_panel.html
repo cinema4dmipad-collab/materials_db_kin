@@ -1,0 +1,70 @@
+{# Единый блок: применить + сохранить. Load-form — отдельно, вне #import-map-form. #}
+<div class="import-templates-panel mb-3" id="import-templates-panel">
+    <div class="import-templates-panel__title">
+        Шаблоны маппинга
+        <span class="import-help__trigger" tabindex="0" aria-label="Подсказка по шаблонам">
+            <span class="import-help__mark" aria-hidden="true">?</span>
+            <span class="import-help__tip import-help__tip--start" role="tooltip">
+                Шаблон хранит сопоставление колонок, тип структуры и общие теги импорта.
+                Примените к файлу или сохраните текущий маппинг под именем.
+            </span>
+        </span>
+    </div>
+
+    {% if import_templates %}
+    <div class="import-templates-panel__row row g-2 align-items-end mb-2">
+        <div class="col-md-7 col-lg-8">
+            <label class="form-label form-label-sm mb-1" for="import-template-id">Применить шаблон</label>
+            <select name="template_id"
+                    id="import-template-id"
+                    class="form-select form-select-sm"
+                    form="import-load-template-form"
+                    required>
+                {% for item in import_templates %}
+                <option value="{{ item.id }}"{% if item.id == selected_template_id %} selected{% endif %}>
+                    {{ item.option_label }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-5 col-lg-4">
+            <button type="submit"
+                    form="import-load-template-form"
+                    class="btn btn-outline-primary btn-sm w-100"
+                    data-import-busy="1">
+                Применить шаблон
+            </button>
+        </div>
+    </div>
+    {% else %}
+    <p class="import-templates-panel__hint mb-2">
+        Пока нет сохранённых шаблонов — настройте маппинг и сохраните его ниже.
+    </p>
+    {% endif %}
+
+    <div class="import-templates-panel__row row g-2 align-items-end">
+        <div class="col-md-7 col-lg-8">
+            <label class="form-label form-label-sm mb-1" for="import-template-name">
+                Сохранить текущий маппинг
+            </label>
+            <input type="text"
+                   name="template_name"
+                   id="import-template-name"
+                   class="form-control form-control-sm"
+                   form="import-map-form"
+                   placeholder="Напр. Ткани из Excel"
+                   maxlength="120"
+                   autocomplete="off">
+        </div>
+        <div class="col-md-5 col-lg-4">
+            <button type="submit"
+                    name="action"
+                    value="save_template"
+                    form="import-map-form"
+                    class="btn btn-outline-secondary btn-sm w-100"
+                    data-import-busy="1">
+                Сохранить шаблон
+            </button>
+        </div>
+    </div>
+</div>

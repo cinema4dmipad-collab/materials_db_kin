@@ -146,7 +146,9 @@
 }
 
 .group-picker-section + .group-picker-section {
-    margin-top: 0.75rem;
+    margin-top: 0.45rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--kx-border, #e4e7ec);
 }
 
 .member-add-row__user-card-inner {

@@ -1,0 +1,136 @@
+.import-review-board {
+    align-items: stretch;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: min(70vh, 36rem);
+}
+
+@media (max-width: 900px) {
+    .import-review-board {
+        grid-template-columns: 1fr;
+        min-height: 0;
+    }
+}
+
+.import-review-column {
+    background: var(--kx-surface-muted, #f4f7f7);
+    border: 1px solid var(--kx-border, #d0d5dd);
+    border-radius: 0.65rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 18rem;
+    overflow: hidden;
+    transition: background 0.12s ease, outline-color 0.12s ease;
+}
+
+.import-review-column.is-drop-target {
+    background: rgba(0, 118, 121, 0.1);
+    outline: 2px dashed var(--kx-brand, #007679);
+    outline-offset: -4px;
+}
+
+.import-review-column__head {
+    align-items: center;
+    background: var(--kx-surface, #fff);
+    border-bottom: 1px solid var(--kx-border, #d0d5dd);
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.5rem;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+}
+
+.import-review-column__title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.import-review-column__body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-height: 14rem;
+    padding: 0.75rem;
+}
+
+.import-review-card {
+    background: var(--kx-surface, #fff);
+    border: 1px solid var(--kx-border-strong, #c9d2d2);
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    cursor: grab;
+    flex-shrink: 0;
+    padding: 0.75rem 0.85rem;
+}
+
+.import-review-card:active {
+    cursor: grabbing;
+}
+
+.import-review-card.is-dragging {
+    opacity: 0.45;
+}
+
+/* Чужие карточки не перехватывают drop; тянущуюся не трогаем — иначе браузер рвёт drag */
+.import-review-board.is-dragging .import-review-card:not(.is-dragging),
+.import-review-board.is-dragging .import-review-empty {
+    pointer-events: none;
+}
+
+.import-review-card__top {
+    align-items: start;
+    display: grid;
+    gap: 0.35rem 0.75rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.import-review-card__title {
+    color: var(--kx-text, #111);
+    font-weight: 650;
+    grid-column: 1;
+    min-width: 0;
+    text-decoration: none;
+    -webkit-user-drag: none;
+    user-select: none;
+    word-break: break-word;
+}
+
+.import-review-card__type {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    white-space: nowrap;
+}
+
+.import-review-card__type .type-pill {
+    max-width: 100%;
+}
+
+.import-review-card__type .type-pill__label {
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.import-review-card a {
+    -webkit-user-drag: none;
+}
+
+.import-review-card__title:hover {
+    color: var(--kx-brand-dark, #005a5c);
+}
+
+.import-review-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.import-review-empty {
+    padding: 0.5rem 0.25rem;
+}

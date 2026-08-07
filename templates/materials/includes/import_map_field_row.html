@@ -1,0 +1,56 @@
+<tr class="import-map-row{% if item.is_required_target %} is-required-row{% endif %}{% if not item.column %} is-unmapped{% endif %}"
+    data-import-map-row
+    data-field-target="{{ item.target }}"
+    data-field-label="{{ item.target_label|escape }}"
+    data-mapping-target="{{ item.mapping_target|default:item.target }}"
+    data-map-section-kind="{{ item.section }}"
+    data-column-index="{% if item.column_index != None %}{{ item.column_index }}{% endif %}"
+    data-is-primary="{% if item.is_primary %}1{% else %}0{% endif %}"
+    data-is-required="{% if item.is_required_target %}1{% else %}0{% endif %}"
+    tabindex="0"
+    role="option"
+    aria-selected="false"
+    aria-label="{% if item.is_tag %}Тег {{ item.tag_preview }}{% else %}Поле {{ item.target_label }}{% endif %}">
+    <td class="import-map-row__file">
+        <div class="import-map-row__head">
+            <div class="import-map-row__title">{{ item.target_label }}</div>
+            {% if item.is_required_target %}
+            <span class="import-required-badge">★ обязательно</span>
+            {% endif %}
+        </div>
+        <div class="import-map-row__sample import-map-row__sample-live"
+             title="{% if item.is_tag %}{{ item.tag_preview }}{% else %}{{ item.sample }}{% endif %}">{% if item.is_tag %}{{ item.tag_preview }}{% else %}{{ item.sample }}{% endif %}</div>
+    </td>
+    <td class="import-map-row__expr">
+        <span class="import-map-expr-slot{% if not item.column %} is-empty{% endif %}"
+              data-drop-slot
+              {% if item.column %}draggable="true"{% endif %}
+              title="{% if not item.column %}Перетащите колонку сюда или выберите строку и кликните колонку справа{% else %}Перетащите в другое поле или обратно в каталог{% endif %}">
+            <span class="import-map-expr-label">{% if item.column %}{{ item.column.display }}{% endif %}</span>
+        </span>
+        <input type="hidden"
+               class="import-map-column-value"
+               value="{% if item.column_index != None %}{{ item.column_index }}{% endif %}"
+               data-label="{% if item.column %}{{ item.column.display|escape }}{% endif %}"
+               data-sample="{{ item.sample|escape }}">
+    </td>
+    <td class="import-map-row__parse{% if item.is_tag %} import-map-row__parse--tag{% endif %}">
+        {% if item.is_tag %}
+        <span class="text-muted" aria-hidden="true">—</span>
+        {% else %}
+        <select class="form-select form-select-sm import-map-parse"
+                aria-label="Тип поля для {{ item.target_label }}"
+                {% if not item.column %}disabled{% endif %}>
+            {% for value, label in parse_modes %}
+            <option value="{{ value }}"{% if item.parse == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </td>    <td class="import-map-row__actions">
+        {% if item.is_addon %}
+        <button type="button"
+                class="btn btn-link btn-sm text-danger import-map-remove-field p-0"
+                title="{% if item.is_tag %}Убрать тег{% else %}Убрать поле{% endif %}">×</button>
+        {% endif %}
+    </td>
+</tr>

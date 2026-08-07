@@ -213,6 +213,26 @@ def materials_owned_by(workspace):
     return Material.objects.filter(home_workspace=workspace)
 
 
+def materials_linked_in(workspace):
+    from apps.materials.models import Material
+
+    if workspace is None:
+        return Material.objects.none()
+    return Material.objects.filter(workspace_links__workspace=workspace).distinct()
+
+
+def materials_in_workspace_tab(workspace):
+    from apps.materials.models import Material
+
+    if workspace is None:
+        return Material.objects.none()
+    if not _model_has_field(Material, 'home_workspace'):
+        return Material.objects.all()
+    return Material.objects.filter(
+        Q(home_workspace=workspace) | Q(workspace_links__workspace=workspace),
+    ).distinct()
+
+
 def materials_shared_in(workspace):
     from apps.materials.models import Material
     from apps.workspaces.visibility import VisibilityMode
@@ -261,8 +281,28 @@ def samples_in_workspace(workspace):
     return Sample.objects.all()
 
 
-def scans_in_workspace(workspace):
+def samples_visible_in(workspace):
+    from django.db.models import F, Q
     from apps.samples.models import Sample
+
+    if workspace is None:
+        return Sample.objects.none()
+    if not _model_has_field(Sample, 'workspace'):
+        return Sample.objects.all()
+
+    visible_materials = materials_visible_in(workspace)
+    shared_materials = visible_materials.exclude(home_workspace=workspace)
+    return Sample.objects.filter(
+        Q(workspace=workspace)
+        | Q(
+            material__in=shared_materials.filter(home_workspace__isnull=False),
+            workspace_id=F('material__home_workspace_id'),
+        )
+        | Q(material__in=shared_materials.filter(home_workspace__isnull=True)),
+    ).distinct()
+
+
+def scans_in_workspace(workspace):
     from apps.scans.models import ScanRecord
 
     if workspace is None:
@@ -272,3 +312,17 @@ def scans_in_workspace(workspace):
     if _model_has_field(Sample, 'workspace'):
         return ScanRecord.objects.filter(sample__workspace=workspace)
     return ScanRecord.objects.all()
+
+
+def scans_visible_in(workspace):
+    from django.db.models import Q
+    from apps.scans.models import ScanRecord
+
+    if workspace is None:
+        return ScanRecord.objects.none()
+    visible_samples = samples_visible_in(workspace)
+    if _model_has_field(ScanRecord, 'workspace'):
+        return ScanRecord.objects.filter(
+            Q(workspace=workspace) | Q(sample__in=visible_samples),
+        ).distinct()
+    return ScanRecord.objects.filter(sample__in=visible_samples)

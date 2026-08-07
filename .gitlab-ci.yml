@@ -44,6 +44,9 @@ test:
     POETRY_VIRTUALENVS_IN_PROJECT: 'true'
     POETRY_VIRTUALENVS_CREATE: 'true'
     DB_ENGINE: ''
+    # Windows runner часто не достучится до pypi.org — ставим deps через pip + зеркало.
+    PIP_INDEX_URL: 'https://pypi.tuna.tsinghua.edu.cn/simple/'
+    PIP_TRUSTED_HOST: 'pypi.tuna.tsinghua.edu.cn'
   before_script:
     - *poetry_setup_windows
   script:

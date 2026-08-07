@@ -64,8 +64,22 @@ class PropertyMappingTests(TestCase):
         self.assertEqual(data['field_type'], 'DecimalField')
         self.assertEqual(data['label'], 'Предел прочности, МПа')
         self.assertEqual(data['name'], 'tensile_strength')
-        self.assertEqual(data['decimal_places'], 4)
+        self.assertEqual(data['decimal_places'], 2)
         self.assertEqual(data['max_digits'], 10)
+
+    def test_property_maps_to_decimal_field_with_custom_decimal_places(self):
+        prop = Property.objects.create(
+            name='density',
+            display_name='Плотность',
+            unit='g/cm3',
+            data_type='number',
+            decimal_places=2,
+            group=self.group,
+        )
+
+        data = property_to_structure_field_data(prop)
+
+        self.assertEqual(data['decimal_places'], 2)
 
     def test_property_string_maps_to_char_field(self):
         prop = Property.objects.create(
@@ -75,6 +89,29 @@ class PropertyMappingTests(TestCase):
         )
 
         self.assertEqual(property_to_structure_field_data(prop)['field_type'], 'CharField')
+
+    def test_property_choice_maps_to_choice_field_with_options(self):
+        from apps.references.models import PropertyChoice
+
+        prop = Property.objects.create(
+            name='weave_type',
+            display_name='Тип сплетения',
+            data_type='choice',
+        )
+        PropertyChoice.objects.create(property=prop, label='Саржа', value='twill', sort_order=0)
+        PropertyChoice.objects.create(property=prop, label='Полотно', value='plain', sort_order=1)
+
+        data = property_to_structure_field_data(prop)
+        self.assertEqual(data['field_type'], 'ChoiceField')
+        self.assertEqual(data['data_type'], 'choice')
+        self.assertEqual(
+            data['choices'],
+            [
+                {'value': 'twill', 'label': 'Саржа'},
+                {'value': 'plain', 'label': 'Полотно'},
+            ],
+        )
+        self.assertEqual(data['choice_options'], data['choices'])
 
     def test_reserved_sql_name_gets_safe_suffix(self):
         prop = Property.objects.create(
@@ -123,19 +160,31 @@ class StructureIdentifierTests(TestCase):
             data={
                 'name': 'UI Sandwich',
                 'description': '',
-                'display_color': 'tone-teal',
+                'display_color': '#007679',
                 'table_name': 'structures_custom_panel',
             }
         )
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['table_name'], 'structures_custom_panel')
 
+    def test_structure_type_form_rejects_invalid_display_color(self):
+        form = StructureTypeForm(
+            data={
+                'name': 'UI Sandwich',
+                'description': '',
+                'display_color': 'red',
+                'table_name': 'structures_custom_panel',
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('display_color', form.errors)
+
     def test_structure_type_form_rejects_invalid_table_name(self):
         form = StructureTypeForm(
             data={
                 'name': 'UI Sandwich',
                 'description': '',
-                'display_color': 'tone-teal',
+                'display_color': '#007679',
                 'table_name': 'structures_bad-name',
             }
         )
@@ -147,7 +196,7 @@ class StructureIdentifierTests(TestCase):
             data={
                 'name': 'UI Sandwich',
                 'description': '',
-                'display_color': 'tone-teal',
+                'display_color': '#007679',
             }
         )
         self.assertTrue(form.is_valid(), form.errors)
@@ -252,6 +301,9 @@ class PermissiveAdminUser:
 
 class PublicStructureRecordViewsTests(TransactionTestCase):
     def setUp(self):
+        from apps.workspaces.services import ensure_legacy_workspace
+
+        self.workspace = ensure_legacy_workspace()
         self.structure_type = StructureType.objects.create(
             name='Public Panel',
             code='public_panel',
@@ -269,7 +321,7 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         StructureField.objects.create(
             structure_type=self.structure_type,
             name='thickness',
-            label='Thickness',
+            label='Thickness, mm',
             field_type='DecimalField',
             max_digits=8,
             decimal_places=2,
@@ -290,9 +342,10 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Public Panel')
-        self.assertContains(response, 'Public UI type')
         self.assertContains(response, reverse('structures:list', args=[self.structure_type.code]))
         self.assertContains(response, reverse('structures:type_manage', args=[self.structure_type.code]))
+        self.assertContains(response, 'bi-gear')
+        self.assertNotContains(response, 'structures_public_panel')
 
     def test_create_list_detail_edit_delete_flow(self):
         create_url = reverse('structures:create', args=[self.structure_type.code])
@@ -305,14 +358,24 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
         self.assertEqual(create_response.status_code, 302)
 
-        list_response = self.client.get(
-            reverse('structures:list', args=[self.structure_type.code])
-        )
-        self.assertContains(list_response, 'Panel A')
-
         records = SQLExecutor.get_structure_instances(self.structure_type)
         self.assertEqual(len(records), 1)
         row_id = records[0]['id']
+
+        material = Material.objects.create(
+            code='MAT-PANEL-A',
+            name='Panel A material',
+            home_workspace=self.workspace,
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        list_response = self.client.get(
+            reverse('structures:list', args=[self.structure_type.code])
+        )
+        self.assertContains(list_response, 'Panel A material')
+        self.assertContains(list_response, 'MAT-PANEL-A')
+        self.assertContains(list_response, 'structure-materials-grid')
+        self.assertContains(list_response, '12,50')
 
         detail_response = self.client.get(
             reverse('structures:detail', args=[self.structure_type.code, row_id])
@@ -331,6 +394,7 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         updated = SQLExecutor.get_structure_instance(self.structure_type, row_id)
         self.assertEqual(updated['title'], 'Panel B')
 
+        material.delete()
         delete_response = self.client.post(
             reverse('structures:delete', args=[self.structure_type.code, row_id])
         )
@@ -361,7 +425,187 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
         self.assertIsNotNone(SQLExecutor.get_structure_instance(self.structure_type, row_id))
 
-    def test_routes_require_created_table(self):
+    def test_detail_shows_material_expand_for_material_link(self):
+        material = Material.objects.create(code='MAT-EXPAND', name='Expandable material')
+        link_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='linked_material',
+            label='Linked material',
+            field_type=MATERIAL_LINK_FIELD_TYPE,
+            foreign_key_model='materials.Material',
+            sort_order=3,
+        )
+
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {
+                'title': 'Panel with link',
+                'thickness': '3.00',
+                'linked_material': material,
+            },
+        )['id']
+
+        response = self.client.get(
+            reverse('structures:detail', args=[self.structure_type.code, row_id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Expandable material')
+        self.assertContains(response, 'structure-material-expand')
+        self.assertContains(response, 'Развернуть')
+        self.assertContains(response, f'data-material-id="{material.pk}"')
+        self.assertContains(response, f'id="structure-material-preview-{link_field.pk}"')
+        self.assertContains(response, 'structure_material_expand.js')
+        self.assertContains(
+            response,
+            reverse(
+                'materials:properties_json',
+                kwargs={'pk': '00000000-0000-0000-0000-000000000000'},
+            ),
+        )
+
+    def test_structure_record_display_label_prefers_linked_material_name(self):
+        from apps.structures.table_storage import structure_record_display_label
+
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Panel A', 'thickness': '78.00'},
+        )['id']
+        material = Material.objects.create(
+            code='MAT-DISPLAY-LABEL',
+            name='Полотно',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+
+        self.assertEqual(
+            structure_record_display_label(record, self.structure_type),
+            'Полотно',
+        )
+        self.assertEqual(
+            structure_record_display_label(
+                record,
+                self.structure_type,
+                linked_materials=[{'pk': material.pk, 'code': material.code, 'name': material.name}],
+            ),
+            'Полотно',
+        )
+
+    def test_list_shows_materials_structure_grid(self):
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Linked panel', 'thickness': '4.00'},
+        )['id']
+        material = Material.objects.create(
+            code='MAT-LIST-EXPAND',
+            name='List expandable material',
+            home_workspace=self.workspace,
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+
+        response = self.client.get(
+            reverse('structures:list', args=[self.structure_type.code])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'List expandable material')
+        self.assertContains(response, 'MAT-LIST-EXPAND')
+        self.assertContains(response, 'structure-materials-grid')
+        self.assertContains(response, 'Linked panel')
+        self.assertContains(response, '4,00')
+        self.assertContains(response, 'Thickness')
+        self.assertContains(response, 'structure-materials-grid__col-unit')
+        self.assertContains(response, '>mm<')
+        self.assertContains(response, reverse('materials:detail', args=[material.pk]))
+        self.assertNotContains(response, 'structure-material-expand')
+        self.assertNotContains(response, 'structure_material_expand.js')
+
+    def test_list_search_filters_by_tag_without_showing_tags(self):
+        from apps.core.models import Tag
+
+        tagged_row = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Tagged panel', 'thickness': '1.00'},
+        )['id']
+        other_row = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Other panel', 'thickness': '2.00'},
+        )['id']
+        tagged = Material.objects.create(
+            code='MAT-TAGGED',
+            name='Tagged material',
+            home_workspace=self.workspace,
+            struct_type=self.structure_type,
+            struct_props_id=tagged_row,
+        )
+        Material.objects.create(
+            code='MAT-OTHER',
+            name='Other material',
+            home_workspace=self.workspace,
+            struct_type=self.structure_type,
+            struct_props_id=other_row,
+        )
+        tag = Tag.objects.create(
+            name='кевлар-тест',
+            slug='kevlar-test',
+            workspace=self.workspace,
+        )
+        tagged.tags.add(tag)
+
+        response = self.client.get(
+            reverse('structures:list', args=[self.structure_type.code]),
+            {'q': 'кевлар'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Tagged material')
+        self.assertContains(response, 'MAT-TAGGED')
+        self.assertNotContains(response, 'Other material')
+        self.assertNotContains(response, 'MAT-OTHER')
+        self.assertNotContains(response, 'кевлар-тест')
+
+    def test_list_shows_only_home_workspace_materials(self):
+        from apps.workspaces.models import Workspace
+        from apps.workspaces.visibility import VisibilityMode
+
+        local_row = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Local panel', 'thickness': '1.00'},
+        )['id']
+        shared_row = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Shared panel', 'thickness': '2.00'},
+        )['id']
+        other = Workspace.objects.create(slug='other-struct-ws', name='Other struct WS')
+        Material.objects.create(
+            code='MAT-LOCAL-WS',
+            name='Local workspace material',
+            home_workspace=self.workspace,
+            struct_type=self.structure_type,
+            struct_props_id=local_row,
+        )
+        Material.objects.create(
+            code='MAT-SHARED-WS',
+            name='Shared workspace material',
+            home_workspace=other,
+            visibility_mode=VisibilityMode.ALL_WORKSPACES,
+            struct_type=self.structure_type,
+            struct_props_id=shared_row,
+        )
+
+        response = self.client.get(
+            reverse('structures:list', args=[self.structure_type.code])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Local workspace material')
+        self.assertContains(response, 'MAT-LOCAL-WS')
+        self.assertNotContains(response, 'Shared workspace material')
+        self.assertNotContains(response, 'MAT-SHARED-WS')
+
+    def test_list_allows_type_without_created_table(self):
         draft_type = StructureType.objects.create(
             name='Draft Panel',
             code='draft_panel',
@@ -377,6 +621,26 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
 
         response = self.client.get(reverse('structures:list', args=[draft_type.code]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ещё не создана')
+        self.assertContains(response, reverse('structures:type_manage', args=[draft_type.code]))
+
+    def test_create_requires_created_table(self):
+        draft_type = StructureType.objects.create(
+            name='Draft Panel Create',
+            code='draft_panel_create',
+            table_name='structures_draft_panel_create',
+            is_active=True,
+        )
+        StructureField.objects.create(
+            structure_type=draft_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            sort_order=1,
+        )
+
+        response = self.client.get(reverse('structures:create', args=[draft_type.code]))
         self.assertRedirects(
             response,
             reverse('structures:type_manage', args=[draft_type.code]),
@@ -412,7 +676,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'add-from-properties-btn')
-        self.assertContains(response, 'add-material-link-btn')
+        self.assertNotContains(response, 'add-material-link-btn')
         self.assertContains(response, 'structure-field-empty')
         self.assertContains(response, 'reference-properties-data')
 
@@ -423,7 +687,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
             {
                 'name': 'UI Sandwich',
                 'description': 'Created from public UI',
-                'display_color': 'tone-blue',
+                'display_color': '#6A8FC0',
                 'allow_layers': 'on',
                 'fields-TOTAL_FORMS': '1',
                 'fields-INITIAL_FORMS': '0',
@@ -440,7 +704,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         self.assertEqual(response.status_code, 302)
         structure_type = StructureType.objects.get(code='ui_sandwich')
         self.assertFalse(structure_type.is_created)
-        self.assertEqual(structure_type.display_color, 'tone-blue')
+        self.assertEqual(structure_type.display_color, '#6A8FC0')
         self.assertEqual(structure_type.fields.count(), 1)
 
         manage_url = reverse('structures:type_manage', args=[structure_type.code])
@@ -470,7 +734,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
             {
                 'name': 'UI Empty',
                 'description': '',
-                'display_color': 'tone-blue',
+                'display_color': '#6A8FC0',
                 'fields-TOTAL_FORMS': '0',
                 'fields-INITIAL_FORMS': '0',
                 'fields-MIN_NUM_FORMS': '0',
@@ -496,7 +760,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type = StructureType.objects.create(
             name='UI Custom Table',
             code='ui_custom_table',
-            display_color='tone-blue',
+            display_color='#6A8FC0',
         )
         table_response = self.client.post(
             reverse('structures:type_create_table', args=[structure_type.code]),
@@ -515,7 +779,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type = StructureType.objects.create(
             name='UI Bad Table',
             code='ui_bad_table',
-            display_color='tone-blue',
+            display_color='#6A8FC0',
         )
         table_response = self.client.post(
             reverse('structures:type_create_table', args=[structure_type.code]),
@@ -530,7 +794,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type = StructureType.objects.create(
             name='UI Prompt Existing',
             code='ui_prompt_existing',
-            display_color='tone-blue',
+            display_color='#6A8FC0',
         )
         manage_url = reverse('structures:type_manage', args=[structure_type.code])
         response = self.client.get(manage_url)
@@ -600,7 +864,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
             {
                 'name': 'UI Duplicate Fields',
                 'description': '',
-                'display_color': 'tone-teal',
+                'display_color': '#007679',
                 'fields-TOTAL_FORMS': '2',
                 'fields-INITIAL_FORMS': '0',
                 'fields-MIN_NUM_FORMS': '0',
@@ -627,13 +891,13 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type = StructureType.objects.create(
             name='UI Color',
             code='ui_color_type',
-            display_color='tone-teal',
+            display_color='#007679',
         )
         manage_url = reverse('structures:type_manage', args=[structure_type.code])
-        response = self.client.post(manage_url, {'display_color': 'tone-violet'})
+        response = self.client.post(manage_url, {'display_color': '#8B5CF6'})
         self.assertRedirects(response, manage_url)
         structure_type.refresh_from_db()
-        self.assertEqual(structure_type.display_color, 'tone-violet')
+        self.assertEqual(structure_type.display_color, '#8B5CF6')
 
 
 class SQLOnlyDynamicStructureTests(TransactionTestCase):
@@ -786,7 +1050,7 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertTrue(SQLExecutor.table_exists(empty_type))
         SQLExecutor.drop_table(empty_type)
 
-    def test_structure_field_validation_rejects_create_change_and_delete_when_created(self):
+    def test_structure_field_allows_create_but_rejects_change_and_delete_when_created(self):
         field = self.structure_type.fields.get(name='title')
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
 
@@ -797,10 +1061,15 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             field_type='CharField',
             sort_order=4,
         )
-        with self.assertRaises(ValidationError):
-            new_field.full_clean()
-        with self.assertRaises(ValidationError):
-            new_field.save()
+        new_field.full_clean()
+        new_field.save()
+        self.assertTrue(self.structure_type.fields.filter(name='status').exists())
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT * FROM {SQLExecutor.quote_identifier(self.structure_type.table_name)} LIMIT 0'
+            )
+            columns = [column[0] for column in cursor.description]
+        self.assertIn('status', columns)
 
         field.label = 'Changed title'
         with self.assertRaises(ValidationError):
@@ -821,27 +1090,32 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             field_type='CharField',
             sort_order=4,
         )
-
+        # Table flag is set but physical table may be missing — add_column should fail.
         with self.assertRaises(ValidationError):
-            new_field.full_clean()
+            new_field.save()
 
-    def test_structure_field_bulk_create_rejects_created_structure_type(self):
+    def test_structure_field_bulk_create_adds_column_for_created_structure_type(self):
         self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
 
-        with self.assertRaises(ValidationError):
-            StructureField.objects.bulk_create(
-                [
-                    StructureField(
-                        structure_type=self.structure_type,
-                        name='status',
-                        label='Status',
-                        field_type='CharField',
-                        sort_order=4,
-                    )
-                ]
-            )
+        StructureField.objects.bulk_create(
+            [
+                StructureField(
+                    structure_type=self.structure_type,
+                    name='status',
+                    label='Status',
+                    field_type='CharField',
+                    sort_order=4,
+                )
+            ]
+        )
 
-        self.assertFalse(self.structure_type.fields.filter(name='status').exists())
+        self.assertTrue(self.structure_type.fields.filter(name='status').exists())
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'SELECT * FROM {SQLExecutor.quote_identifier(self.structure_type.table_name)} LIMIT 0'
+            )
+            columns = [column[0] for column in cursor.description]
+        self.assertIn('status', columns)
 
     def test_structure_field_bulk_update_rejects_created_structure_type(self):
         field = self.structure_type.fields.get(name='title')
@@ -873,20 +1147,22 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
 
         self.assertTrue(StructureField.objects.filter(pk=field.pk).exists())
 
-    def test_structure_field_inline_is_locked_when_table_created(self):
+    def test_structure_field_inline_allows_add_but_locks_change_delete_when_created(self):
         site = AdminSite()
         inline = StructureFieldInline(StructureType, site)
         self.structure_type.is_created = True
+        request = RequestFactory().get('/')
+        request.user = PermissiveAdminUser()
 
-        self.assertFalse(inline.has_add_permission(None, self.structure_type))
-        self.assertFalse(inline.has_change_permission(None, self.structure_type))
-        self.assertFalse(inline.has_delete_permission(None, self.structure_type))
-        self.assertEqual(inline.get_extra(None, self.structure_type), 0)
-        self.assertEqual(set(inline.get_readonly_fields(None, self.structure_type)), set(inline.fields))
+        self.assertTrue(inline.has_add_permission(request, self.structure_type))
+        self.assertFalse(inline.has_change_permission(request, self.structure_type))
+        self.assertFalse(inline.has_delete_permission(request, self.structure_type))
+        self.assertEqual(inline.get_extra(request, self.structure_type), 1)
 
     def test_field_type_choices_include_material_link_but_not_foreign_key(self):
         field_type_values = [value for value, _ in StructureField.FIELD_TYPES]
         self.assertIn('MaterialLink', field_type_values)
+        self.assertIn('ChoiceField', field_type_values)
         self.assertNotIn('ForeignKey', field_type_values)
 
         site = AdminSite()
@@ -1004,8 +1280,8 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         actions_request = factory.get('/')
         actions_request.user = PermissiveAdminUser()
 
-        self.assertFalse(admin_model.has_add_permission(get_request))
-        self.assertFalse(admin_model.has_add_permission(post_request))
+        self.assertTrue(admin_model.has_add_permission(get_request))
+        self.assertTrue(admin_model.has_add_permission(post_request))
         self.assertFalse(admin_model.has_change_permission(actions_request, field))
         self.assertFalse(admin_model.has_delete_permission(actions_request, field))
         self.assertNotIn('delete_selected', admin_model.get_actions(actions_request))
@@ -1166,6 +1442,63 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         blank_row = SQLExecutor.get_by_id(self.structure_type, blank_insert['id'])
         self.assertIsNone(blank_row['record']['skin_material'])
 
+    def test_structure_record_label_resolves_material_link_and_skips_broken(self):
+        from apps.structures.forms import MATERIAL_LINK_MISSING_LABEL, material_link_display
+        from apps.structures.table_storage import structure_record_label
+
+        material = Material.objects.create(code='MAT-LABEL-001', name='Label material')
+        link_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='skin_material',
+            label='Skin material',
+            field_type='MaterialLink',
+            sort_order=0,
+        )
+        title_field = self.structure_type.fields.get(name='title')
+        title_field.sort_order = 1
+        title_field.save(update_fields=['sort_order'])
+        self.assertTrue(SQLExecutor.create_table(self.structure_type)['success'])
+
+        resolved_id = table_storage.insert_row(
+            self.structure_type,
+            'resolved-row',
+            {'skin_material': material.pk, 'title': 'Fallback title'},
+        )
+        fallback_id = table_storage.insert_row(
+            self.structure_type,
+            'fallback-row',
+            {'title': 'Visible title'},
+        )
+
+        resolved = table_storage.get_row(self.structure_type, resolved_id)
+        fallback = table_storage.get_row(self.structure_type, fallback_id)
+
+        self.assertEqual(
+            structure_record_label(resolved, self.structure_type),
+            'MAT-LABEL-001 - Label material',
+        )
+        self.assertEqual(
+            structure_record_label(fallback, self.structure_type),
+            'Visible title',
+        )
+        empty_record_id = uuid.uuid4()
+        self.assertEqual(
+            structure_record_label({'id': empty_record_id}, self.structure_type),
+            f'Запись {str(empty_record_id)[:8]}…',
+        )
+
+        missing_id = uuid.uuid4()
+        link_display = table_storage.DisplayValue(link_field, missing_id)
+        self.assertEqual(link_display.get_value(), MATERIAL_LINK_MISSING_LABEL)
+        self.assertEqual(material_link_display(missing_id), MATERIAL_LINK_MISSING_LABEL)
+        self.assertIsNone(link_display.material_pk)
+
+        resolved_display = next(
+            item for item in table_storage.get_display_values(self.structure_type, resolved_id)
+            if item.field.name == link_field.name
+        )
+        self.assertEqual(resolved_display.material_pk, str(material.pk))
+
     def test_material_link_dynamic_table_form_uses_material_choice_and_initial_object(self):
         material = Material.objects.create(code='MAT-FORM-001', name='Form material')
         other_material = Material.objects.create(code='MAT-FORM-002', name='Other material')
@@ -1191,6 +1524,50 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
         self.assertFalse(form_field.required)
         self.assertEqual(list(form_field.queryset), [material, other_material])
         self.assertEqual(form_field.label_from_instance(material), 'MAT-FORM-001 - Form material')
+
+    def test_choice_field_dynamic_form_uses_select_with_options(self):
+        from apps.structures.forms import _build_dynamic_field
+        from apps.structures.models import CHOICE_FIELD_TYPE
+
+        choice_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='weave_type',
+            label='Тип сплетения',
+            field_type=CHOICE_FIELD_TYPE,
+            choice_options=[
+                {'value': 'twill', 'label': 'Саржа'},
+                {'value': 'plain', 'label': 'Полотно'},
+            ],
+            sort_order=4,
+        )
+        form_field = _build_dynamic_field(choice_field)
+        self.assertIsInstance(form_field, forms.ChoiceField)
+        self.assertEqual(
+            list(form_field.choices),
+            [('', '---------'), ('twill', 'Саржа'), ('plain', 'Полотно')],
+        )
+        self.assertEqual(form_field.widget.attrs.get('data-choice-picker'), 'true')
+
+    def test_char_field_falls_back_to_reference_choice_property(self):
+        from apps.references.models import Property, PropertyChoice
+        from apps.structures.forms import _build_dynamic_field
+
+        prop = Property.objects.create(
+            name='legacy_weave',
+            display_name='Тип сплетения',
+            data_type='choice',
+        )
+        PropertyChoice.objects.create(property=prop, label='Саржа', value='twill', sort_order=0)
+        char_field = StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='legacy_weave',
+            label='Тип сплетения',
+            field_type='CharField',
+            sort_order=4,
+        )
+        form_field = _build_dynamic_field(char_field)
+        self.assertIsInstance(form_field, forms.ChoiceField)
+        self.assertIn(('twill', 'Саржа'), list(form_field.choices))
 
     def test_unlimited_offset_pagination_uses_postgresql_compatible_sql(self):
         with mock.patch.object(connection, 'vendor', 'postgresql'):
@@ -1487,3 +1864,250 @@ class SQLOnlyDynamicStructureTests(TransactionTestCase):
             CommandError, 'Dynamic Django model generation is disabled'
         ):
             call_command('generate_structure_model', self.structure_type.pk)
+
+
+class StructureDecimalRangeTests(TransactionTestCase):
+    def setUp(self):
+        self.structure_type = StructureType.objects.create(
+            name='Decimal range panel',
+            code='decimal_range_panel',
+            table_name='structures_decimal_range_panel',
+        )
+        StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            is_required=True,
+            sort_order=1,
+        )
+        StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='thickness',
+            label='Thickness',
+            field_type='DecimalField',
+            max_digits=8,
+            decimal_places=2,
+            sort_order=2,
+        )
+        create_result = SQLExecutor.create_table(self.structure_type)
+        self.assertTrue(create_result['success'], create_result.get('error'))
+
+    def tearDown(self):
+        SQLExecutor.drop_table(self.structure_type)
+
+    def _field_name(self, field_name):
+        field = self.structure_type.fields.get(name=field_name)
+        return f'structure_field_{field.pk}'
+
+    def _decimal_post_data(self, field_name, *, scalar='', min_value='', max_value='', tolerance_value='', is_range=False, is_tolerance=False):
+        field = self.structure_type.fields.get(name=field_name)
+        base = f'structure_field_{field.pk}'
+        data = {
+            base: scalar,
+            f'{base}__min': min_value,
+            f'{base}__max': max_value,
+            f'{base}__tolerance': tolerance_value,
+        }
+        if is_range:
+            data[f'{base}__is_range'] = 'on'
+        if is_tolerance:
+            data[f'{base}__is_tolerance'] = 'on'
+        return data
+
+    def test_create_table_creates_decimal_companion_columns(self):
+        for column_name in (
+            'thickness',
+            'thickness__kind',
+            'thickness__b',
+        ):
+            self.assertTrue(
+                SQLExecutor.column_exists(self.structure_type, column_name),
+                column_name,
+            )
+
+    def test_insert_scalar_writes_companion_columns(self):
+        from apps.core.property_number_value import VALUE_KIND_SCALAR
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        packed = pack_decimal_field_data(
+            'thickness',
+            value_kind=VALUE_KIND_SCALAR,
+            value='12.50',
+            value_b=None,
+        )
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Scalar panel', **packed},
+        )['id']
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'scalar')
+        self.assertEqual(str(record['thickness']), '12.50')
+        self.assertIsNone(record['thickness__b'])
+
+    def test_insert_range_writes_companion_columns(self):
+        from apps.core.property_number_value import VALUE_KIND_RANGE
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        packed = pack_decimal_field_data(
+            'thickness',
+            value_kind=VALUE_KIND_RANGE,
+            value='900',
+            value_b='1900',
+        )
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Range panel', **packed},
+        )['id']
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'range')
+        self.assertEqual(str(record['thickness']), '900.00')
+        self.assertEqual(str(record['thickness__b']), '1900.00')
+
+    def test_backfill_populates_companion_columns_for_legacy_scalar(self):
+        table_name = SQLExecutor.quote_identifier(self.structure_type.table_name)
+        row_id = str(uuid.uuid4())
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'INSERT INTO {table_name} '
+                f'({SQLExecutor.quote_identifier("id")}, '
+                f'{SQLExecutor.quote_identifier("title")}, '
+                f'{SQLExecutor.quote_identifier("thickness")}) '
+                f'VALUES (%s, %s, %s)',
+                [row_id, 'Legacy panel', '7.25'],
+            )
+
+        result = SQLExecutor.backfill_decimal_companion_columns(self.structure_type)
+        self.assertTrue(result['success'], result.get('error'))
+        self.assertEqual(result['updated'], 1)
+
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'scalar')
+        self.assertEqual(str(record['thickness']), '7.25')
+        self.assertIsNone(record['thickness__b'])
+
+    def test_insert_tolerance_writes_companion_columns(self):
+        from apps.core.property_number_value import VALUE_KIND_TOLERANCE
+        from apps.structures.decimal_range import pack_decimal_field_data
+
+        packed = pack_decimal_field_data(
+            'thickness',
+            value_kind=VALUE_KIND_TOLERANCE,
+            value=Decimal('0.27'),
+            value_b=Decimal('0.03'),
+        )
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Tolerance panel', **packed},
+        )['id']
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'tolerance')
+        self.assertEqual(str(record['thickness']), '0.27')
+        self.assertEqual(str(record['thickness__b']), '0.03')
+
+    def test_structure_record_form_saves_decimal_tolerance(self):
+        create_url = reverse('structures:create', args=[self.structure_type.code])
+        post_data = {
+            self._field_name('title'): 'Tolerance form panel',
+            **self._decimal_post_data(
+                'thickness',
+                scalar='0,27',
+                tolerance_value='0,03',
+                is_tolerance=True,
+            ),
+        }
+        response = self.client.post(create_url, post_data)
+        self.assertEqual(response.status_code, 302)
+
+        records = SQLExecutor.get_structure_instances(self.structure_type)
+        record = records[0]
+        self.assertEqual(record['thickness__kind'], 'tolerance')
+        self.assertEqual(str(record['thickness__b']), '0.03')
+
+        detail_response = self.client.get(
+            reverse('structures:detail', args=[self.structure_type.code, record['id']])
+        )
+        self.assertContains(detail_response, '0,27±0,03')
+
+    def test_insert_auto_adds_missing_companion_columns(self):
+        table_name = SQLExecutor.quote_identifier(self.structure_type.table_name)
+        with connection.cursor() as cursor:
+            for column_name in (
+                'thickness__kind',
+                'thickness__b',
+            ):
+                cursor.execute(
+                    f'ALTER TABLE {table_name} DROP COLUMN '
+                    f'{SQLExecutor.quote_identifier(column_name)}'
+                )
+
+        row_id = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Legacy auto-migrate', 'thickness': '1.50'},
+        )['id']
+        self.assertTrue(SQLExecutor.column_exists(self.structure_type, 'thickness__kind'))
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(str(record['thickness']), '1.50')
+
+    def test_migrate_structure_decimal_ranges_command(self):
+        table_name = SQLExecutor.quote_identifier(self.structure_type.table_name)
+        with connection.cursor() as cursor:
+            for column_name in (
+                'thickness__kind',
+                'thickness__b',
+            ):
+                if SQLExecutor.column_exists(self.structure_type, column_name):
+                    cursor.execute(
+                        f'ALTER TABLE {table_name} DROP COLUMN '
+                        f'{SQLExecutor.quote_identifier(column_name)}'
+                    )
+            row_id = str(uuid.uuid4())
+            cursor.execute(
+                f'INSERT INTO {table_name} '
+                f'({SQLExecutor.quote_identifier("id")}, '
+                f'{SQLExecutor.quote_identifier("title")}, '
+                f'{SQLExecutor.quote_identifier("thickness")}) '
+                f'VALUES (%s, %s, %s)',
+                [row_id, 'Migrate panel', '3.50'],
+            )
+
+        output = io.StringIO()
+        call_command('migrate_structure_decimal_ranges', stdout=output)
+
+        for column_name in (
+            'thickness',
+            'thickness__kind',
+            'thickness__b',
+        ):
+            self.assertTrue(SQLExecutor.column_exists(self.structure_type, column_name))
+        record = SQLExecutor.get_structure_instance(self.structure_type, row_id)
+        self.assertEqual(record['thickness__kind'], 'scalar')
+        self.assertEqual(str(record['thickness']), '3.50')
+        self.assertIn('Готово', output.getvalue())
+
+    def test_structure_record_form_saves_decimal_range(self):
+        create_url = reverse('structures:create', args=[self.structure_type.code])
+        post_data = {
+            self._field_name('title'): 'Range form panel',
+            **self._decimal_post_data(
+                'thickness',
+                min_value='1.25',
+                max_value='3.25',
+                is_range=True,
+            ),
+        }
+        response = self.client.post(create_url, post_data)
+        self.assertEqual(response.status_code, 302)
+
+        records = SQLExecutor.get_structure_instances(self.structure_type)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['thickness__kind'], 'range')
+        self.assertEqual(str(record['thickness']), '1.25')
+        self.assertEqual(str(record['thickness__b']), '3.25')
+
+        detail_response = self.client.get(
+            reverse('structures:detail', args=[self.structure_type.code, record['id']])
+        )
+        self.assertContains(detail_response, '1,25')
+        self.assertContains(detail_response, '3,25')

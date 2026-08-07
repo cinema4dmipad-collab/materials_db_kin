@@ -1,5 +1,9 @@
 /* Jira-like app shell layout (KeenetiCA colors unchanged) */
 
+:root {
+    --app-topbar-height: 3.75rem;
+}
+
 .app-body--shell {
     height: 100vh;
     overflow: hidden;
@@ -13,7 +17,7 @@
     position: sticky;
     top: 0;
     z-index: 1040;
-    min-height: 3.5rem !important;
+    min-height: var(--app-topbar-height) !important;
     padding-top: 0.35rem !important;
     padding-bottom: 0.35rem !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -59,7 +63,13 @@
 }
 
 .app-topbar__brand .brand-logo {
-    max-height: 2.25rem;
+    display: block;
+    /* tightly cropped master — keep glyphs modest vs header chrome */
+    height: 32px;
+    width: auto;
+    max-height: 32px;
+    max-width: min(22rem, 58vw);
+    object-fit: contain;
 }
 
 .app-topbar__workspace-picker {
@@ -247,6 +257,216 @@
 
 .app-topbar__workspace-menu-link {
     font-size: 0.8125rem;
+}
+
+.app-topbar__bookmark-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: calc(1.35rem + 0.56rem);
+    padding: 0.28rem 0.7rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.bookmark-icon-picker {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.bookmark-icon-picker__option {
+    margin: 0;
+    cursor: pointer;
+}
+
+.bookmark-icon-picker__option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.bookmark-icon-picker__face {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1;
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    border-radius: 0.45rem;
+    background: #f8fafc;
+    color: var(--bookmark-icon-color, #334155);
+    font-size: 1.15rem;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bookmark-icon-picker__option:hover .bookmark-icon-picker__face {
+    border-color: var(--bookmark-icon-color, var(--kx-brand, #007679));
+}
+
+.bookmark-icon-picker__option input:checked + .bookmark-icon-picker__face,
+.bookmark-icon-picker__option input:focus-visible + .bookmark-icon-picker__face {
+    border-color: var(--bookmark-icon-color, var(--kx-brand, #007679));
+    background: rgba(0, 118, 121, 0.1);
+    box-shadow: 0 0 0 2px rgba(0, 118, 121, 0.18);
+}
+
+.bookmark-color-picker__presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.bookmark-color-picker__preset {
+    width: 1.65rem;
+    height: 1.65rem;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.bookmark-color-picker__preset:hover {
+    transform: scale(1.08);
+}
+
+.bookmark-color-picker__preset:focus-visible {
+    outline: 2px solid var(--kx-brand, #007679);
+    outline-offset: 2px;
+}
+
+.bookmark-color-picker__preset--active {
+    border-color: #0f172a;
+    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.12);
+}
+
+.bookmark-color-picker__preset--default {
+    background:
+        linear-gradient(135deg, #cbd5e1 25%, transparent 25%) -0.2rem 0 / 0.55rem 0.55rem,
+        linear-gradient(225deg, #cbd5e1 25%, transparent 25%) -0.2rem 0 / 0.55rem 0.55rem,
+        linear-gradient(315deg, #cbd5e1 25%, transparent 25%) 0 0 / 0.55rem 0.55rem,
+        linear-gradient(45deg, #cbd5e1 25%, #f8fafc 25%) 0 0 / 0.55rem 0.55rem;
+}
+
+.bookmark-color-picker__native {
+    width: 3rem;
+    height: 2.25rem;
+    padding: 0.15rem;
+}
+
+.app-topbar__bookmark-btn:hover,
+.app-topbar__bookmark-btn:focus {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #fff;
+}
+
+.app-topbar__bookmark-btn.is-bookmarked,
+.app-topbar__bookmark-btn.is-stock-nav:disabled {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.4);
+    opacity: 1;
+    cursor: default;
+}
+
+.app-topbar__bookmark-btn.is-stock-nav:disabled:hover,
+.app-topbar__bookmark-btn.is-stock-nav:disabled:focus {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
+}
+
+.app-topbar__bookmark-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.45);
+    outline-offset: 2px;
+}
+
+.app-topbar__bookmark-btn .bi {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* Match .app-topbar__user-btn size/shape in the header (text-only). */
+.keenetix-bridge-presence {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: calc(1.35rem + 0.56rem);
+    padding: 0.28rem 0.7rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0;
+    white-space: nowrap;
+    user-select: none;
+    cursor: default;
+    transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.keenetix-bridge-presence--offline {
+    opacity: 0.72;
+}
+
+.keenetix-bridge-presence--online {
+    background: rgba(250, 204, 21, 0.18);
+    border-color: rgba(250, 204, 21, 0.55);
+    color: #fde68a;
+}
+
+.keenetix-bridge-presence--paired {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.55);
+    color: #bbf7d0;
+}
+
+.keenetix-bridge-toast-host {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: min(22rem, calc(100vw - 2rem));
+    pointer-events: none;
+}
+
+.keenetix-bridge-toast {
+    padding: 0.65rem 0.85rem;
+    border-radius: 0.4rem;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    color: #fff;
+    background: rgba(17, 24, 39, 0.92);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    opacity: 1;
+    transition: opacity 0.25s ease;
+}
+
+.keenetix-bridge-toast--ok {
+    background: rgba(22, 101, 52, 0.95);
+}
+
+.keenetix-bridge-toast--warn {
+    background: rgba(146, 64, 14, 0.95);
+}
+
+.keenetix-bridge-toast--hide {
+    opacity: 0;
 }
 
 .app-topbar__user-btn {
@@ -456,7 +676,9 @@
 }
 
 .workspace-sidebar__home-link {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
     padding: 0.35rem 0.5rem;
     border-radius: 0.25rem;
     font-size: 0.8125rem;
@@ -468,6 +690,15 @@
 .workspace-sidebar__home-link:hover {
     background: var(--kx-brand-soft);
     color: var(--kx-brand-dark);
+}
+
+.workspace-sidebar__icon {
+    flex: 0 0 auto;
+    width: 1.25rem;
+    font-size: 1.0625rem;
+    line-height: 1;
+    text-align: center;
+    color: inherit;
 }
 
 .workspace-sidebar__footer-workspace {
@@ -487,6 +718,14 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding-bottom: 0.5rem;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* legacy Edge */
+}
+
+.workspace-sidebar__nav::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none; /* Chromium / Safari */
 }
 
 .workspace-sidebar__section {
@@ -508,9 +747,110 @@
     padding: 0;
 }
 
+.workspace-sidebar__link.is-bookmarked .workspace-sidebar__link-text {
+    max-width: calc(100% - 5.5rem);
+}
+
+.workspace-sidebar__bookmarked-label {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+    background: rgba(0, 118, 121, 0.12);
+    color: var(--kx-brand-dark, #005f61);
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.workspace-sidebar__bookmarked-label.is-stock {
+    background: rgba(100, 116, 139, 0.12);
+    color: #475569;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__bookmarked-label {
+    display: none;
+}
+
+.workspace-sidebar__item--bookmark {
+    display: flex;
+    align-items: center;
+    position: relative;
+    min-height: 2.125rem;
+}
+
+.workspace-sidebar__link--bookmark {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    padding-right: 0.25rem;
+    overflow: hidden;
+}
+
+.workspace-sidebar__link--bookmark .workspace-sidebar__link-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workspace-sidebar__bookmark-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    align-self: center;
+    margin: 0;
+    padding: 0 0.35rem 0 0;
+}
+
+.workspace-sidebar__bookmark-remove-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: var(--kx-text-subtle);
+    opacity: 0;
+    pointer-events: none;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.workspace-sidebar__item--bookmark:hover .workspace-sidebar__bookmark-remove-btn,
+.workspace-sidebar__item--bookmark:focus-within .workspace-sidebar__bookmark-remove-btn {
+    opacity: 0.75;
+    pointer-events: auto;
+    color: #b91c1c;
+}
+
+.workspace-sidebar__bookmark-remove-btn:hover,
+.workspace-sidebar__bookmark-remove-btn:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    color: #991b1b;
+    background: rgba(185, 28, 28, 0.14);
+}
+
+.workspace-sidebar__bookmark-remove-btn .bi {
+    font-size: 0.75rem;
+    line-height: 1;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__bookmark-remove {
+    display: none;
+}
+
 .workspace-sidebar__link {
     display: flex;
     align-items: center;
+    gap: 0.55rem;
     min-height: 2.125rem;
     padding: 0.35rem 0.75rem;
     color: var(--kx-text);
@@ -531,6 +871,15 @@
     font-weight: 600;
 }
 
+.workspace-sidebar__link--muted {
+    color: var(--kx-text-muted);
+    font-size: 0.8125rem;
+}
+
+.workspace-sidebar__link--muted:hover {
+    color: var(--kx-brand-dark);
+}
+
 .workspace-sidebar__footer {
     margin-top: auto;
     padding: 0.65rem 0.75rem;
@@ -544,22 +893,64 @@
     color: var(--kx-text-muted);
 }
 
-/* Collapsed desktop sidebar (icons area reserved for future) */
+/* Collapsed desktop sidebar: icons + native tooltips (title) */
 .app-shell--sidebar-collapsed .workspace-sidebar {
     width: 56px;
 }
 
-.app-shell--sidebar-collapsed .workspace-sidebar__header,
+.app-shell--sidebar-collapsed .workspace-sidebar__notice,
 .app-shell--sidebar-collapsed .workspace-sidebar__section-title,
 .app-shell--sidebar-collapsed .workspace-sidebar__link-text,
 .app-shell--sidebar-collapsed .workspace-sidebar__role,
 .app-shell--sidebar-collapsed .workspace-sidebar__footer-workspace,
-.app-shell--sidebar-collapsed .workspace-sidebar__home-link {
+.app-shell--sidebar-collapsed .workspace-sidebar__home-label {
     display: none;
 }
 
+.app-shell--sidebar-collapsed .workspace-sidebar__header {
+    padding: 0.5rem 0.35rem;
+    display: flex;
+    justify-content: center;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__home-link {
+    justify-content: center;
+    gap: 0;
+    padding: 0.25rem;
+    width: 100%;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__icon {
+    width: 1.375rem;
+    font-size: 1.25rem;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__link {
+    justify-content: center;
+    gap: 0;
+    padding: 0.35rem 0.25rem;
+    border-left-width: 0;
+    border-right: 3px solid transparent;
+}
+
 .app-shell--sidebar-collapsed .workspace-sidebar__link.is-active {
-    border-left-width: 3px;
+    border-left-width: 0;
+    border-right-color: var(--kx-brand);
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__footer {
+    padding: 0.5rem 0.25rem;
+    min-height: 0.5rem;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__section {
+    margin-bottom: 0.15rem;
+}
+
+.app-shell--sidebar-collapsed .workspace-sidebar__section + .workspace-sidebar__section {
+    margin-top: 0.35rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--kx-border);
 }
 
 /* Legacy helper kept for templates */

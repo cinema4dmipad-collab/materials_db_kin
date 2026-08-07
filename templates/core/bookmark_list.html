@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block title %}Закладки — База композитов{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+        <h1 class="h4 mb-1">Закладки</h1>
+        <p class="text-muted mb-0 small">
+            Страницы текущего пространства. Добавить можно кнопкой «В закладки» в шапке.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button"
+                class="btn btn-primary btn-sm"
+                data-bs-toggle="modal"
+                data-bs-target="#bookmarkPageModal">
+            Добавить страницу
+        </button>
+        <a href="{% url 'core:dashboard' %}" class="btn btn-outline-secondary btn-sm">На дашборд</a>
+    </div>
+</div>
+
+{% if bookmarks %}
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Тип</th>
+                    <th>Название</th>
+                    <th>Код / адрес</th>
+                    <th class="text-end">Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in bookmarks %}
+                <tr>
+                    <td class="text-nowrap">
+                        <i class="{{ item.icon }} me-1{% if not item.icon_color %} text-muted{% endif %}"{% if item.icon_color %} style="color: {{ item.icon_color }};"{% endif %} aria-hidden="true"></i>
+                        {{ item.entity_type_label }}
+                    </td>
+                    <td style="max-width: 18rem;">
+                        <a href="{{ item.url }}"
+                           class="fw-semibold text-decoration-none d-inline-block text-truncate w-100"
+                           title="{{ item.label }}">{{ item.label }}</a>
+                    </td>
+                    <td class="text-muted small text-truncate" style="max-width: 14rem;" title="{{ item.subtitle }}">{{ item.subtitle|default:"—" }}</td>
+                    <td class="text-end text-nowrap">
+                        <a href="{{ item.url }}" class="btn btn-outline-primary btn-sm">Открыть</a>
+                        <form method="post"
+                              action="{% url 'core:bookmark_remove' item.bookmark.pk %}"
+                              class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <button type="submit"
+                                    class="btn btn-outline-danger btn-sm"
+                                    title="Удалить закладку"
+                                    aria-label="Удалить закладку «{{ item.label }}»">
+                                <i class="bi bi-x-lg" aria-hidden="true"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-secondary mb-0">
+    Закладок пока нет. Откройте нужную страницу и нажмите «В закладки» в шапке.
+</div>
+{% endif %}
+{% endblock %}

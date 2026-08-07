@@ -17,7 +17,8 @@
 
     const FIELD_TYPE_DEFAULTS = {
         CharField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
-        DecimalField: { max_length: '', max_digits: '10', decimal_places: '4', default_value: '' },
+        ChoiceField: { max_length: '255', max_digits: '', decimal_places: '', default_value: '' },
+        DecimalField: { max_length: '', max_digits: '10', decimal_places: '2', default_value: '' },
         MaterialLink: { max_length: '', max_digits: '', decimal_places: '', default_value: '' },
     };
 
@@ -106,7 +107,7 @@
         if (typeNode) {
             let typeLabel = fieldTypeLabel(fieldType);
             if (fieldType === 'DecimalField') {
-                const places = row.querySelector('[name$="-decimal_places"]')?.value || '4';
+                const places = row.querySelector('[name$="-decimal_places"]')?.value || '2';
                 typeLabel = `${typeLabel} · ${places} зн.`;
             }
             typeNode.textContent = typeLabel;
@@ -246,34 +247,9 @@
         if (data.max_digits != null && data.max_digits !== '') {
             setRowInputValue(row, 'max_digits', String(data.max_digits));
         }
+        const choices = data.choice_options || data.choices || [];
+        setRowInputValue(row, 'choice_options', JSON.stringify(choices));
         syncRowSummary(row);
-    }
-
-    function suggestMaterialLinkName() {
-        const used = getUsedColumnNames();
-        if (!used.has('material')) {
-            return 'material';
-        }
-        let index = 2;
-        while (used.has(`material_${index}`)) {
-            index += 1;
-        }
-        return `material_${index}`;
-    }
-
-    function appendMaterialLinkRow() {
-        const row = appendRowFromTemplate();
-        if (!row) {
-            return null;
-        }
-        delete row.dataset.referencePropertyId;
-        setRowInputValue(row, 'label', 'Материал');
-        setRowInputValue(row, 'name', suggestMaterialLinkName());
-        setRowInputValue(row, 'field_type', 'MaterialLink');
-        setRowInputValue(row, 'sort_order', String(getNextSortOrder()));
-        applyHiddenFieldDefaults(row, 'MaterialLink');
-        syncRowSummary(row);
-        return row;
     }
 
     function renderReferencePropertiesList(filterText = '') {
@@ -287,7 +263,10 @@
             getUsedColumnNames,
             metaLine(item) {
                 const escapeHtml = picker.escapeHtml;
-                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(fieldTypeLabel(item.field_type))}`;
+                const typeLabel = item.data_type === 'choice'
+                    ? (picker.DATA_TYPE_LABELS.choice || 'Выбор из списка')
+                    : fieldTypeLabel(item.field_type);
+                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(typeLabel)}`;
             },
         });
     }
@@ -476,7 +455,10 @@
             getUsedColumnNames,
             metaLine(item) {
                 const escapeHtml = picker.escapeHtml;
-                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(fieldTypeLabel(item.field_type))}`;
+                const typeLabel = item.data_type === 'choice'
+                    ? (picker.DATA_TYPE_LABELS.choice || 'Выбор из списка')
+                    : fieldTypeLabel(item.field_type);
+                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(typeLabel)}`;
             },
             onConfirm(payloads) {
                 payloads.forEach((payload) => {
@@ -516,17 +498,6 @@
         form.addEventListener('submit', clearFormDraft);
     }
 
-    function bindMaterialLinkButton() {
-        const button = document.getElementById('add-material-link-btn');
-        if (!button || button.dataset.bound === 'true') {
-            return;
-        }
-        button.dataset.bound = 'true';
-        button.addEventListener('click', () => {
-            appendMaterialLinkRow();
-        });
-    }
-
     function bindFieldRows() {
         document.querySelectorAll('[data-structure-field-row]').forEach((row) => {
             bindDeleteButtons(row);
@@ -548,7 +519,6 @@
         const modal = bindPropertiesModal();
         bindCreatePropertyLink();
         bindFormSubmitClearDraft();
-        bindMaterialLinkButton();
 
         if (shouldOpenPropertiesModal()) {
             cleanupOpenPropertiesParam();

@@ -1,0 +1,29 @@
+<div class="import-wizard-nav-bar mb-3" role="region" aria-label="Навигация мастера импорта">
+    <nav class="import-wizard-nav">
+        <div class="import-wizard-nav__back">
+            {% if not hide_back and wizard_back_url %}
+            <a href="{{ wizard_back_url }}" class="btn btn-outline-secondary import-wizard-nav__back-btn">
+                ← {{ wizard_back_label|default:"Назад" }}
+            </a>
+            {% endif %}
+        </div>
+        <div class="import-wizard-nav__forward d-flex flex-wrap gap-2 align-items-center">
+            {% if forward_mode != 'none' %}
+            <button type="submit"
+                    class="btn btn-primary import-wizard-nav__forward-btn{% if forward_extra_class %} {{ forward_extra_class }}{% endif %}"
+                    {% if forward_name %}name="{{ forward_name }}"{% endif %}
+                    {% if forward_value %}value="{{ forward_value }}"{% endif %}
+                    {% if forward_disabled %}disabled{% endif %}
+                    {% if forward_busy %}data-import-busy="1"{% endif %}>
+                {{ forward_label|default:wizard_forward_label|default:"Вперёд" }} →
+            </button>
+            {% endif %}
+            {% if hint %}
+            <span class="import-help__trigger" tabindex="0" aria-label="Подсказка">
+                <span class="import-help__mark" aria-hidden="true">?</span>
+                <span class="import-help__tip import-help__tip--end" role="tooltip">{{ hint }}</span>
+            </span>
+            {% endif %}
+        </div>
+    </nav>
+</div>

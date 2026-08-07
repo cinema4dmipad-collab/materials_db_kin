@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from apps.materials.models import Material
-from apps.workspaces.services import materials_owned_by, materials_shared_in, materials_visible_in
+from apps.workspaces.services import materials_in_workspace_tab, materials_shared_in, materials_visible_in
 
 MATERIAL_PICKER_SCOPE_WORKSPACE = 'workspace'
 MATERIAL_PICKER_SCOPE_SHARED = 'shared'
@@ -30,10 +30,10 @@ def materials_for_picker(workspace=None) -> list[dict]:
         ]
 
     by_pk: dict = {}
-    owned_qs = materials_owned_by(workspace).select_related('struct_type')
+    workspace_qs = materials_in_workspace_tab(workspace).select_related('struct_type')
     shared_qs = materials_shared_in(workspace).select_related('struct_type')
 
-    for item in owned_qs:
+    for item in workspace_qs:
         by_pk[item.pk] = (item, [MATERIAL_PICKER_SCOPE_WORKSPACE])
 
     for item in shared_qs:

@@ -10,6 +10,7 @@
 <link href="{% static 'css/structure_type_form.css' %}" rel="stylesheet">
 <script src="{% static 'js/reference_properties_picker.js' %}" defer></script>
 <script src="{% static 'js/structure_type_form.js' %}" defer></script>
+<script src="{% static 'js/structure_color_picker.js' %}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -65,17 +66,14 @@
                     <div class="card mt-4">
                         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <h2 class="h6 mb-0">Свойства структуры</h2>
-                            {% if not fields_locked %}
                             <div class="d-flex flex-wrap gap-2">
                                 <button type="button" class="btn btn-outline-primary btn-sm" id="add-from-properties-btn">Добавить</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="add-material-link-btn" title="Добавить поле, ссылающееся на другой материал">Ссылка на материал</button>
                             </div>
-                            {% endif %}
                         </div>
                         <div class="card-body">
-                            {% if fields_locked %}
+                            {% if existing_fields_readonly %}
                             <div class="alert alert-warning mb-3">
-                                Таблица уже создана в базе — состав свойств изменить нельзя.
+                                Таблица уже создана в базе: можно добавлять новые поля, но нельзя изменять или удалять существующие.
                             </div>
                             {% endif %}
 
@@ -84,9 +82,11 @@
                             <div class="alert alert-danger">{{ field_formset.non_form_errors }}</div>
                             {% endif %}
 
-                            <ul id="structure-field-list" class="structure-field-list">
+                            <ul id="structure-field-list" class="structure-field-list" data-can-delete-existing="{% if can_delete_fields %}true{% else %}false{% endif %}">
                                 {% for field_form in field_formset %}
-                                {% if field_formset.can_delete and not fields_locked %}
+                                {% if field_formset.can_delete and can_delete_fields %}
+                                {% include 'structures/includes/structure_field_list_item.html' with field_form=field_form show_actions=True %}
+                                {% elif field_formset.can_delete and not field_form.instance.pk %}
                                 {% include 'structures/includes/structure_field_list_item.html' with field_form=field_form show_actions=True %}
                                 {% else %}
                                 {% include 'structures/includes/structure_field_list_item.html' with field_form=field_form show_actions=False %}
@@ -94,10 +94,9 @@
                                 {% endfor %}
                             </ul>
                             <div id="structure-field-empty" class="structure-field-empty{% if field_formset.forms %} d-none{% endif %}">
-                                Пока нет свойств. Добавьте их из справочника или ссылку на материал.
+                                Пока нет свойств. Добавьте их из справочника.
                             </div>
 
-                            {% if not fields_locked %}
                             {% include 'includes/reference_properties_modal.html' %}
 
                             <template id="field-row-template">
@@ -125,35 +124,28 @@
                                             <option value="DateField">Дата</option>
                                             <option value="DateTimeField">Дата и время</option>
                                             <option value="MaterialLink">Материал</option>
+                                            <option value="ChoiceField">Выбор из списка</option>
                                         </select>
                                         <input type="checkbox" name="fields-__idx__-is_required" id="id_fields-__idx__-is_required">
                                         <input type="number" name="fields-__idx__-sort_order" value="0" min="0" id="id_fields-__idx__-sort_order">
                                         <input type="number" name="fields-__idx__-max_length" value="255" min="1" max="4000" id="id_fields-__idx__-max_length">
                                         <input type="number" name="fields-__idx__-max_digits" value="10" min="1" max="18" id="id_fields-__idx__-max_digits">
-                                        <input type="number" name="fields-__idx__-decimal_places" value="4" min="0" max="10" id="id_fields-__idx__-decimal_places">
+                                        <input type="number" name="fields-__idx__-decimal_places" value="2" min="0" max="10" id="id_fields-__idx__-decimal_places">
                                         <input type="text" name="fields-__idx__-default_value" maxlength="500" id="id_fields-__idx__-default_value">
+                                        <input type="hidden" name="fields-__idx__-choice_options" value="[]" data-structure-field-choices id="id_fields-__idx__-choice_options">
                                         <input type="checkbox" name="fields-__idx__-DELETE" id="id_fields-__idx__-DELETE" class="d-none">
                                     </div>
                                 </li>
                             </template>
-                            {% endif %}
                         </div>
                     </div>
 
                     {% if is_edit %}
                     {% url 'structures:type_manage' structure_type.code as structure_type_cancel_url %}
-                    {% if fields_locked %}
-                    {% include 'includes/sticky_form_actions.html' with submit_label='Сохранить' cancel_url=structure_type_cancel_url cancel_label='К управлению' show_submit=False %}
-                    {% else %}
                     {% include 'includes/sticky_form_actions.html' with submit_label='Сохранить' cancel_url=structure_type_cancel_url cancel_label='К управлению' %}
-                    {% endif %}
                     {% else %}
                     {% url 'structures:select_type' as structure_types_list_url %}
-                    {% if fields_locked %}
-                    {% include 'includes/sticky_form_actions.html' with submit_label='Создать' cancel_url=structure_types_list_url show_submit=False %}
-                    {% else %}
                     {% include 'includes/sticky_form_actions.html' with submit_label='Создать' cancel_url=structure_types_list_url %}
-                    {% endif %}
                     {% endif %}
                 </form>
             </div>

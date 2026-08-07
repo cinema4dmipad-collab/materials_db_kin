@@ -1,0 +1,108 @@
+<div class="modal fade" id="bookmarkPageModal" tabindex="-1" aria-labelledby="bookmarkPageModalLabel" aria-hidden="true"
+     data-bookmarked="{% if current_page_bookmark %}1{% else %}0{% endif %}"
+     {% if current_page_bookmark %}
+     data-bookmark-label="{{ current_page_bookmark.label }}"
+     data-bookmark-icon="{{ current_page_bookmark.icon|default:default_page_bookmark_icon }}"
+     data-bookmark-icon-color="{{ current_page_bookmark.icon_color|default:default_page_bookmark_icon_color }}"
+     {% endif %}>
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post"
+              action="{% url 'core:bookmark_page_save' %}"
+              class="modal-content"
+              id="bookmark-page-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" id="bookmark-page-next" value="{{ request.get_full_path }}">
+            <input type="hidden"
+                   id="bookmark-page-url"
+                   name="url"
+                   value="{{ request.get_full_path }}"
+                   maxlength="2000"
+                   required>
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="bookmarkPageModalLabel">
+                    {% if current_page_bookmark %}Страница в закладках{% else %}Добавить в закладки{% endif %}
+                </h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3" id="bookmark-page-hint">
+                    {% if current_page_bookmark %}
+                    Этот адрес уже сохранён в закладках. Можно изменить название, иконку или цвет.
+                    {% else %}
+                    Текущая страница сохранится в закладки под выбранным названием, иконкой и цветом.
+                    {% endif %}
+                </p>
+                <div class="mb-3">
+                    <label for="bookmark-page-label" class="form-label">Название</label>
+                    <input type="text"
+                           class="form-control"
+                           id="bookmark-page-label"
+                           name="label"
+                           maxlength="300"
+                           required
+                           autocomplete="off"
+                           placeholder="Например: Справка по импорту"
+                           {% if current_page_bookmark %}value="{{ current_page_bookmark.label }}"{% endif %}>
+                </div>
+                <fieldset class="mb-3">
+                    <legend class="form-label mb-2">Иконка</legend>
+                    <div class="bookmark-icon-picker" role="radiogroup" aria-label="Иконка закладки">
+                        {% for icon in page_bookmark_icons %}
+                        <label class="bookmark-icon-picker__option">
+                            <input type="radio"
+                                   name="icon"
+                                   value="{{ icon }}"
+                                   {% if current_page_bookmark %}
+                                   {% if current_page_bookmark.icon == icon %}checked{% elif not current_page_bookmark.icon and icon == default_page_bookmark_icon %}checked{% endif %}
+                                   {% elif icon == default_page_bookmark_icon %}checked{% endif %}>
+                            <span class="bookmark-icon-picker__face" title="{{ icon }}">
+                                <i class="{{ icon }}" aria-hidden="true"></i>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+                <fieldset class="mb-0" data-bookmark-color-picker>
+                    <legend class="form-label mb-2">Цвет иконки</legend>
+                    <div class="bookmark-color-picker__presets" role="group" aria-label="Цвет иконки">
+                        <button type="button"
+                                class="bookmark-color-picker__preset bookmark-color-picker__preset--default"
+                                data-color=""
+                                title="По умолчанию"
+                                aria-label="Цвет по умолчанию"></button>
+                        {% for preset_color, preset_label in page_bookmark_color_presets %}
+                        <button type="button"
+                                class="bookmark-color-picker__preset"
+                                data-color="{{ preset_color }}"
+                                title="{{ preset_label }}"
+                                aria-label="{{ preset_label }}"
+                                style="background-color: {{ preset_color }};"></button>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex align-items-center gap-2 mt-2">
+                        <input type="color"
+                               class="form-control form-control-color bookmark-color-picker__native"
+                               value="{% if current_page_bookmark and current_page_bookmark.icon_color %}{{ current_page_bookmark.icon_color }}{% else %}#007679{% endif %}"
+                               title="Выбрать цвет"
+                               aria-label="Произвольный цвет иконки">
+                        <input type="text"
+                               name="icon_color"
+                               id="bookmark-page-icon-color"
+                               class="form-control bookmark-color-picker__text"
+                               value="{% if current_page_bookmark %}{{ current_page_bookmark.icon_color }}{% endif %}"
+                               maxlength="7"
+                               placeholder="По умолчанию"
+                               autocomplete="off"
+                               spellcheck="false">
+                    </div>
+                </fieldset>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="submit" class="btn btn-primary" id="bookmark-page-submit">
+                    {% if current_page_bookmark %}Обновить{% else %}Сохранить{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

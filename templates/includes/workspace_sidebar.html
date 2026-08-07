@@ -2,7 +2,13 @@
 <aside class="workspace-sidebar" id="appWorkspaceSidebar" aria-label="Навигация приложения">
     <div class="workspace-sidebar__header">
         {% if active_workspace %}
-        <a href="{% url 'core:dashboard' %}" class="workspace-sidebar__home-link">Дашборд</a>
+        <a href="{% url 'core:dashboard' %}"
+           class="workspace-sidebar__home-link"
+           title="Дашборд"
+           aria-label="Дашборд">
+            <i class="bi bi-speedometer2 workspace-sidebar__icon" aria-hidden="true"></i>
+            <span class="workspace-sidebar__link-text">Дашборд</span>
+        </a>
         {% else %}
         <span class="workspace-sidebar__home-label">Пространство не выбрано</span>
         {% endif %}
@@ -27,7 +33,10 @@
                 {% if item.visible %}
                 <li>
                     <a href="{{ item.url }}"
-                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}">
+                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}{% if item.is_footer_link %} workspace-sidebar__link--muted{% endif %}"
+                       title="{% if item.subtitle %}{{ item.label }} · {{ item.subtitle }}{% else %}{{ item.label }}{% endif %}"
+                       aria-label="{{ item.label }}">
+                        <i class="{{ item.icon }} workspace-sidebar__icon" aria-hidden="true"></i>
                         <span class="workspace-sidebar__link-text">{{ item.label }}</span>
                     </a>
                 </li>
@@ -43,11 +52,28 @@
             <ul class="workspace-sidebar__list">
                 {% for item in section.items %}
                 {% if item.visible %}
-                <li>
+                <li{% if item.remove_url %} class="workspace-sidebar__item--bookmark"{% endif %}>
                     <a href="{{ item.url }}"
-                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}">
+                       class="workspace-sidebar__link{% if item.active %} is-active{% endif %}{% if item.is_footer_link %} workspace-sidebar__link--muted{% endif %}{% if item.remove_url %} workspace-sidebar__link--bookmark{% endif %}"
+                       title="{% if item.subtitle %}{{ item.label }} · {{ item.subtitle }}{% else %}{{ item.label }}{% endif %}"
+                       aria-label="{{ item.label }}">
+                        <i class="{{ item.icon }} workspace-sidebar__icon"{% if item.icon_color %} style="color: {{ item.icon_color }};"{% endif %} aria-hidden="true"></i>
                         <span class="workspace-sidebar__link-text">{{ item.label }}</span>
                     </a>
+                    {% if item.remove_url %}
+                    <form method="post"
+                          action="{{ item.remove_url }}"
+                          class="workspace-sidebar__bookmark-remove">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit"
+                                class="workspace-sidebar__bookmark-remove-btn"
+                                title="Удалить закладку"
+                                aria-label="Удалить закладку «{{ item.label }}»">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        </button>
+                    </form>
+                    {% endif %}
                 </li>
                 {% endif %}
                 {% endfor %}
@@ -59,7 +85,7 @@
     {% if workspace_user_groups or active_workspace %}
     <div class="workspace-sidebar__footer">
         {% if active_workspace %}
-        <span class="workspace-sidebar__footer-workspace">{{ active_workspace.name }}</span>
+        <span class="workspace-sidebar__footer-workspace" title="{{ active_workspace.name }}">{{ active_workspace.name }}</span>
         {% endif %}
         {% if workspace_user_groups %}
         <span class="workspace-sidebar__role">

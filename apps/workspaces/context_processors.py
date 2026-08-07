@@ -1,6 +1,23 @@
 from django.urls import reverse
 
-from apps.workspaces.permissions import WorkspacePerm, has_workspace_perm, is_system_admin
+from apps.core.bookmarks import (
+    DEFAULT_PAGE_BOOKMARK_ICON,
+    DEFAULT_PAGE_BOOKMARK_ICON_COLOR,
+    PAGE_BOOKMARK_COLOR_PRESETS,
+    PAGE_BOOKMARK_ICONS,
+    find_bookmark_covering_url,
+    is_stock_navigation_url,
+    sidebar_bookmark_items,
+)
+from apps.core.models import BookmarkEntityType
+from apps.workspaces.permissions import (
+    WorkspacePerm,
+    can_manage_global_groups,
+    can_manage_global_users,
+    can_manage_global_workspaces,
+    has_workspace_perm,
+    is_system_admin,
+)
 from apps.workspaces.services import get_active_workspace, get_user_workspaces
 
 
@@ -21,42 +38,73 @@ def workspace_navigation(request):
     main_nav_items = [
         {
             'label': 'Материалы',
+            'icon': 'bi-box-seam',
             'url': reverse('materials:list'),
             'visible': can(WorkspacePerm.MATERIAL_VIEW),
-            'is_active': lambda n, u: n == 'materials',
+            'is_active': lambda n, u: n == 'materials' and u != 'import' and u not in (
+                'import_example',
+                'import_review',
+            ),
+        },
+        {
+            'label': 'Импорт',
+            'icon': 'bi-upload',
+            'url': reverse('materials:import'),
+            'visible': can(WorkspacePerm.MATERIAL_CREATE),
+            'is_active': lambda n, u: n == 'materials' and u in ('import', 'import_example'),
+        },
+        {
+            'label': 'Проверка импорта',
+            'icon': 'bi-clipboard-check',
+            'url': reverse('materials:import_review'),
+            'visible': can(WorkspacePerm.MATERIAL_EDIT),
+            'is_active': lambda n, u: n == 'materials' and u == 'import_review',
         },
         {
             'label': 'Свойства',
+            'icon': 'bi-sliders',
             'url': reverse('references:list'),
             'visible': can(WorkspacePerm.PROPERTY_VIEW),
-            'is_active': lambda n, u: n == 'references',
+            'is_active': lambda n, u: n == 'references' and not (u or '').startswith('dictionary'),
+        },
+        {
+            'label': 'Справочники',
+            'icon': 'bi-journal-bookmark',
+            'url': reverse('references:dictionary_hub'),
+            'visible': can(WorkspacePerm.PROPERTY_VIEW),
+            'is_active': lambda n, u: n == 'references' and (u or '').startswith('dictionary'),
         },
         {
             'label': 'Теги',
+            'icon': 'bi-tags',
             'url': reverse('core:tag_list'),
             'visible': can(WorkspacePerm.TAG_VIEW),
             'is_active': lambda n, u: n == 'core' and u.startswith('tag_'),
         },
         {
             'label': 'Структуры',
+            'icon': 'bi-diagram-3',
             'url': reverse('structures:select_type'),
             'visible': can(WorkspacePerm.STRUCTURE_VIEW),
             'is_active': lambda n, u: n == 'structures',
         },
         {
             'label': 'Образцы',
+            'icon': 'bi-collection',
             'url': reverse('samples:list'),
             'visible': can(WorkspacePerm.SAMPLE_VIEW),
             'is_active': lambda n, u: n in ('samples', 'attachments'),
         },
         {
             'label': 'Сканы',
+            'icon': 'bi-hdd-stack',
             'url': reverse('scans_all'),
             'visible': can(WorkspacePerm.SCAN_VIEW),
             'is_active': lambda n, u: u == 'scans_all' or n == 'scans',
         },
         {
             'label': 'Справка',
+            'icon': 'bi-question-circle',
             'url': reverse('core:help'),
             'visible': True,
             'is_active': lambda n, u: n == 'core' and u == 'help',
@@ -79,6 +127,7 @@ def workspace_navigation(request):
         workspace_items.append(
             {
                 'label': 'Настройки',
+                'icon': 'bi-gear',
                 'url': reverse('workspaces:settings', kwargs={'pk': active_workspace.pk}),
                 'active': nav_namespace == 'workspaces' and nav_url_name == 'settings',
                 'visible': True,
@@ -88,6 +137,7 @@ def workspace_navigation(request):
         workspace_items.append(
             {
                 'label': 'Участники',
+                'icon': 'bi-people',
                 'url': reverse('workspaces:members', kwargs={'pk': active_workspace.pk}),
                 'active': nav_namespace == 'workspaces' and nav_url_name in (
                     'members',
@@ -101,19 +151,47 @@ def workspace_navigation(request):
     if workspace_items:
         nav_sections.append({'title': 'Пространство', 'items': workspace_items})
 
+    if active_workspace:
+        bookmark_items = sidebar_bookmark_items(
+            user=user,
+            workspace=active_workspace,
+            request_path=getattr(request, 'path', '') or '',
+        )
+        if bookmark_items:
+            nav_sections.insert(
+                0,
+                {
+                    'title': 'Закладки',
+                    'items': bookmark_items,
+                },
+            )
+
     admin_items = []
-    if is_system_admin(user) and active_workspace:
+    if is_system_admin(user):
+        admin_items.append(
+            {
+                'label': 'Бэкапы',
+                'icon': 'bi-database-down',
+                'url': reverse('administration:backups'),
+                'active': _admin_active('backups', 'backup_manual', 'backup_download'),
+                'visible': True,
+            }
+        )
+    if can_manage_global_users(user):
         admin_items.append(
             {
                 'label': 'Пользователи',
+                'icon': 'bi-person-badge',
                 'url': reverse('administration:admin_users'),
                 'active': _admin_active('admin_users', 'admin_user_create', 'admin_user_edit', 'admin_user_memberships'),
                 'visible': True,
             }
         )
+    if can_manage_global_workspaces(user):
         admin_items.append(
             {
                 'label': 'Пространства',
+                'icon': 'bi-globe2',
                 'url': reverse('administration:admin_workspaces'),
                 'active': _admin_active(
                     'admin_workspaces',
@@ -124,9 +202,11 @@ def workspace_navigation(request):
                 'visible': True,
             }
         )
+    if can_manage_global_groups(user) and active_workspace:
         admin_items.append(
             {
                 'label': 'Группы',
+                'icon': 'bi-shield-lock',
                 'url': reverse('workspaces:groups', kwargs={'pk': active_workspace.pk}),
                 'active': nav_namespace == 'workspaces' and nav_url_name in (
                     'groups',
@@ -140,6 +220,21 @@ def workspace_navigation(request):
     if admin_items:
         nav_sections.append({'title': 'Администрирование', 'items': admin_items})
 
+    current_path = request.get_full_path()
+    current_is_stock_nav = is_stock_navigation_url(current_path, workspace=active_workspace)
+    current_page_bookmark = None
+    current_url_is_bookmarked = False
+    if not current_is_stock_nav:
+        covering = find_bookmark_covering_url(
+            user=user,
+            workspace=active_workspace,
+            raw_url=current_path,
+        )
+        current_url_is_bookmarked = covering is not None
+        # Editable modal only for PAGE pins; entity pins already cover the URL.
+        if covering is not None and covering.entity_type == BookmarkEntityType.PAGE:
+            current_page_bookmark = covering
+
     return {
         'active_workspace': active_workspace,
         'workspace_user_groups': workspace_user_groups,
@@ -148,5 +243,14 @@ def workspace_navigation(request):
         'workspace_nav_sections': nav_sections,
         'can_manage_workspace_settings': can(WorkspacePerm.MANAGE_SETTINGS),
         'can_manage_workspace_members': can(WorkspacePerm.MANAGE_MEMBERS),
+        'can_manage_global_users': can_manage_global_users(user),
+        'can_manage_global_workspaces': can_manage_global_workspaces(user),
         'is_system_admin': is_system_admin(user),
+        'page_bookmark_icons': PAGE_BOOKMARK_ICONS,
+        'default_page_bookmark_icon': DEFAULT_PAGE_BOOKMARK_ICON,
+        'page_bookmark_color_presets': PAGE_BOOKMARK_COLOR_PRESETS,
+        'default_page_bookmark_icon_color': DEFAULT_PAGE_BOOKMARK_ICON_COLOR,
+        'current_page_is_stock_nav': current_is_stock_nav,
+        'current_page_bookmark': current_page_bookmark,
+        'current_url_is_bookmarked': current_url_is_bookmarked,
     }

@@ -34,32 +34,30 @@
                     </div>
 
                     <fieldset class="mb-4">
-                        <legend class="form-label fs-6">{{ form.permissions.label }}</legend>
-                        {% for error in form.permissions.errors %}
+                        <legend class="form-label fs-6">{{ form.permission_bundles.label }}</legend>
+                        {% if form.permission_bundles.help_text %}
+                        <p class="form-text">{{ form.permission_bundles.help_text }}</p>
+                        {% endif %}
+                        {% for error in form.permission_bundles.errors %}
                         <div class="invalid-feedback d-block">{{ error }}</div>
                         {% endfor %}
-                        {% for section_title, codenames in permission_sections %}
-                        <div class="mb-3">
-                            <div class="fw-semibold small text-muted mb-2">{{ section_title }}</div>
-                            <div class="row">
-                                {% for codename in codenames %}
-                                <div class="col-md-6 col-lg-4">
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox"
-                                               name="permissions" value="{{ codename }}"
-                                               id="perm_{{ forloop.parentloop.counter }}_{{ forloop.counter }}"
-                                               {% if codename in form.permissions.value %}checked{% endif %}>
-                                        <label class="form-check-label" for="perm_{{ forloop.parentloop.counter }}_{{ forloop.counter }}">
-                                            {% for choice_value, choice_label in form.permissions.field.choices %}
-                                                {% if choice_value == codename %}{{ choice_label }}{% endif %}
-                                            {% endfor %}
-                                        </label>
-                                    </div>
+                        <div class="row">
+                            {% for bundle_key, bundle_label in form.permission_bundles.field.choices %}
+                            <div class="col-md-6 col-lg-4">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           name="permission_bundles"
+                                           value="{{ bundle_key }}"
+                                           id="perm_bundle_{{ forloop.counter }}"
+                                           {% if bundle_key in form.permission_bundles.value %}checked{% endif %}>
+                                    <label class="form-check-label" for="perm_bundle_{{ forloop.counter }}">
+                                        {{ bundle_label }}
+                                    </label>
                                 </div>
-                                {% endfor %}
                             </div>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
                     </fieldset>
 
                     <button type="submit" class="btn btn-primary">{{ submit_label }}</button>

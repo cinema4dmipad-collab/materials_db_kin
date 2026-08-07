@@ -1,73 +1,49 @@
-{% extends 'base.html' %}
-
-{% block title %}Группы — {{ target_user.username }}{% endblock %}
-
-{% block content %}
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h1 class="h4 mb-0">Группы пользователя {{ target_user.username }}</h1>
-        <a href="{% url 'administration:admin_users' %}" class="btn btn-sm btn-outline-secondary">К пользователям</a>
-    </div>
-    <div class="card-body p-0">
-        {% if workspace_rows %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
-                <thead>
-                    <tr>
-                        <th>Пространство</th>
-                        <th>Группы</th>
-                        <th class="text-end">Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in workspace_rows %}
-                    <tr>
-                        <td>{{ row.workspace.name }}</td>
-                        <td>
-                            {% for group in row.groups %}
-                            <span class="badge text-bg-light border me-1 mb-1">{{ group.name }}</span>
-                            {% empty %}
-                            <span class="text-muted small">Без групп</span>
-                            {% endfor %}
-                        </td>
-                        <td class="text-end">
-                            <div class="table-actions">
-                            {% url 'workspaces:member_edit' row.workspace.pk target_user.pk as member_edit_url %}
-                            {% include 'includes/table_action_icon.html' with action='edit' url=member_edit_url title='Изменить группы' %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="text-muted p-3 mb-0">Группы пока не назначены.</p>
-        {% endif %}
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header">
-        <h2 class="h5 mb-0">Назначить группы</h2>
-    </div>
-    <div class="card-body">
-        <p class="text-muted small">Выберите одну или несколько групп из любых пространств. Пользователь получит доступ в соответствующие пространства автоматически.</p>
-        <form method="post" novalidate>
-            {% csrf_token %}
-            {% if membership_form.non_field_errors %}
-            <div class="alert alert-danger">{{ membership_form.non_field_errors }}</div>
-            {% endif %}
-            <div class="mb-3">
-                <label class="form-label">{{ membership_form.groups.label }}</label>
-                {% include 'includes/form_field_widget.html' with field=membership_form.groups %}
-                {% for error in membership_form.groups.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <button type="submit" class="btn btn-primary">Назначить</button>
-        </form>
-    </div>
-</div>
-{% endblock %}
-
+{% extends 'base.html' %}
+
+{% block title %}Группы — {{ target_user.username }}{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h1 class="h4 mb-0">Группы пользователя {{ target_user.username }}</h1>
+        <a href="{% url 'administration:admin_users' %}" class="btn btn-sm btn-outline-secondary">К пользователям</a>
+    </div>
+    <div class="card-body p-0">
+        {% if workspace_rows %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
+                <thead>
+                    <tr>
+                        <th>Пространство</th>
+                        <th>Группы</th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in workspace_rows %}
+                    <tr>
+                        <td>{{ row.workspace.name }}</td>
+                        <td>
+                            {% for group in row.groups %}
+                            <span class="badge text-bg-light border me-1 mb-1">{{ group.name }}</span>
+                            {% empty %}
+                            <span class="text-muted small">Без групп</span>
+                            {% endfor %}
+                        </td>
+                        <td class="text-end">
+                            <div class="table-actions">
+                            {% url 'workspaces:member_edit' row.workspace.pk target_user.pk as member_edit_url %}
+                            {% include 'includes/table_action_icon.html' with action='edit' url=member_edit_url title='Изменить группы' %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted p-3 mb-0">Группы пока не назначены.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

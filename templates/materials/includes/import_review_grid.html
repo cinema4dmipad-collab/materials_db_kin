@@ -1,0 +1,293 @@
+<form method="post" class="mb-0" id="import-unrecognized-form">
+    {% csrf_token %}
+    <input type="hidden" name="review_marker" value="1">
+    {% for item in review_editable_fields %}
+    <input type="hidden"
+           class="import-fix-hidden-value"
+           name="{{ item.input_name }}"
+           id="id_{{ item.input_name }}"
+           value="{{ item.fix_value }}"
+           data-fix-input="{{ item.input_name }}">
+    {% if item.allow_skip %}
+    <input type="checkbox"
+           class="d-none import-fix-hidden-skip"
+           name="{{ item.skip_name }}"
+           id="id_{{ item.skip_name }}"
+           value="1"
+           data-fix-skip="{{ item.input_name }}"
+           {% if item.skip_checked %}checked{% endif %}>
+    {% endif %}
+    {% endfor %}
+
+    <div class="import-wizard-nav-bar mb-3" role="region" aria-label="Навигация мастера импорта">
+        <nav class="import-wizard-nav">
+            <div class="import-wizard-nav__back">
+                {% if wizard_back_url %}
+                <a href="{{ wizard_back_url }}" class="btn btn-outline-secondary import-wizard-nav__back-btn">
+                    ← {{ wizard_back_label|default:"Назад" }}
+                </a>
+                {% endif %}
+            </div>
+            <div class="import-wizard-nav__forward d-flex flex-wrap gap-2 align-items-center">
+                {% if import_has_validation_errors %}
+                <a href="{% url 'materials:import' %}?step=mapping" class="btn btn-primary">
+                    Исправить сопоставление →
+                </a>
+                {% else %}
+                {% include "materials/includes/import_review_write_actions.html" with show_help=True primary_class="import-wizard-nav__forward-btn" %}
+                <button type="submit" name="action" value="review_iterate_start" class="btn btn-link btn-sm"
+                        {% if not can_apply %}disabled{% endif %}>
+                    Построчно
+                </button>
+                <span class="import-help__trigger" tabindex="0" aria-label="Подсказка">
+                    <span class="import-help__mark" aria-hidden="true">?</span>
+                    <span class="import-help__tip import-help__tip--end" role="tooltip">
+                        Кликните любую ячейку таблицы, чтобы изменить значение перед записью.
+                        {% if has_unrecognized %}
+                        Жёлтые ячейки система не разобрала — их нужно исправить или пропустить.
+                        Синим отмечены ячейки, которые вы изменили вручную.
+                        {% else %}
+                        Синим отмечены ячейки, которые вы изменили вручную.
+                        {% endif %}
+                        «Записать» — сохранить правки и записать в базу.
+                    </span>
+                </span>
+                {% endif %}
+            </div>
+        </nav>
+    </div>
+
+    {% include "materials/includes/import_name_collisions.html" %}
+
+    {% if import_has_validation_errors %}
+    <div class="alert alert-danger py-3 mb-3">
+        <div class="fw-semibold mb-1">Есть ошибки валидации — запись запрещена</div>
+        <p class="mb-0 small">
+            Подробности — в блоке «Проверка перед записью» ниже.
+            Вернитесь к сопоставлению колонок, поправьте маппинг и снова соберите черновик.
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="import-unrecognized-panel mb-3{% if not has_unrecognized %} is-resolved{% endif %}" id="import-unrecognized-fields">
+        <div class="import-unrecognized-panel__title">
+            {% if has_unrecognized %}
+            <button type="button"
+                    class="badge text-bg-warning border-0 me-2 import-unrecognized-jump"
+                    id="import-unrecognized-jump"
+                    title="Перейти к следующей проблемной ячейке"
+                    aria-label="Перейти к следующей проблемной ячейке">
+                Предупреждение
+            </button>
+            <span id="import-unrecognized-title-text">Нераспознанные значения</span>
+            {% else %}
+            <span id="import-unrecognized-title-text">Значения к записи</span>
+            {% endif %}
+            <span class="import-help__trigger" tabindex="0" aria-label="Подсказка" id="import-unrecognized-hint-trigger">
+                <span class="import-help__mark" aria-hidden="true">?</span>
+                <span class="import-help__tip import-help__tip--start" role="tooltip" id="import-unrecognized-hint">
+                    В таблице — все значения, которые будут записаны в базу.
+                    Кликните любую ячейку, чтобы изменить значение.
+                    {% if has_unrecognized %}
+                    Подсвеченные ячейки система не разобрала: кликните ячейку или бейдж «Предупреждение»,
+                    чтобы переходить по ним по кругу. Исправленные ячейки подсвечиваются зелёным.
+                    {% endif %}
+                    Синим отмечены ячейки, которые вы изменили вручную.
+                </span>
+            </span>
+        </div>
+        <p class="import-unrecognized-panel__meta mb-2">
+            Черновик: {{ draft_create_count }} созд.{% if name_collision_count %} · совпадений по названию: {{ name_collision_count }}{% endif %}
+            {% if has_unrecognized %}
+            · <span id="import-fix-attention-label">требуют внимания</span>:
+            <strong id="import-fix-attention-count">{{ unrecognized_count }}</strong>
+            {% endif %}
+            · строк к записи: <strong>{{ review_fix_grid.rows|length }}</strong>
+        </p>
+
+        <div class="import-fix-sheet mb-3" id="import-fix-sheet">
+            <div class="import-fix-grid-wrap" id="import-fix-grid-wrap">
+                <table class="import-fix-grid" id="import-fix-grid">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="import-fix-grid__sticky import-fix-grid__name"
+                                data-col-index="0">Название</th>
+                            {% for col in review_fix_grid.columns %}
+                            <th scope="col" title="{{ col.label }}" data-col-index="{{ forloop.counter }}">{{ col.label }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in review_fix_grid.rows %}
+                        <tr data-draft-index="{{ row.draft_index }}" data-source-row="{{ row.source_row }}">
+                            {% with cell=row.name_cell %}
+                            <td class="import-fix-grid__sticky import-fix-grid__name import-fix-cell"
+                                data-col-index="0"
+                                tabindex="0"
+                                role="button"
+                                data-fix-cell
+                                data-allow-skip="0"
+                                data-input-name="{{ cell.input_name }}"
+                                data-raw="{{ cell.raw|escape }}"
+                                data-target-label="Название"
+                                data-column-label=""
+                                data-material-label="{{ row.material_label|escape }}"
+                                data-source-row="{{ row.source_row }}"
+                                title="Клик — изменить название">
+                                {% if cell.display %}{{ cell.display }}{% else %}<span class="import-fix-cell__empty">&nbsp;</span>{% endif %}
+                            </td>
+                            {% endwith %}
+                            {% for cell in row.cell_list %}
+                            <td class="import-fix-cell{% if cell.is_unrecognized %} is-unrecognized{% elif cell.is_excluded %} is-excluded{% endif %}"
+                                data-col-index="{{ cell.col_index }}"
+                                {% if cell.is_editable and cell.input_name %}
+                                tabindex="0"
+                                role="button"
+                                data-fix-cell
+                                data-allow-skip="{% if cell.allow_skip %}1{% else %}0{% endif %}"
+                                data-input-name="{{ cell.input_name }}"
+                                data-skip-name="{{ cell.skip_name }}"
+                                data-raw="{{ cell.raw|escape }}"
+                                data-target-label="{{ cell.target_label|escape }}"
+                                data-column-label="{{ cell.column_label|escape }}"
+                                data-material-label="{{ row.material_label|escape }}"
+                                data-source-row="{{ row.source_row }}"
+                                title="{% if cell.is_unrecognized %}Клик — исправить: {{ cell.raw }}{% else %}Клик — изменить: {{ cell.display }}{% endif %}"
+                                {% elif cell.is_excluded %}
+                                title="Не будет записано"
+                                {% else %}
+                                title="{{ cell.display }}"
+                                {% endif %}>
+                                {% if cell.display %}{{ cell.display }}{% else %}<span class="import-fix-cell__empty">&nbsp;</span>{% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="{{ review_fix_grid.columns|length|add:1 }}" class="text-muted">
+                                Нет строк к записи.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="import-fix-editor d-none mb-0" id="import-fix-editor" hidden>
+                <div class="import-fix-editor__head">
+                    <div>
+                        <div class="import-fix-editor__title">Правка значения</div>
+                        <p class="import-fix-editor__meta mb-0" id="import-fix-editor-meta"></p>
+                    </div>
+                    <button type="button" class="btn-close" id="import-fix-editor-close" aria-label="Закрыть"></button>
+                </div>
+                <p class="small mb-2">
+                    Было:
+                    <code id="import-fix-editor-raw" class="import-fix-editor__raw"></code>
+                </p>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-8">
+                        <label class="form-label" for="import-fix-editor-input">Новое значение</label>
+                        <input type="text"
+                               class="form-control"
+                               id="import-fix-editor-input"
+                               autocomplete="off"
+                               spellcheck="false"
+                               placeholder="Число, диапазон, ±, текст, да/нет или дата"
+                               aria-describedby="import-unrecognized-hint">
+                    </div>
+                    <div class="col-md-4" id="import-fix-editor-skip-wrap">
+                        <div class="form-check mt-md-4">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   id="import-fix-editor-skip"
+                                   value="1">
+                            <label class="form-check-label" for="import-fix-editor-skip">
+                                Пропустить (не записывать)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+{% if has_unrecognized %}
+<div class="modal fade" id="import-ignore-unrecognized-modal" tabindex="-1"
+     aria-labelledby="import-ignore-unrecognized-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="import-ignore-unrecognized-title">
+                    Игнорировать нераспознанные поля?
+                </h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">
+                    Если продолжить, <strong>{{ unrecognized_count }}</strong>
+                    {% if unrecognized_count == 1 %}поле останется пустым{% else %}полей останутся пустыми{% endif %}
+                    после записи материалов.
+                </p>
+                {% if name_collision_count %}
+                <p class="mb-2">
+                    Также учтутся совпадения по названию
+                    (<strong>({{ name_collision_count }})</strong>:
+                    дубликаты не запишутся или получат префикс — по выбору в блоке предупреждения выше.
+                </p>
+                {% endif %}
+                <p class="mb-0 small text-muted">
+                    Кривые (нераспознанные) значения из Excel не сохранятся.
+                    Остальные поля черновика запишутся как обычно.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Отменить
+                </button>
+                <button type="submit"
+                        form="import-unrecognized-form"
+                        name="action"
+                        value="review_resolve_ignore"
+                        class="btn btn-warning"
+                        data-bs-dismiss="modal"
+                        data-import-busy="1">
+                    Всё равно продолжить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if import_has_validation_errors and import_report and import_report.errors %}
+<div class="card border-danger mb-3" id="import-validation-report">
+    <div class="card-header py-2">
+        <span class="fw-semibold text-danger">Также есть ошибки валидации</span>
+        <span class="small text-muted ms-2">Исправьте маппинг и соберите черновик заново</span>
+    </div>
+    <div class="card-body py-2">
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Строка</th><th>Колонка</th><th>Ошибка</th></tr></thead>
+                <tbody>
+                    {% for error in import_report.errors %}
+                    <tr>
+                        <td>{{ error.row|default:"—" }}</td>
+                        <td>{% if error.column %}<code>{{ error.column }}</code>{% else %}—{% endif %}</td>
+                        <td>{{ error.message }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if not import_has_validation_errors %}
+<div class="import-review-bottom-bar mt-3 pt-3 border-top mb-3" role="region" aria-label="Действия записи">
+    {% include "materials/includes/import_review_write_actions.html" with align="end" form_id="import-unrecognized-form" primary_class="import-wizard-nav__forward-btn" %}
+</div>
+{% endif %}

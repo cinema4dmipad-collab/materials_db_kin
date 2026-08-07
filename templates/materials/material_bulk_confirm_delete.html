@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление материалов — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Удаление выбранных материалов</h1>
+    </div>
+    <div class="card-body">
+        {% if deletable %}
+        <div class="alert alert-warning">
+            Будут удалены <strong>{{ deletable|length }}</strong> материал{{ deletable|length|pluralize:"а,ов" }}
+            вместе со свойствами, образцами и сканами.
+        </div>
+        <ul class="mb-3">
+            {% for material in deletable %}
+            <li><code>{{ material.code }}</code> — {{ material.name }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if blocked %}
+        <div class="alert alert-secondary">
+            Не будут удалены ({{ blocked|length }}):
+            <ul class="mb-0 mt-1">
+                {% for item in blocked %}
+                <li>
+                    <code>{{ item.material.code }}</code> — {{ item.material.name }}
+                    <span class="text-muted">({{ item.reason }})</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if deletable %}
+        <form method="post" class="d-flex flex-wrap gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="confirm" value="1">
+            {% for pk in ids %}
+            <input type="hidden" name="ids" value="{{ pk }}">
+            {% endfor %}
+            <button type="submit" class="btn btn-danger">Удалить выбранные</button>
+            <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary">Отмена</a>
+        </form>
+        {% else %}
+        <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary">К списку</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

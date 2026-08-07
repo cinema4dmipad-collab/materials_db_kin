@@ -42,6 +42,15 @@
                         <td>{{ scan.uploaded_at|date:"d.m.Y H:i" }}</td>
                         <td class="text-end">
                             <div class="table-actions">
+                            <button type="button"
+                               class="btn btn-sm table-action-btn btn-action-link"
+                               data-keenetix-open-scan
+                               data-scan-id="{{ scan.pk }}"
+                               data-workspace-id="{% firstof scan.workspace_id sample.workspace_id active_workspace.pk %}"
+                               title="Открыть в KeenetiX"
+                               aria-label="Открыть в KeenetiX">
+                                {% include 'includes/table_action_icon_svg.html' with action='link' %}
+                            </button>
                             {% url 'scans:download' sample.pk scan.pk as scan_download_url %}
                             {% include 'includes/table_action_icon.html' with action='download' url=scan_download_url title='Скачать' extra_class='file-download-link btn-action-download' download_name=scan.filename %}
                             {% url 'scans:edit' sample.pk scan.pk as scan_edit_url %}

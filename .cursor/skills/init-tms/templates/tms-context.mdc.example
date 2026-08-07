@@ -1,0 +1,11 @@
+---
+description: TMS/TestRay/Jira defaults for this repository
+alwaysApply: true
+---
+
+# TMS / TestRay context
+
+1. Read **`docs/tms.project.yaml`** — `testray.scheme`, `jira.*`, `issue_types.*` (**`Defect`**, **`Functional Requirement`**, **`Test Case`**, **`Test Plan`**), `links.*`.
+2. Read **`docs/tms.md`** and **`docs/tms.panels.md`** (JQL панелей, ссылки вида `/projects/{KEY}/issues?filter=`). Если в проекте есть **`docs/tms.boards.md`** — доп. контекст для Agile-досок.
+3. **`/create-defect-tms`** requires **`docs/tms.project.yaml`**. Without it, stop.
+4. Defect body: `~/.cursor/skills/create-defect-tms/templates/defect-description.md`. Requirement links: тип **`Functional Requirement`**. TestRay **hierarchy** / **coverage** — MCP Atlassian / Synapse, не выдуманные схемы связей.

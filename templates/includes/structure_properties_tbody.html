@@ -1,7 +1,7 @@
 {% if structure_properties or structure_message %}
 <tbody class="material-props-section"{% if structure_tbody_id %} id="{{ structure_tbody_id }}"{% endif %}>
     <tr class="material-props-section__header">
-        <th scope="colgroup" colspan="3">{{ structure_section_title|default:"Из параметров структуры" }}</th>
+        <th scope="colgroup" colspan="{% if show_property_value_spacer != False %}4{% else %}3{% endif %}">{{ structure_section_title|default:"Из параметров структуры" }}</th>
     </tr>
     {% if structure_properties %}
     {% for prop in structure_properties %}
@@ -14,12 +14,15 @@
             {{ prop.display_value }}
             {% endif %}
         </td>
-        <td class="material-props-section__unit">—</td>
+        <td class="material-props-section__unit">{{ prop.unit }}</td>
+        {% if show_property_value_spacer != False %}
+        <td class="material-props-section__spacer" aria-hidden="true"></td>
+        {% endif %}
     </tr>
     {% endfor %}
     {% else %}
     <tr class="material-props-section__empty structure-properties-empty-row">
-        <td colspan="3">{{ structure_message }}</td>
+        <td colspan="{% if show_property_value_spacer != False %}4{% else %}3{% endif %}">{{ structure_message }}</td>
     </tr>
     {% endif %}
 </tbody>

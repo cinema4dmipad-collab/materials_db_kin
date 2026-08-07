@@ -10,14 +10,21 @@ from django.urls import reverse
 from apps.core.list_filters import (
     ALL_SEARCH_SCOPE,
     CREATOR_SEARCH_SCOPE,
-    DEFAULT_CREATOR_FILTER,
+    CREATOR_WITH_LABEL_FILTER,
     OBJECT_TYPE_SEARCH_SCOPE,
     SCAN_METHOD_SEARCH_SCOPE,
     TAG_SEARCH_SCOPE,
     QuerySetFilterMixin,
     build_choice_label_filter,
 )
-from apps.core.tag_utils import assign_tags, get_or_create_tags, parse_tag_input, tag_slug_from_name
+from apps.core.tag_utils import (
+    assign_tags,
+    dedupe_scoped_tag_names,
+    get_or_create_tags,
+    parse_scoped_tag_name,
+    parse_tag_input,
+    tag_slug_from_name,
+)
 from apps.core.templatetags.ui_tags import category_tone, semantic_tone, ui_category_tone, ui_tone
 from apps.core.models import Tag
 from apps.core.forms import TagForm
@@ -132,6 +139,34 @@ class TagFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('name', form.errors)
 
+    def test_tag_form_accepts_metadata(self):
+        form = TagForm(
+            data={
+                'name': 'Pilot',
+                'description': 'Test pilot batch',
+                'color': '#aabbcc',
+                'is_archived': True,
+            },
+            workspace=self.workspace,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        tag = form.save()
+        self.assertEqual(tag.description, 'Test pilot batch')
+        self.assertEqual(tag.color, '#AABBCC')
+        self.assertTrue(tag.is_archived)
+
+    def test_tag_form_rejects_invalid_color(self):
+        form = TagForm(data={'name': 'Pilot', 'color': 'red'}, workspace=self.workspace)
+        self.assertFalse(form.is_valid())
+        self.assertIn('color', form.errors)
+
+    def test_tag_form_accepts_scoped_name(self):
+        form = TagForm(data={'name': 'тип::баг'}, workspace=self.workspace)
+        self.assertTrue(form.is_valid(), form.errors)
+        tag = form.save()
+        self.assertEqual(tag.name, 'тип::баг')
+        self.assertEqual(tag.slug, 'тип--баг')
+
 
 class TagViewsTests(AuthenticatedWorkspaceTestCase):
     @classmethod
@@ -240,6 +275,46 @@ class TagViewsTests(AuthenticatedWorkspaceTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Tag.objects.filter(pk=self.workspace_tag.pk).exists())
 
+    def test_tag_bulk_delete_confirm_then_delete(self):
+        extra = Tag.objects.create(name='Extra', slug='extra-bulk', workspace=self.workspace)
+        list_page = self.client.get(reverse('core:tag_list'))
+        self.assertContains(list_page, 'data-list-bulk-toggle')
+        self.assertContains(list_page, reverse('core:tag_bulk_delete'))
+
+        confirm = self.client.post(
+            reverse('core:tag_bulk_delete'),
+            {'ids': [str(self.workspace_tag.pk), str(extra.pk)]},
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, 'Prepreg')
+        self.assertContains(confirm, 'Extra')
+
+        done = self.client.post(
+            reverse('core:tag_bulk_delete'),
+            {
+                'ids': [str(self.workspace_tag.pk), str(extra.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('core:tag_list'))
+        self.assertFalse(Tag.objects.filter(pk=self.workspace_tag.pk).exists())
+        self.assertFalse(Tag.objects.filter(pk=extra.pk).exists())
+
+    def test_tag_list_archive_filter(self):
+        Tag.objects.create(
+            name='Old tag',
+            slug='old-tag',
+            workspace=self.workspace,
+            is_archived=True,
+        )
+        response = self.client.get(reverse('core:tag_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Old tag')
+        response = self.client.get(reverse('core:tag_list'), {'archive': 'archived'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Old tag')
+        self.assertNotContains(response, 'Prepreg')
+
 
 class TagUtilsTests(TestCase):
     @classmethod
@@ -254,17 +329,181 @@ class TagUtilsTests(TestCase):
         slug = tag_slug_from_name('T700 test')
         self.assertEqual(slug, 't700-test')
 
+    def test_tag_slug_from_scoped_name(self):
+        bug_slug = tag_slug_from_name('тип::баг')
+        feature_slug = tag_slug_from_name('тип::фича')
+        self.assertEqual(bug_slug, 'тип--баг')
+        self.assertNotEqual(bug_slug, feature_slug)
+
+    def test_parse_scoped_tag_name(self):
+        scope, value = parse_scoped_tag_name('тип::баг')
+        self.assertEqual(scope, 'тип')
+        self.assertEqual(value, 'баг')
+        scope, value = parse_scoped_tag_name('plain')
+        self.assertIsNone(scope)
+        self.assertEqual(value, 'plain')
+
+    def test_dedupe_scoped_tag_names_keeps_last_per_scope(self):
+        names = dedupe_scoped_tag_names(['тип::баг', 'lab', 'тип::фича', 'field'])
+        self.assertEqual(names, ['тип::фича', 'lab', 'field'])
+
+    def test_dedupe_scoped_tag_names_ignores_invalid_scoped(self):
+        from apps.core.tag_utils import tag_scope_key
+
+        self.assertIsNone(tag_scope_key('a::b::c'))
+        names = dedupe_scoped_tag_names(['a::b::c', 'тип::баг', 'тип::фича'])
+        self.assertEqual(names, ['a::b::c', 'тип::фича'])
+
+    def test_split_scoped_tag_display(self):
+        from apps.core.tag_utils import split_scoped_tag_display
+
+        self.assertEqual(split_scoped_tag_display('тип::баг'), ('тип', 'баг', 'тип::баг'))
+        self.assertEqual(split_scoped_tag_display('plain'), (None, None, 'plain'))
+
     def test_get_or_create_tags_reuses_existing_slug(self):
         Tag.objects.create(name='Prepreg', slug='prepreg', workspace=self.workspace)
         tags = get_or_create_tags(['prepreg', 'PREPREG'], self.workspace)
         self.assertEqual(len(tags), 1)
         self.assertEqual(tags[0].slug, 'prepreg')
 
-    def test_get_or_create_tags_creates_workspace_tag_not_global(self):
-        Tag.objects.create(name='Prepreg', slug='prepreg', workspace=None)
+    def test_get_or_create_tags_reuses_legacy_scoped_slug_by_name(self):
+        """Старый slugify схлопывал «--» в «-»; повторное назначение не должно падать."""
+        existing = Tag.objects.create(
+            name='Волокно::Стекло',
+            slug='волокно-стекло',
+            workspace=self.workspace,
+        )
+        tags = get_or_create_tags(['Волокно::Стекло'], self.workspace)
+        self.assertEqual(len(tags), 1)
+        self.assertEqual(tags[0].pk, existing.pk)
+        self.assertEqual(tags[0].slug, 'волокно--стекло')
+
+    def test_get_or_create_tags_reuses_global_tag(self):
+        global_tag = Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            color='#cc0000',
+            workspace=None,
+        )
         tags = get_or_create_tags(['prepreg'], self.workspace)
         self.assertEqual(len(tags), 1)
-        self.assertEqual(tags[0].workspace, self.workspace)
+        self.assertEqual(tags[0].pk, global_tag.pk)
+        self.assertIsNone(tags[0].workspace_id)
+        self.assertEqual(tags[0].color, '#cc0000')
+
+    def test_get_or_create_tags_prefers_colored_global_over_colorless_workspace(self):
+        global_tag = Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            color='#cc0000',
+            workspace=None,
+        )
+        Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            color='',
+            workspace=self.workspace,
+        )
+        tags = get_or_create_tags(['prepreg'], self.workspace)
+        self.assertEqual(tags[0].pk, global_tag.pk)
+
+    def test_get_or_create_tags_prefers_workspace_tag_over_global(self):
+        Tag.objects.create(name='Prepreg', slug='prepreg', color='#cc0000', workspace=None)
+        local = Tag.objects.create(
+            name='Prepreg',
+            slug='prepreg',
+            color='#00cc00',
+            workspace=self.workspace,
+        )
+        tags = get_or_create_tags(['prepreg'], self.workspace)
+        self.assertEqual(tags[0].pk, local.pk)
+
+    def test_coalesce_tags_for_display_uses_global_color(self):
+        from apps.core.tag_utils import coalesce_tags_for_display
+
+        Tag.objects.create(
+            name='Общий',
+            slug='obshchiy',
+            color='#336699',
+            workspace=None,
+        )
+        local = Tag.objects.create(
+            name='Общий',
+            slug='obshchiy',
+            color='',
+            workspace=self.workspace,
+        )
+        display = coalesce_tags_for_display([local])
+        self.assertEqual(len(display), 1)
+        self.assertEqual(display[0].color, '#336699')
+
+    def test_coalesce_scoped_tag_gets_brand_or_scope_color(self):
+        from apps.core.tag_utils import SCOPED_TAG_DEFAULT_COLOR, coalesce_tags_for_display
+
+        colorless = Tag.objects.create(
+            name='марка уток::EC9',
+            slug='marka-utok--ec9',
+            color='',
+            workspace=self.workspace,
+        )
+        display = coalesce_tags_for_display([colorless])
+        self.assertEqual(display[0].color, SCOPED_TAG_DEFAULT_COLOR)
+
+        Tag.objects.create(
+            name='марка уток',
+            slug='marka-utok',
+            color='#cc0066',
+            workspace=None,
+        )
+        colorless2 = Tag.objects.create(
+            name='марка уток::EC13',
+            slug='marka-utok--ec13',
+            color='',
+            workspace=self.workspace,
+        )
+        display2 = coalesce_tags_for_display([colorless2])
+        self.assertEqual(display2[0].color, '#cc0066')
+
+    def test_legacy_plain_utok_tag_displays_as_scoped(self):
+        from apps.core.tag_utils import (
+            SCOPED_TAG_DEFAULT_COLOR,
+            coalesce_tags_for_display,
+            merge_import_tag_names,
+            normalize_legacy_import_tag_name,
+        )
+
+        self.assertEqual(
+            normalize_legacy_import_tag_name('7 ends/cm Уток: EC9'),
+            'марка уток::EC9',
+        )
+        self.assertEqual(
+            normalize_legacy_import_tag_name('марка::Основа: EC 9'),
+            'марка основа::EC 9',
+        )
+        merged = merge_import_tag_names(
+            ['7 ends/cm Уток: EC', 'приоритет::1', 'марка::Е-стекло'],
+            ['марка уток::EC13'],
+        )
+        self.assertIn('марка уток::EC13', merged)
+        self.assertIn('приоритет::1', merged)
+        self.assertIn('марка::Е-стекло', merged)  # другая область — сохраняется
+        self.assertNotIn('7 ends/cm Уток: EC', merged)
+
+        replaced = merge_import_tag_names(
+            ['марка::Е-стекло', '7 ends/cm Уток: EC'],
+            ['марка::Т-23'],
+        )
+        self.assertEqual(replaced, ['марка::Т-23'])
+
+        legacy = Tag.objects.create(
+            name='7 ends/cm Уток: EC',
+            slug='legacy-utok',
+            color='',
+            workspace=self.workspace,
+        )
+        display = coalesce_tags_for_display([legacy])
+        self.assertEqual(display[0].name, 'марка уток::EC')
+        self.assertEqual(display[0].color, SCOPED_TAG_DEFAULT_COLOR)
 
 
 class NumberUtilsTests(TestCase):
@@ -304,6 +543,77 @@ class TagAssignmentTests(TestCase):
         self.assertEqual(self.material.tags.count(), 2)
         self.assertTrue(self.material.tags.filter(slug='prepreg').exists())
 
+    def test_assign_tags_dedupes_scoped_tags_by_scope(self):
+        assign_tags(self.material, ['тип::баг', 'тип::фича'], workspace=self.workspace)
+        self.assertEqual(self.material.tags.count(), 1)
+        self.assertEqual(self.material.tags.get().name, 'тип::фича')
+
+
+class TagNamesFormMixinTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.workspace = ensure_legacy_workspace()
+        Tag.objects.create(name='Active tag', slug='active-tag', workspace=cls.workspace)
+        Tag.objects.create(
+            name='Archived tag',
+            slug='archived-tag',
+            workspace=cls.workspace,
+            is_archived=True,
+        )
+
+    def test_suggestions_exclude_archived_tags(self):
+        from apps.materials.forms import MaterialForm
+
+        form = MaterialForm(workspace=self.workspace)
+        suggestions = form.fields['tag_names'].widget.get_tag_suggestions()
+        slugs = {item['slug'] for item in suggestions}
+        self.assertIn('active-tag', slugs)
+        self.assertNotIn('archived-tag', slugs)
+
+    def test_suggestions_dedupe_global_and_workspace_same_name(self):
+        from apps.materials.forms import MaterialForm
+
+        Tag.objects.create(
+            name='общий тег',
+            slug='obshchiy-teg-global',
+            color='#336699',
+            workspace=None,
+        )
+        Tag.objects.create(
+            name='общий тег',
+            slug='obshchiy-teg-ws',
+            color='',
+            workspace=self.workspace,
+        )
+
+        form = MaterialForm(workspace=self.workspace)
+        suggestions = form.fields['tag_names'].widget.get_tag_suggestions()
+        matching = [item for item in suggestions if item['name'].casefold() == 'общий тег']
+        self.assertEqual(len(matching), 1)
+        # Colored global wins over colorless workspace duplicate.
+        self.assertEqual(matching[0]['slug'], 'obshchiy-teg-global')
+        self.assertEqual(matching[0]['color'], '#336699')
+
+    def test_suggestions_apply_default_color_to_scoped_tags(self):
+        from apps.core.tag_utils import SCOPED_TAG_DEFAULT_COLOR
+        from apps.materials.forms import MaterialForm
+
+        Tag.objects.create(
+            name='марка::Е-стекло с добавлением E-CR',
+            slug='marka--e-steklo',
+            color='',
+            workspace=self.workspace,
+        )
+        form = MaterialForm(workspace=self.workspace)
+        suggestions = form.fields['tag_names'].widget.get_tag_suggestions()
+        matching = [
+            item
+            for item in suggestions
+            if item['name'] == 'марка::Е-стекло с добавлением E-CR'
+        ]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]['color'], SCOPED_TAG_DEFAULT_COLOR)
+
 
 class _SampleFilterViewWithObjectType(_SampleFilterView):
     search_scopes = _SampleFilterView.search_scopes + (
@@ -326,7 +636,7 @@ class _SampleFilterViewWithCreator(_SampleFilterView):
 
     def get_custom_search_scope_filters(self):
         return {
-            CREATOR_SEARCH_SCOPE: DEFAULT_CREATOR_FILTER,
+            CREATOR_SEARCH_SCOPE: CREATOR_WITH_LABEL_FILTER,
         }
 
 
@@ -415,6 +725,30 @@ class QuerySetFilterMixinTests(TestCase):
         self.assertEqual(queryset.count(), 1)
         self.assertEqual(queryset.get().code, 'SMP-FILTER-B')
 
+    def test_search_and_filter_include_global_tags(self):
+        global_tag = Tag.objects.create(
+            name='Общие теги::Тест',
+            slug='obshchie-tegi--test',
+            color='#aa33cc',
+            workspace=None,
+        )
+        assign_tags(self.sample_a, [global_tag.name], workspace=self.workspace)
+        self.assertTrue(self.sample_a.tags.filter(pk=global_tag.pk).exists())
+
+        request = self._request('/samples/', {'q': 'Общие', 'q_in': TAG_SEARCH_SCOPE})
+        view = _SampleFilterView(request)
+        queryset = view.filter_queryset(Sample.objects.all())
+        self.assertEqual(queryset.count(), 1)
+        self.assertEqual(queryset.get().code, 'SMP-FILTER-A')
+
+        request = self._request('/samples/', {'tag': global_tag.slug})
+        view = _SampleFilterView(request)
+        context = view.get_filter_context()
+        self.assertEqual(view.filter_queryset(Sample.objects.all()).count(), 1)
+        self.assertEqual(context['active_tags'][0]['label'], global_tag.name)
+        self.assertEqual(context['active_tags'][0]['color'], '#aa33cc')
+        self.assertEqual(context['active_tags'][0]['tag'].pk, global_tag.pk)
+
     def test_search_scope_limits_fields(self):
         request = RequestFactory().get('/samples/', {'q': 'Alpha', 'q_in': 'code'})
         view = _SampleFilterView(request)
@@ -492,6 +826,22 @@ class QuerySetFilterMixinTests(TestCase):
         self.assertEqual(context['active_tags'][0]['remove_url'], '/samples/?tag=field')
         self.assertEqual(context['active_tags'][1]['remove_url'], '/samples/?tag=lab')
 
+    def test_choice_filter_chip_has_remove_url(self):
+        request = RequestFactory().get(
+            '/samples/',
+            {'object_type': 'test', 'tag': 'lab', 'q': 'alpha'},
+        )
+        view = _SampleFilterView(request)
+        context = view.get_filter_context()
+        object_type_filter = next(
+            item for item in context['list_filters'] if item['param'] == 'object_type'
+        )
+        self.assertEqual(object_type_filter['value'], 'test')
+        self.assertEqual(
+            object_type_filter['remove_url'],
+            '/samples/?tag=lab&q=alpha',
+        )
+
 
 class HelpPageTests(TestCase):
     def test_help_page_renders(self):
@@ -503,6 +853,98 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Образцы')
         self.assertContains(response, 'id="interface"')
         self.assertContains(response, 'Пространство')
+        self.assertContains(response, 'область::значение')
+        self.assertContains(response, 'Общие цветные теги')
+        self.assertContains(response, 'Импорт из файла')
+        self.assertContains(response, 'источнику импорта')
+        self.assertContains(response, 'пример большой таблицы')
+        self.assertContains(response, 'Производитель')
+        self.assertContains(response, 'Справочные свойства')
+        self.assertContains(response, 'ту же модалку выбора')
+        self.assertContains(response, 'Доступные теги')
+        self.assertContains(response, 'Справочники материалов')
+        self.assertContains(response, 'марка::')
+        self.assertContains(response, '4050/ 50мм')
+        self.assertContains(response, '± погрешностью')
+        self.assertContains(response, 'Знаков после запятой')
+        self.assertContains(response, 'проблемные ячейки')
+        self.assertContains(response, 'каталог колонок')
+        self.assertContains(response, 'Выгрузить в Excel')
+        self.assertContains(response, 'одного типа структуры')
+        self.assertContains(response, 'пропускаются')
+        self.assertContains(response, 'двухуровневая шапка')
+        self.assertContains(response, 'Теги для всех материалов')
+        self.assertContains(response, 'дубликатах по названию')
+        self.assertContains(response, 'уже исправленные значения')
+        self.assertContains(response, 'постфикс')
+        self.assertContains(response, 'изменённые вручную')
+        self.assertContains(response, 'Развернуть')
+        self.assertContains(response, 'В закладки')
+        self.assertContains(response, 'В закладках')
+        self.assertContains(response, 'кнопки закладок нет')
+        self.assertContains(response, 'иконка и цвет')
+        self.assertContains(response, 'повторно добавить нельзя')
+        self.assertContains(response, 'материалы этой структуры')
+        self.assertContains(response, 'Поиск работает как у материалов')
+        self.assertContains(response, 'текущего рабочего пространства')
+        self.assertContains(response, 'Импорт к разбору')
+        self.assertContains(response, 'Продолжить импорт')
+        self.assertContains(response, 'статус::на проверке')
+        self.assertContains(response, 'статус::учрежден')
+        self.assertContains(response, 'Активные фильтры')
+        self.assertContains(response, 'крестик на чипе')
+        self.assertContains(response, 'Администрирование → Бэкапы')
+        self.assertContains(response, '/backups')
+        self.assertContains(response, 'токен API')
+        self.assertContains(response, 'HTTP API v1')
+        self.assertContains(response, 'Открыть в KeenetiX')
+
+
+class DashboardTests(AuthenticatedWorkspaceTestCase):
+    def test_dashboard_renders_workspace_desktop(self):
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Требуют внимания')
+        self.assertContains(response, 'dashboard-analytics-slot')
+        self.assertContains(response, 'Сводка')
+        self.assertContains(response, self.workspace.name)
+        self.assertContains(response, 'Недавние материалы')
+        self.assertContains(response, 'Недавние образцы')
+
+    def test_dashboard_shows_russian_date(self):
+        from django.utils import timezone
+
+        from apps.core.views import format_dashboard_date
+
+        today = timezone.localdate()
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertContains(response, format_dashboard_date(today))
+
+    def test_dashboard_attention_material_without_struct_type(self):
+        Material.objects.create(
+            code='NO-STRUCT',
+            name='No structure',
+            home_workspace=self.workspace,
+        )
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertContains(response, 'Материалы без типа структуры')
+        self.assertContains(response, 'NO-STRUCT')
+
+    def test_dashboard_empty_attention_when_no_issues(self):
+        structure_type = StructureType.objects.create(
+            name='Dash panel',
+            code='dash_panel',
+            table_name='structures_dash_panel',
+            is_created=True,
+        )
+        Material.objects.create(
+            code='WITH-STRUCT',
+            name='Has structure',
+            home_workspace=self.workspace,
+            struct_type=structure_type,
+        )
+        response = self.client.get(reverse('core:dashboard'))
+        self.assertContains(response, 'Сейчас нет записей, требующих внимания.')
 
 
 class AppVersionTests(TestCase):

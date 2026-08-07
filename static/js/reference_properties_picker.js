@@ -6,6 +6,8 @@
         string: 'Строка',
         boolean: 'Да/Нет',
         date: 'Дата',
+        material_link: 'Материал',
+        choice: 'Выбор из списка',
     };
 
     var FIELD_TYPE_LABELS = {
@@ -18,6 +20,7 @@
         DateField: 'Дата',
         DateTimeField: 'Дата и время',
         MaterialLink: 'Материал',
+        ChoiceField: 'Выбор из списка',
     };
 
     function escapeHtml(text) {
@@ -142,7 +145,6 @@
                     + (isUsed ? ' · уже добавлено' : '')
                     + '</div>'
                     + '</span>';
-                itemEl.querySelector('input').dataset.propertyPayload = JSON.stringify(item);
                 groupEl.appendChild(itemEl);
             });
 
@@ -210,12 +212,18 @@
 
         addBtn.addEventListener('click', function () {
             var selected = modalEl.querySelectorAll('.reference-property-checkbox:checked:not(:disabled)');
+            var allProperties = getReferenceProperties();
+            var byId = {};
+            allProperties.forEach(function (item) {
+                if (item && item.property_id) {
+                    byId[item.property_id] = item;
+                }
+            });
             var payloads = [];
             selected.forEach(function (checkbox) {
-                try {
-                    payloads.push(JSON.parse(checkbox.dataset.propertyPayload || '{}'));
-                } catch (error) {
-                    /* skip invalid payload */
+                var item = byId[checkbox.value];
+                if (item) {
+                    payloads.push(item);
                 }
             });
             if (payloads.length) {

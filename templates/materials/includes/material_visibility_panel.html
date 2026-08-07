@@ -19,6 +19,11 @@
             <span class="badge text-bg-info text-dark">{{ material.get_visibility_mode_display }}</span>
             {% endif %}
         </p>
+        {% if material_is_workspace_link %}
+        <p class="text-muted small mb-0">
+            Видимость ссылочного материала настраивается в исходном пространстве.
+        </p>
+        {% endif %}
     </div>
     {% if can_publish_material %}
     <a href="{% url 'materials:visibility' material.pk %}" class="btn btn-primary btn-sm flex-shrink-0">

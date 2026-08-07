@@ -4,7 +4,7 @@ from apps.core.form_validation import (
     validation_flash_message,
     validation_sections,
 )
-from apps.materials.forms import STRUCTURE_FIELD_PREFIX
+from apps.structures.constants import STRUCTURE_FIELD_PREFIX
 
 
 def build_material_form_validation_summary(form, properties_formset=None, layers_formset=None):
@@ -16,6 +16,9 @@ def build_material_form_validation_summary(form, properties_formset=None, layers
     field_sections.update({
         'visibility_mode': 'Видимость',
         'published_workspaces': 'Видимость',
+        'manufacturer': 'Справочные свойства',
+        'availability': 'Справочные свойства',
+        'technology': 'Справочные свойства',
     })
     summary = collect_form_errors(
         form,

@@ -1,5 +1,6 @@
 from django import template
 from django.utils.html import json_script
+from django.utils.safestring import mark_safe
 
 from apps.core.number_utils import format_decimal_display
 from apps.core.property_form_display import property_label_with_unit as format_property_label_with_unit
@@ -76,11 +77,16 @@ def creator_display(obj):
 
 
 @register.filter
-def decimal_comma(value):
+def decimal_comma(value, decimal_places=None):
     """Отображает число с запятой в качестве десятичного разделителя."""
     if value in (None, ''):
         return '—'
-    return format_decimal_display(value)
+    if decimal_places not in (None, ''):
+        try:
+            decimal_places = int(decimal_places)
+        except (TypeError, ValueError):
+            decimal_places = None
+    return format_decimal_display(value, decimal_places)
 
 
 @register.simple_tag
@@ -109,3 +115,49 @@ def reference_structure_types_json_script(structure_types=None):
     if not isinstance(structure_types, list):
         structure_types = []
     return json_script(structure_types, 'reference-structure-types-data')
+
+
+@register.simple_tag
+def get_structure_color_presets():
+    from apps.structures.colors import STRUCTURE_COLOR_PRESETS
+
+    return list(STRUCTURE_COLOR_PRESETS)
+
+
+@register.filter
+def structure_is_hex_color(value):
+    from apps.structures.colors import is_hex_display_color, normalize_display_color
+
+    return is_hex_display_color(normalize_display_color(str(value or '')))
+
+
+@register.simple_tag
+def structure_pill_style(color):
+    from apps.structures.colors import structure_pill_style as build_style
+
+    result = build_style(color)
+    return mark_safe(result) if result else ''
+
+
+@register.simple_tag
+def structure_pill_dot_style(color):
+    from apps.structures.colors import structure_pill_dot_style as build_style
+
+    result = build_style(color)
+    return mark_safe(result) if result else ''
+
+
+@register.simple_tag
+def entity_code_link_style(color):
+    from apps.structures.colors import entity_code_link_style as build_style
+
+    result = build_style(color)
+    return mark_safe(result) if result else ''
+
+
+@register.simple_tag
+def entity_code_mark_style(color):
+    from apps.structures.colors import entity_code_mark_style as build_style
+
+    result = build_style(color)
+    return mark_safe(result) if result else ''

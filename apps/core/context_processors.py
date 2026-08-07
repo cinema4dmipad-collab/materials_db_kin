@@ -1,5 +1,6 @@
 from django.core.cache import cache
 
+from apps.core.tag_utils import active_tags_queryset
 from apps.workspaces.models import Workspace
 from apps.workspaces.services import tags_in_workspace
 
@@ -27,10 +28,12 @@ def tag_suggestions(request):
     tag_ids = cache.get(cache_key)
     if tag_ids is None:
         tag_ids = list(
-            tags_in_workspace(workspace).order_by('name').values_list('pk', flat=True)[:250]
+            active_tags_queryset(tags_in_workspace(workspace))
+            .order_by('name')
+            .values_list('pk', flat=True)[:250]
         )
         cache.set(cache_key, tag_ids, TAG_SUGGESTIONS_CACHE_TIMEOUT)
-    tags = tags_in_workspace(workspace).filter(pk__in=tag_ids).order_by('name')
+    tags = active_tags_queryset(tags_in_workspace(workspace)).filter(pk__in=tag_ids).order_by('name')
     return {'tag_suggestions': tags}
 
 

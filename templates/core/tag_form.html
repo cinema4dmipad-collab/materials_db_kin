@@ -32,10 +32,19 @@
                     {% endif %}
 
                     {% for field in form %}
-                    <div class="mb-3{% if field.name == 'is_global' %} form-check{% endif %}">
-                        {% if field.name == 'is_global' %}
+                    <div class="mb-3{% if field.name == 'is_global' or field.name == 'is_archived' %} form-check{% endif %}">
+                        {% if field.name == 'is_global' or field.name == 'is_archived' %}
                         {{ field }}
                         <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {% elif field.name == 'color' %}
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="color"
+                                   class="form-control form-control-color tag-form-color-picker"
+                                   value="{% if field.value %}{{ field.value }}{% else %}#336699{% endif %}"
+                                   title="Выбрать цвет">
+                            {{ field }}
+                        </div>
                         {% else %}
                         <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
@@ -58,4 +67,30 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    var picker = document.querySelector('.tag-form-color-picker');
+    var textInput = document.getElementById('id_color');
+    if (!picker || !textInput) {
+        return;
+    }
+    if (textInput.value && /^#[0-9A-Fa-f]{6}$/.test(textInput.value)) {
+        picker.value = textInput.value;
+    } else {
+        picker.value = '#336699';
+    }
+    // Пишем цвет в поле только при явном выборе; submit не подставляет дефолт picker.
+    picker.addEventListener('input', function () {
+        textInput.value = picker.value.toUpperCase();
+    });
+    textInput.addEventListener('input', function () {
+        if (/^#[0-9A-Fa-f]{6}$/.test(textInput.value)) {
+            picker.value = textInput.value;
+        }
+    });
+})();
+</script>
 {% endblock %}

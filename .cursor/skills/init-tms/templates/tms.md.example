@@ -1,0 +1,21 @@
+# TMS / TestRay / Jira — `<Project name>`
+
+Кратко: **TestRay** на Jira. Типы: **`Functional Requirement`**, **`Test Case`**, **`Defect`**, **`Test Plan`** — см. `docs/tms.project.yaml`. Оформление текста **дефекта** — `create-defect-tms` (`defect-description.md`).
+
+## Ссылки
+
+| Что | URL |
+|-----|-----|
+| Проект Jira | `<paste>` |
+| Summary проекта | `<base>/projects/PROJ/summary` |
+| Панели проекта | см. **`docs/tms.panels.md`** (фильтры + `/projects/PROJ/issues?filter=…`) |
+| (Опционально Agile) | см. **`docs/tms.boards.md`** только если включили `--with-boards` |
+| Поиск по проекту | `<base>/issues/?jql=project%20%3D%20PROJ` |
+
+## Команды
+
+- **`/create-defect-tms`** — черновик → подтверждение → создание **`Defect`** через MCP.
+
+## Конфиг
+
+`docs/tms.project.yaml` — `issue_types.*`, `jira.*`, `links.*`, `testray.scheme`.

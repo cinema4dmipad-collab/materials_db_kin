@@ -26,22 +26,24 @@ def build_choice_label_filter(choices: list[tuple[str, str]] | tuple[tuple[str, 
 
 def build_creator_filter(
     user_field: str = 'created_by_user',
-    label_field: str = 'created_by',
+    label_field: str | None = None,
 ):
     def filter_fn(query: str):
         q = query.strip()
         if not q:
             return None
-        condition = Q(**{f'{label_field}__icontains': q})
-        condition |= Q(**{f'{user_field}__username__icontains': q})
+        condition = Q(**{f'{user_field}__username__icontains': q})
         condition |= Q(**{f'{user_field}__first_name__icontains': q})
         condition |= Q(**{f'{user_field}__last_name__icontains': q})
+        if label_field:
+            condition |= Q(**{f'{label_field}__icontains': q})
         return condition
 
     return filter_fn
 
 
 DEFAULT_CREATOR_FILTER = build_creator_filter()
+CREATOR_WITH_LABEL_FILTER = build_creator_filter(label_field='created_by')
 UPLOADED_BY_CREATOR_FILTER = build_creator_filter('uploaded_by_user', 'uploaded_by')
 
 
@@ -117,30 +119,43 @@ class QuerySetFilterMixin:
             **{f'{self.tag_relation}__workspace__isnull': True}
         )
 
-    def _get_active_tags(self) -> list[dict[str, str]]:
+    def _resolve_tag_for_slug(self, slug: str, workspace):
+        """Pick display tag for a filter slug; prefer colored, then workspace-local."""
+        queryset = Tag.objects.filter(slug=slug, is_archived=False)
+        if workspace is not None:
+            queryset = queryset.filter(Q(workspace=workspace) | Q(workspace__isnull=True))
+        else:
+            queryset = queryset.filter(workspace__isnull=True)
+        candidates = list(queryset)
+        if not candidates:
+            return None
+
+        def rank(tag: Tag) -> tuple[int, int]:
+            return (
+                1 if (tag.color or '').strip() else 0,
+                1 if tag.workspace_id is not None else 0,
+            )
+
+        return max(candidates, key=rank)
+
+    def _get_active_tags(self) -> list[dict]:
         slugs = self._get_active_tag_slugs()
         if not slugs:
             return []
         workspace = self.get_tag_filter_workspace()
-        tag_queryset = Tag.objects.filter(slug__in=slugs)
-        if workspace is not None:
-            tag_queryset = tag_queryset.filter(
-                Q(workspace=workspace) | Q(workspace__isnull=True)
+        active: list[dict] = []
+        for slug in slugs:
+            tag = self._resolve_tag_for_slug(slug, workspace)
+            active.append(
+                {
+                    'slug': slug,
+                    'label': tag.name if tag is not None else slug,
+                    'color': (tag.color or '') if tag is not None else '',
+                    'tag': tag,
+                    'remove_url': self._build_filter_url(remove_tag_slugs=(slug,)),
+                }
             )
-        elif workspace is None:
-            tag_queryset = tag_queryset.filter(workspace__isnull=True)
-        labels = {
-            slug: name
-            for slug, name in tag_queryset.values_list('slug', 'name')
-        }
-        return [
-            {
-                'slug': slug,
-                'label': labels.get(slug, slug),
-                'remove_url': self._build_filter_url(remove_tag_slugs=(slug,)),
-            }
-            for slug in slugs
-        ]
+        return active
 
     def _build_search_condition(self, query: str) -> tuple[Q | None, bool]:
         active_scopes = self._get_active_search_scope_values()
@@ -251,12 +266,18 @@ class QuerySetFilterMixin:
         options_map = self.get_choice_filter_options()
 
         for param, _field_name in self.choice_filters:
+            value = params.get(param, '').strip()
             filters.append(
                 {
                     'param': param,
                     'label': self.choice_filter_labels.get(param, param),
-                    'value': params.get(param, '').strip(),
+                    'value': value,
                     'options': options_map.get(param, []),
+                    'remove_url': (
+                        self._build_filter_url((param,))
+                        if value
+                        else ''
+                    ),
                 }
             )
 

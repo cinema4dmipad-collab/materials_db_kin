@@ -11,6 +11,7 @@ Main application modules and their responsibilities.
 - [Structures](structures.md) — dynamic types and SQL tables
 - [Samples](samples.md) — specimens linked to materials
 - [Scans](scans.md) — HDF5 scan files
+- [HTTP API v1](../api/README.md) — Bearer PAT + workspace header for external clients (KeenetiX)
 
 ## Dependency Graph
 
@@ -21,6 +22,7 @@ structures ──► materials ──► samples ──► scans
                   │
                   └── composites (layers)
 core ── tags, filters, help (cross-cutting)
+api ── PAT over the same domain models (read + scan upload/download)
 ```
 
 ## Public URLs (Summary)
@@ -35,6 +37,7 @@ core ── tags, filters, help (cross-cutting)
 | Structures | `/structures/` |
 | Samples | `/samples/` |
 | All scans | `/scans/` |
+| HTTP API v1 | `/api/v1/` |
 | Admin | `/admin/` |
 
 ## Shared UI Assets

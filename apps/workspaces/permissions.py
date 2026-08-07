@@ -115,109 +115,132 @@ PERMISSION_LABELS = {
     WorkspacePerm.USER_MANAGE: 'Управление пользователями',
 }
 
-PERMISSION_SECTIONS = (
-    ('Пространство', (WorkspacePerm.VIEW, WorkspacePerm.MANAGE_SETTINGS, WorkspacePerm.MANAGE_MEMBERS)),
-    (
-        'Материалы',
-        (
-            WorkspacePerm.MATERIAL_VIEW,
-            WorkspacePerm.MATERIAL_CREATE,
-            WorkspacePerm.MATERIAL_EDIT,
-            WorkspacePerm.MATERIAL_DELETE,
-            WorkspacePerm.MATERIAL_PUBLISH,
-        ),
-    ),
-    (
-        'Структуры',
-        (
-            WorkspacePerm.STRUCTURE_VIEW,
-            WorkspacePerm.STRUCTURE_CREATE,
-            WorkspacePerm.STRUCTURE_EDIT,
-            WorkspacePerm.STRUCTURE_DELETE,
-            WorkspacePerm.STRUCTURE_PUBLISH,
-        ),
-    ),
-    (
-        'Образцы',
-        (
-            WorkspacePerm.SAMPLE_VIEW,
-            WorkspacePerm.SAMPLE_CREATE,
-            WorkspacePerm.SAMPLE_EDIT,
-            WorkspacePerm.SAMPLE_DELETE,
-        ),
-    ),
-    (
-        'Сканы',
-        (
-            WorkspacePerm.SCAN_VIEW,
-            WorkspacePerm.SCAN_CREATE,
-            WorkspacePerm.SCAN_EDIT,
-            WorkspacePerm.SCAN_DELETE,
-        ),
-    ),
-    (
-        'Справочники',
-        (
-            WorkspacePerm.PROPERTY_VIEW,
-            WorkspacePerm.PROPERTY_CREATE,
-            WorkspacePerm.PROPERTY_EDIT,
-            WorkspacePerm.PROPERTY_DELETE,
-            WorkspacePerm.TAG_VIEW,
-            WorkspacePerm.TAG_CREATE,
-            WorkspacePerm.TAG_EDIT,
-            WorkspacePerm.TAG_DELETE,
-        ),
-    ),
-    ('Администрирование', (WorkspacePerm.USER_MANAGE,)),
+_MATERIAL_PERMISSIONS = frozenset(
+    {
+        WorkspacePerm.MATERIAL_VIEW,
+        WorkspacePerm.MATERIAL_CREATE,
+        WorkspacePerm.MATERIAL_EDIT,
+        WorkspacePerm.MATERIAL_DELETE,
+        WorkspacePerm.MATERIAL_PUBLISH,
+    }
+)
+_STRUCTURE_PERMISSIONS = frozenset(
+    {
+        WorkspacePerm.STRUCTURE_VIEW,
+        WorkspacePerm.STRUCTURE_CREATE,
+        WorkspacePerm.STRUCTURE_EDIT,
+        WorkspacePerm.STRUCTURE_DELETE,
+        WorkspacePerm.STRUCTURE_PUBLISH,
+    }
+)
+_SAMPLE_PERMISSIONS = frozenset(
+    {
+        WorkspacePerm.SAMPLE_VIEW,
+        WorkspacePerm.SAMPLE_CREATE,
+        WorkspacePerm.SAMPLE_EDIT,
+        WorkspacePerm.SAMPLE_DELETE,
+    }
+)
+_SCAN_PERMISSIONS = frozenset(
+    {
+        WorkspacePerm.SCAN_VIEW,
+        WorkspacePerm.SCAN_CREATE,
+        WorkspacePerm.SCAN_EDIT,
+        WorkspacePerm.SCAN_DELETE,
+    }
+)
+_PROPERTY_PERMISSIONS = frozenset(
+    {
+        WorkspacePerm.PROPERTY_VIEW,
+        WorkspacePerm.PROPERTY_CREATE,
+        WorkspacePerm.PROPERTY_EDIT,
+        WorkspacePerm.PROPERTY_DELETE,
+    }
+)
+_TAG_PERMISSIONS = frozenset(
+    {
+        WorkspacePerm.TAG_VIEW,
+        WorkspacePerm.TAG_CREATE,
+        WorkspacePerm.TAG_EDIT,
+        WorkspacePerm.TAG_DELETE,
+    }
 )
 
-DEFAULT_GROUP_PERMISSIONS = {
-    'manager': frozenset(
-        {
-            WorkspacePerm.VIEW,
-            WorkspacePerm.MANAGE_SETTINGS,
-            WorkspacePerm.MANAGE_MEMBERS,
-            WorkspacePerm.MATERIAL_VIEW,
-            WorkspacePerm.MATERIAL_CREATE,
-            WorkspacePerm.MATERIAL_EDIT,
-            WorkspacePerm.MATERIAL_DELETE,
-            WorkspacePerm.MATERIAL_PUBLISH,
-            WorkspacePerm.STRUCTURE_VIEW,
-            WorkspacePerm.SAMPLE_VIEW,
-            WorkspacePerm.SAMPLE_CREATE,
-            WorkspacePerm.SAMPLE_EDIT,
-            WorkspacePerm.SAMPLE_DELETE,
-            WorkspacePerm.SCAN_VIEW,
-            WorkspacePerm.SCAN_CREATE,
-            WorkspacePerm.SCAN_EDIT,
-            WorkspacePerm.SCAN_DELETE,
-            WorkspacePerm.PROPERTY_VIEW,
-            WorkspacePerm.TAG_VIEW,
-            WorkspacePerm.TAG_CREATE,
-            WorkspacePerm.TAG_EDIT,
-            WorkspacePerm.TAG_DELETE,
-        }
+# UI bundles: one checkbox grants every codename in the bundle.
+PERMISSION_BUNDLES = (
+    ('workspace_access', 'Доступ к пространству', frozenset({WorkspacePerm.VIEW})),
+    (
+        'workspace_manage',
+        'Управление пространством',
+        frozenset({WorkspacePerm.MANAGE_SETTINGS, WorkspacePerm.MANAGE_MEMBERS}),
     ),
-    'operator': frozenset(
-        {
-            WorkspacePerm.VIEW,
-            WorkspacePerm.MATERIAL_VIEW,
-            WorkspacePerm.MATERIAL_CREATE,
-            WorkspacePerm.MATERIAL_EDIT,
-            WorkspacePerm.MATERIAL_PUBLISH,
-            WorkspacePerm.STRUCTURE_VIEW,
-            WorkspacePerm.SAMPLE_VIEW,
-            WorkspacePerm.SAMPLE_CREATE,
-            WorkspacePerm.SAMPLE_EDIT,
-            WorkspacePerm.SCAN_VIEW,
-            WorkspacePerm.SCAN_CREATE,
-            WorkspacePerm.SCAN_EDIT,
-            WorkspacePerm.PROPERTY_VIEW,
-            WorkspacePerm.TAG_VIEW,
-            WorkspacePerm.TAG_CREATE,
-            WorkspacePerm.TAG_EDIT,
-            WorkspacePerm.TAG_DELETE,
-        }
+    ('materials', 'Материалы', _MATERIAL_PERMISSIONS),
+    ('structures', 'Структуры', _STRUCTURE_PERMISSIONS),
+    ('samples', 'Образцы', _SAMPLE_PERMISSIONS),
+    ('scans', 'Сканы', _SCAN_PERMISSIONS),
+    ('properties', 'Свойства', _PROPERTY_PERMISSIONS),
+    ('tags', 'Теги', _TAG_PERMISSIONS),
+    ('users', 'Пользователи', frozenset({WorkspacePerm.USER_MANAGE})),
+)
+
+PERMISSION_BUNDLE_KEYS = frozenset(key for key, _label, _codes in PERMISSION_BUNDLES)
+PERMISSION_BUNDLE_LABELS = {key: label for key, label, _codes in PERMISSION_BUNDLES}
+PERMISSION_BUNDLE_CODENAMES = {key: codes for key, _label, codes in PERMISSION_BUNDLES}
+UI_PERMISSION_BUNDLES = tuple(
+    bundle for bundle in PERMISSION_BUNDLES if bundle[0] != 'workspace_access'
+)
+
+PERMISSION_SECTIONS = tuple(
+    (label, tuple(sorted(codes))) for _key, label, codes in PERMISSION_BUNDLES
+)
+
+
+def expand_permission_bundles(bundle_keys) -> list[str]:
+    permissions = set()
+    for key in bundle_keys or []:
+        permissions.update(PERMISSION_BUNDLE_CODENAMES.get(key, ()))
+    if permissions:
+        permissions.add(WorkspacePerm.VIEW)
+    return sorted(permissions)
+
+
+def permission_bundles_for_permissions(permissions) -> list[str]:
+    perms = set(permissions or [])
+    return [
+        key
+        for key, _label, codes in UI_PERMISSION_BUNDLES
+        if codes & perms
+    ]
+
+
+def permission_bundle_labels_for_permissions(permissions) -> list[str]:
+    return [
+        PERMISSION_BUNDLE_LABELS[key]
+        for key in permission_bundles_for_permissions(permissions)
+    ]
+
+
+def _default_permissions(*bundle_keys) -> frozenset:
+    return frozenset(expand_permission_bundles(bundle_keys))
+
+
+DEFAULT_GROUP_PERMISSIONS = {
+    'manager': _default_permissions(
+        'workspace_manage',
+        'materials',
+        'structures',
+        'samples',
+        'scans',
+        'properties',
+        'tags',
+    ),
+    'operator': _default_permissions(
+        'materials',
+        'structures',
+        'samples',
+        'scans',
+        'properties',
+        'tags',
     ),
 }
 
@@ -248,6 +271,31 @@ def can_manage_tag(user, tag, workspace) -> bool:
 
 def is_system_admin(user) -> bool:
     return bool(user and user.is_authenticated and user.is_superuser)
+
+
+def user_has_perm_in_any_workspace(user, codename: str) -> bool:
+    if not user or not user.is_authenticated:
+        return False
+    if is_system_admin(user):
+        return True
+    from apps.workspaces.services import get_user_workspaces
+
+    for workspace in get_user_workspaces(user):
+        if has_workspace_perm(user, workspace, codename):
+            return True
+    return False
+
+
+def can_manage_global_users(user) -> bool:
+    return is_system_admin(user) or user_has_perm_in_any_workspace(user, WorkspacePerm.USER_MANAGE)
+
+
+def can_manage_global_workspaces(user) -> bool:
+    return can_manage_global_users(user)
+
+
+def can_manage_global_groups(user) -> bool:
+    return is_system_admin(user)
 
 
 def get_user_groups(user, workspace):

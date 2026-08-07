@@ -2,6 +2,7 @@
     'use strict';
 
     var activeSelect = null;
+    var activeOnSelect = null;
     var activeScope = 'workspace';
 
     var SCOPE_HINTS = {
@@ -232,6 +233,16 @@
 
         selectBtn.addEventListener('click', function () {
             var selected = modalEl.querySelector('.reference-material-radio:checked');
+            if (activeOnSelect && selected) {
+                activeOnSelect(selected.value);
+                activeOnSelect = null;
+                activeSelect = null;
+                var modal = getModal();
+                if (modal) {
+                    modal.hide();
+                }
+                return;
+            }
             if (activeSelect && selected) {
                 activeSelect.value = selected.value;
                 activeSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -247,15 +258,24 @@
     }
 
     function openFor(select) {
-        if (!select) {
-            return;
-        }
-        activeSelect = select;
+        openWithOptions({ select: select });
+    }
+
+    function openWithOptions(options) {
+        options = options || {};
+        activeSelect = options.select || null;
+        activeOnSelect = options.onSelect || null;
         var searchInput = document.getElementById('reference-materials-search');
         if (searchInput) {
             searchInput.value = '';
         }
-        setActiveScope(select.value ? guessScopeForMaterial(select.value) : 'workspace');
+        var scope = options.scope;
+        if (!scope) {
+            scope = activeSelect && activeSelect.value
+                ? guessScopeForMaterial(activeSelect.value)
+                : 'workspace';
+        }
+        setActiveScope(scope);
         renderList('');
         var modal = getModal();
         if (modal) {
@@ -268,6 +288,7 @@
         getMaterials: getMaterials,
         renderList: renderList,
         openFor: openFor,
+        openWithOptions: openWithOptions,
         init: bindModalControls,
     };
 

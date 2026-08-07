@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ page_title|default:"Удаление выбранных" }} — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="h4 mb-0">{{ page_title|default:"Удаление выбранных" }}</h1>
+    </div>
+    <div class="card-body">
+        {% if deletable %}
+        <div class="alert alert-warning">
+            {{ warning_text }}
+        </div>
+        <ul class="mb-3">
+            {% for item in deletable %}
+            <li>{% if item.code %}<code>{{ item.code }}</code> — {% endif %}{{ item.label }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if blocked %}
+        <div class="alert alert-secondary">
+            Не будут удалены ({{ blocked|length }}):
+            <ul class="mb-0 mt-1">
+                {% for item in blocked %}
+                <li>
+                    {% if item.code %}<code>{{ item.code }}</code> — {% endif %}{{ item.label }}
+                    <span class="text-muted">({{ item.reason }})</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if deletable %}
+        <form method="post" class="d-flex flex-wrap gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="confirm" value="1">
+            {% for pk in ids %}
+            <input type="hidden" name="ids" value="{{ pk }}">
+            {% endfor %}
+            <button type="submit" class="btn btn-danger">Удалить выбранные</button>
+            <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Отмена</a>
+        </form>
+        {% else %}
+        <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Назад к списку</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

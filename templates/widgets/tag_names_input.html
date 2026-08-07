@@ -1,4 +1,8 @@
-<div class="tag-input-widget" data-tag-suggestions="{{ widget.tag_suggestions_json }}">
+{% load list_filter_tags %}
+{{ widget.tag_suggestions_json_script }}
+<div class="tag-input-widget{% if widget.allow_colors %} tag-input-widget--colors{% endif %}"
+     data-tag-suggestions-id="{{ widget.tag_suggestions_script_id }}"
+     {% if widget.allow_colors %}data-allow-tag-colors="1"{% endif %}>
     <div class="tag-input-widget__field-wrap">
         <div class="tag-input-composer">
             <div class="tag-input-chips" aria-live="polite"></div>
@@ -13,23 +17,40 @@
                    name="{{ widget.name }}"
                    class="tag-input-value"
                    {% if widget.value != None %} value="{{ widget.value|stringformat:'s' }}"{% endif %}>
+            {% if widget.allow_colors %}
+            <input type="hidden"
+                   name="{{ widget.name }}_colors"
+                   class="tag-input-colors-value"
+                   value="{{ widget.colors_value|escape }}">
+            {% endif %}
         </div>
     </div>
+    {% if widget.allow_colors %}
+    <p class="tag-input-color-hint mb-0">
+        Новому тегу задаётся цвет по умолчанию — изменить можно палитрой на чипе.
+    </p>
+    {% endif %}
     {% if widget.tag_suggestions %}
     <div class="tag-input-existing">
-        <div class="tag-input-existing__label">Существующие теги</div>
-        <div class="tag-input-existing__list">
+        <div class="tag-input-existing__head">
+            <span class="tag-input-existing__label">Доступные теги</span>
+            <span class="tag-input-existing__hint">нажмите, чтобы добавить</span>
+        </div>
+        <div class="tag-input-existing__list" role="listbox" aria-label="Доступные теги">
             {% for tag in widget.tag_suggestions %}
             <button type="button"
-                    class="entity-tag tone-tag tag-input-pick"
+                    class="entity-tag tag-input-pick{% if tag.name|is_scoped_tag %} entity-tag--scoped{% endif %}{% if not tag.color %} tone-tag{% endif %}"
                     data-tag-name="{{ tag.name }}"
                     data-tag-slug="{{ tag.slug }}"
-                    title="Добавить или убрать тег «{{ tag.name }}»">
-                {{ tag.name }}
+                    {% if tag.color %}data-tag-color="{{ tag.color }}"{% endif %}
+                    {% if tag.description %}data-tag-description="{{ tag.description }}"{% endif %}
+                    title="{% if tag.description %}{{ tag.description }}{% else %}Добавить тег «{{ tag.name }}»{% endif %}"
+                    role="option">
+                {{ tag.name|scoped_tag_label }}
             </button>
             {% endfor %}
         </div>
-        <p class="tag-input-existing__empty text-muted small mb-0" hidden>Совпадений не найдено — Enter создаст новый тег</p>
+        <p class="tag-input-existing__empty" hidden>Совпадений нет — Enter создаст новый тег</p>
     </div>
     {% endif %}
 </div>

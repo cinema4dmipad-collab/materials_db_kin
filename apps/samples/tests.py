@@ -68,7 +68,11 @@ class SampleViewsTests(TestCase):
     def _property_formset_data(self, property_obj, prefix='properties-0', **overrides):
         data = {
             f'{prefix}-property': str(property_obj.pk),
+            f'{prefix}-value_kind': 'scalar',
             f'{prefix}-value': '1.55',
+            f'{prefix}-value_min': '',
+            f'{prefix}-value_max': '',
+            f'{prefix}-value_tolerance': '',
         }
         data.update(overrides)
         return data
@@ -103,6 +107,37 @@ class SampleViewsTests(TestCase):
 
         self.assertTrue(Sample.objects.filter(code='SMP-UI-002').exists())
 
+    def test_sample_bulk_delete(self):
+        other = Sample.objects.create(
+            code='SMP-UI-BULK',
+            name='Bulk sample',
+            material=self.material,
+            object_type='test',
+            workspace=self.legacy_workspace,
+        )
+        list_page = self.client.get(reverse('samples:list'))
+        self.assertContains(list_page, 'data-list-bulk-toggle')
+        self.assertContains(list_page, reverse('samples:bulk_delete'))
+
+        confirm = self.client.post(
+            reverse('samples:bulk_delete'),
+            {'ids': [str(self.sample.pk), str(other.pk)]},
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, 'UI sample')
+        self.assertContains(confirm, 'Bulk sample')
+
+        done = self.client.post(
+            reverse('samples:bulk_delete'),
+            {
+                'ids': [str(self.sample.pk), str(other.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('samples:list'))
+        self.assertFalse(Sample.objects.filter(pk=self.sample.pk).exists())
+        self.assertFalse(Sample.objects.filter(pk=other.pk).exists())
+
     def test_sample_list_filters_by_object_type_search(self):
         Sample.objects.create(
             code='SMP-UI-CTRL',
@@ -122,6 +157,23 @@ class SampleViewsTests(TestCase):
         self.assertNotContains(response, 'SMP-UI-CTRL')
         self.assertContains(response, 'type-pill-link')
         self.assertContains(response, 'Испытательный')
+
+    def test_sample_detail_has_inline_tags_form(self):
+        response = self.client.get(reverse('samples:detail', kwargs={'pk': self.sample.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('tags_form', response.context)
+        self.assertContains(response, 'entity-detail-tags-form')
+
+    def test_sample_tags_update_view(self):
+        response = self.client.post(
+            reverse('samples:tags', kwargs={'pk': self.sample.pk}),
+            {'tag_names': 'лаб, тип::тест'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            set(self.sample.tags.values_list('name', flat=True)),
+            {'лаб', 'тип::тест'},
+        )
 
     def test_sample_property_formset_save_directly(self):
         density = Property.objects.create(
@@ -287,7 +339,8 @@ class SampleViewsTests(TestCase):
 
         self.assertContains(response, 'Свойства')
         self.assertContains(response, 'Из свойств материала')
-        self.assertContains(response, 'Density, g/cm3')
+        self.assertContains(response, 'Density')
+        self.assertContains(response, 'g/cm3')
         self.assertContains(response, '2,10')
         self.assertNotContains(response, 'client_filter_bar')
 

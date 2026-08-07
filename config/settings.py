@@ -23,6 +23,10 @@ def env_str(name: str, default: str = '') -> str:
     return value.strip().strip('"').strip("'")
 
 
+BACKUP_DIR = Path(env_str('BACKUP_DIR', str(BASE_DIR / 'backups')))
+BACKUP_SUBPROCESS_TIMEOUT = int(env_str('BACKUP_SUBPROCESS_TIMEOUT', '1800'))
+
+
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -39,6 +43,9 @@ def env_list(name: str, default: list[str] | None = None) -> list[str]:
 
 SECRET_KEY = env_str('SECRET_KEY')
 DEBUG = env_bool('DEBUG', False)
+# Кнопка «удалить результат последнего импорта» (сессия). По умолчанию = DEBUG;
+# на стенде можно включить без полного DEBUG: IMPORT_BATCH_UNDO=true
+IMPORT_BATCH_UNDO = env_bool('IMPORT_BATCH_UNDO', DEBUG)
 
 if not DEBUG and not SECRET_KEY:
     raise ImproperlyConfigured('SECRET_KEY обязателен при DEBUG=False.')
@@ -53,8 +60,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'dmr',
+    'dmr.security.token.app',
     'apps.workspaces.apps.WorkspacesConfig',
     'apps.core.apps.CoreConfig',
+    'apps.api.apps.ApiConfig',
     'apps.references',
     'apps.composites',
     'apps.materials',
@@ -227,7 +237,15 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Большие HDF5-файлы (до 20 ГБ) не держим целиком в памяти — пишем во временный файл.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
-DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+# Лимит тела запроса: UI-restore дампов БД (см. BACKUP_UPLOAD_MAX_BYTES).
+BACKUP_UPLOAD_MAX_BYTES = int(env_str('BACKUP_UPLOAD_MAX_BYTES', str(512 * 1024 * 1024)))
+DATA_UPLOAD_MAX_MEMORY_SIZE = max(
+    10 * 1024 * 1024,
+    BACKUP_UPLOAD_MAX_BYTES,
+    int(env_str('DATA_UPLOAD_MAX_MEMORY_SIZE', '0') or '0'),
+)
+# Импорт: черновик с десятками колонок × много строк даёт >1000 POST-полей (лимит Django по умолчанию).
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
 # Загружаемые файлы: S3 (если USE_S3=true и задан bucket) или локальная папка media/.
 AWS_ACCESS_KEY_ID = env_str('AWS_ACCESS_KEY_ID')
@@ -253,6 +271,14 @@ if USE_S3_STORAGE:
     AWS_S3_FILE_OVERWRITE = False
     AWS_S3_VERIFY = env_bool('AWS_S3_VERIFY', default=AWS_S3_ENDPOINT_URL.startswith('https://'))
     AWS_S3_USE_SSL = AWS_S3_ENDPOINT_URL.startswith('https://') if AWS_S3_ENDPOINT_URL else True
+    # Fail fast when SeaweedFS/S3 is down (default boto timeouts hang for minutes).
+    from botocore.config import Config as BotoConfig
+
+    AWS_S3_CLIENT_CONFIG = BotoConfig(
+        connect_timeout=2,
+        read_timeout=10,
+        retries={'total_max_attempts': 1},
+    )
     STORAGES = {
         'default': {
             'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',

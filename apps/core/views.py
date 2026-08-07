@@ -6,15 +6,46 @@ from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.db import connection
+from django.db.models import Count
 from django.shortcuts import render
+from django.urls import reverse
+from urllib.parse import urlencode
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 
 from apps.core.version import format_git_commit_display, get_git_commit_hash
+from apps.materials.imports.debug_undo import get_last_import_debug_batch
+from apps.materials.imports.upload import get_import_session_name, get_import_session_path
 from apps.workspaces.mixins import workspace_login_required
 from apps.workspaces.services import (
+    materials_owned_by,
     materials_visible_in,
     samples_in_workspace,
     structure_types_visible_in,
+)
+
+_WEEKDAYS_RU = (
+    'понедельник',
+    'вторник',
+    'среда',
+    'четверг',
+    'пятница',
+    'суббота',
+    'воскресенье',
+)
+_MONTHS_RU = (
+    'января',
+    'февраля',
+    'марта',
+    'апреля',
+    'мая',
+    'июня',
+    'июля',
+    'августа',
+    'сентября',
+    'октября',
+    'ноября',
+    'декабря',
 )
 
 
@@ -28,17 +59,139 @@ RECENT_LOG_LINES = 80
 RECENT_LOG_BYTES = 64 * 1024
 
 
+def format_dashboard_date(value):
+    weekday = _WEEKDAYS_RU[value.weekday()]
+    month = _MONTHS_RU[value.month - 1]
+    return f'{weekday}, {value.day} {month} {value.year}'
+
+
+def _build_dashboard_attention(*, request, workspace):
+    items = []
+    if workspace is None:
+        return items
+
+    owned_materials = materials_owned_by(workspace)
+    materials_no_struct = owned_materials.filter(struct_type__isnull=True)
+    no_struct_count = materials_no_struct.count()
+    if no_struct_count:
+        items.append(
+            {
+                'kind': 'materials_no_struct',
+                'label': 'Материалы без типа структуры',
+                'count': no_struct_count,
+                'url': reverse('materials:list'),
+                'preview': list(
+                    materials_no_struct.order_by('-created_at').values('pk', 'code', 'name')[:5]
+                ),
+            }
+        )
+
+    samples_qs = samples_in_workspace(workspace)
+    samples_no_scans = samples_qs.annotate(scan_count=Count('scans')).filter(scan_count=0)
+    no_scans_count = samples_no_scans.count()
+    if no_scans_count:
+        items.append(
+            {
+                'kind': 'samples_no_scans',
+                'label': 'Образцы без сканов',
+                'count': no_scans_count,
+                'url': reverse('samples:list'),
+                'preview': list(
+                    samples_no_scans.select_related('material')
+                    .order_by('-created_at')
+                    .values('pk', 'code', 'name', 'material__code')[:5]
+                ),
+            }
+        )
+
+    if get_import_session_path(request.session):
+        items.append(
+            {
+                'kind': 'import_pending',
+                'label': 'Продолжить импорт',
+                'count': 1,
+                'url': reverse('materials:import'),
+                'detail': get_import_session_name(request.session),
+            }
+        )
+
+    from apps.materials.imports.review_status import count_pending_import_review
+
+    pending_review = count_pending_import_review(workspace)
+    if pending_review:
+        items.append(
+            {
+                'kind': 'import_review',
+                'label': 'Импорт к разбору',
+                'count': pending_review,
+                'url': reverse('materials:import_review'),
+                'detail': 'Материалы с тегом статус::на проверке',
+            }
+        )
+
+    batch = get_last_import_debug_batch(request.session)
+    if batch and batch.get('workspace_slug') == workspace.slug:
+        batch_materials = batch.get('materials') or []
+        if batch_materials:
+            from apps.materials.models import Material
+
+            material_ids = [row['id'] for row in batch_materials if row.get('id')]
+            source_filename = (
+                Material.objects.filter(pk__in=material_ids)
+                .exclude(import_source_filename='')
+                .values_list('import_source_filename', flat=True)
+                .first()
+            )
+            list_url = reverse('materials:list')
+            if source_filename:
+                list_url = f'{list_url}?{urlencode({"import_source": source_filename})}'
+            items.append(
+                {
+                    'kind': 'last_import',
+                    'label': 'Последний импорт',
+                    'count': len(batch_materials),
+                    'url': list_url,
+                    'detail': source_filename or f'{len(batch_materials)} материал(ов)',
+                }
+            )
+
+    return items
+
+
 @workspace_login_required
 def dashboard(request):
     active_workspace = getattr(request, 'active_workspace', None)
-    materials_qs = materials_visible_in(active_workspace)
+    materials_visible = materials_visible_in(active_workspace)
+    materials_owned = materials_owned_by(active_workspace)
     samples_qs = samples_in_workspace(active_workspace)
     structures_qs = structure_types_visible_in(active_workspace)
+
+    from apps.core.models import Tag
+    from apps.scans.models import ScanRecord
+
+    tags_qs = Tag.objects.filter(workspace=active_workspace) if active_workspace else Tag.objects.none()
+    if active_workspace is None:
+        scans_count = 0
+        materials_shared_count = 0
+    else:
+        scans_count = ScanRecord.objects.filter(sample__in=samples_qs).count()
+        materials_shared_count = materials_visible.exclude(home_workspace=active_workspace).count()
+
+    today = timezone.localdate()
     context = {
-        'materials_count': materials_qs.count(),
+        'dashboard_date': format_dashboard_date(today),
+        'materials_owned_count': materials_owned.count(),
+        'materials_shared_count': materials_shared_count,
+        'materials_count': materials_visible.count(),
         'samples_count': samples_qs.count(),
         'structures_count': structures_qs.count(),
-        'recent_materials': materials_qs.order_by('-created_at')[:5],
+        'scans_count': scans_count,
+        'tags_count': tags_qs.count(),
+        'attention_items': _build_dashboard_attention(request=request, workspace=active_workspace),
+        'recent_materials': materials_visible.select_related('struct_type').order_by('-created_at')[:8],
+        'recent_samples': samples_qs.select_related('material', 'material__struct_type').order_by(
+            '-created_at'
+        )[:8],
     }
     return render(request, 'core/dashboard.html', context)
 
