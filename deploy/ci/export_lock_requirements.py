@@ -20,7 +20,7 @@ def main() -> int:
             continue
         lines.append(f'{pkg["name"]}=={pkg["version"]}')
     out.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-    print(f'Exported {len(lines)} packages from poetry.lock → {out}')
+    print(f'Exported {len(lines)} packages from poetry.lock -> {out}')
     return 0
 
 
