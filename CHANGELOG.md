@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
 ### Added
 
 - HTTP API v1 (django-modern-rest): PAT в профиле, `Authorization: Bearer`, workspace через `X-Workspace-Id`; GET workspaces/materials/samples/scans (`search` по code/name у samples); POST скан к образцу; stream download HDF5 (**503** без S3/SeaweedFS). См. `docs/api/README.md` и Postman-коллекцию.
