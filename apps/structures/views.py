@@ -144,10 +144,12 @@ class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMi
         }
 
     def _materials_queryset(self):
-        from apps.workspaces.services import materials_visible_in
+        # Only home-workspace materials — shared/published rows from other spaces
+        # break tag search and mix unrelated data into the structure matrix.
+        from apps.workspaces.services import materials_owned_by
 
         return self.filter_queryset(
-            materials_visible_in(self.request.active_workspace)
+            materials_owned_by(self.request.active_workspace)
             .filter(struct_type=self.structure_type)
             .select_related('manufacturer', 'availability', 'technology', 'created_by_user')
             .order_by('code', 'name')

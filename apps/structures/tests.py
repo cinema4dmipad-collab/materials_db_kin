@@ -301,6 +301,9 @@ class PermissiveAdminUser:
 
 class PublicStructureRecordViewsTests(TransactionTestCase):
     def setUp(self):
+        from apps.workspaces.services import ensure_legacy_workspace
+
+        self.workspace = ensure_legacy_workspace()
         self.structure_type = StructureType.objects.create(
             name='Public Panel',
             code='public_panel',
@@ -362,6 +365,7 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         material = Material.objects.create(
             code='MAT-PANEL-A',
             name='Panel A material',
+            home_workspace=self.workspace,
             struct_type=self.structure_type,
             struct_props_id=row_id,
         )
@@ -496,6 +500,7 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         material = Material.objects.create(
             code='MAT-LIST-EXPAND',
             name='List expandable material',
+            home_workspace=self.workspace,
             struct_type=self.structure_type,
             struct_props_id=row_id,
         )
@@ -531,16 +536,22 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         tagged = Material.objects.create(
             code='MAT-TAGGED',
             name='Tagged material',
+            home_workspace=self.workspace,
             struct_type=self.structure_type,
             struct_props_id=tagged_row,
         )
         Material.objects.create(
             code='MAT-OTHER',
             name='Other material',
+            home_workspace=self.workspace,
             struct_type=self.structure_type,
             struct_props_id=other_row,
         )
-        tag = Tag.objects.create(name='кевлар-тест', slug='kevlar-test')
+        tag = Tag.objects.create(
+            name='кевлар-тест',
+            slug='kevlar-test',
+            workspace=self.workspace,
+        )
         tagged.tags.add(tag)
 
         response = self.client.get(
@@ -554,6 +565,45 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         self.assertNotContains(response, 'Other material')
         self.assertNotContains(response, 'MAT-OTHER')
         self.assertNotContains(response, 'кевлар-тест')
+
+    def test_list_shows_only_home_workspace_materials(self):
+        from apps.workspaces.models import Workspace
+        from apps.workspaces.visibility import VisibilityMode
+
+        local_row = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Local panel', 'thickness': '1.00'},
+        )['id']
+        shared_row = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Shared panel', 'thickness': '2.00'},
+        )['id']
+        other = Workspace.objects.create(slug='other-struct-ws', name='Other struct WS')
+        Material.objects.create(
+            code='MAT-LOCAL-WS',
+            name='Local workspace material',
+            home_workspace=self.workspace,
+            struct_type=self.structure_type,
+            struct_props_id=local_row,
+        )
+        Material.objects.create(
+            code='MAT-SHARED-WS',
+            name='Shared workspace material',
+            home_workspace=other,
+            visibility_mode=VisibilityMode.ALL_WORKSPACES,
+            struct_type=self.structure_type,
+            struct_props_id=shared_row,
+        )
+
+        response = self.client.get(
+            reverse('structures:list', args=[self.structure_type.code])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Local workspace material')
+        self.assertContains(response, 'MAT-LOCAL-WS')
+        self.assertNotContains(response, 'Shared workspace material')
+        self.assertNotContains(response, 'MAT-SHARED-WS')
 
     def test_list_allows_type_without_created_table(self):
         draft_type = StructureType.objects.create(
