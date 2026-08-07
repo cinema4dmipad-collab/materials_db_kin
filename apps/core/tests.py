@@ -886,6 +886,7 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'повторно добавить нельзя')
         self.assertContains(response, 'материалы этой структуры')
         self.assertContains(response, 'Поиск работает как у материалов')
+        self.assertContains(response, 'текущего рабочего пространства')
         self.assertContains(response, 'Администрирование → Бэкапы')
         self.assertContains(response, 'токен API')
         self.assertContains(response, 'Открыть в KeenetiX')
