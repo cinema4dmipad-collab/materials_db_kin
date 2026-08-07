@@ -1,0 +1,57 @@
+{% load attachment_tags ui_tags %}
+{% with kind=attachment.kind creator=attachment|creator_display %}
+<article class="file-tile">
+    <div class="file-tile__header">
+        <span class="file-tile__type file-tile__type--{{ kind }}" title="{% if kind == 'pdf' %}PDF{% elif kind == 'word' %}Word{% elif kind == 'excel' %}Excel{% else %}Файл{% endif %}" aria-hidden="true">
+            {% if kind == 'pdf' %}
+            <i class="bi bi-file-earmark-pdf-fill"></i>
+            {% elif kind == 'word' %}
+            <i class="bi bi-file-earmark-word-fill"></i>
+            {% elif kind == 'excel' %}
+            <i class="bi bi-file-earmark-excel-fill"></i>
+            {% else %}
+            <i class="bi bi-file-earmark-fill"></i>
+            {% endif %}
+        </span>
+        <span class="file-tile__title" title="{{ attachment.title }}">{{ attachment.title }}</span>
+        <div class="dropdown file-tile__menu-wrap">
+            <button type="button"
+                    class="file-tile__menu"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                    aria-label="Действия">
+                <i class="bi bi-three-dots-vertical" aria-hidden="true"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                {% if download_url %}
+                <li>
+                    <a class="dropdown-item file-download-link"
+                       href="{{ download_url }}"
+                       data-download-name="{{ attachment.filename }}">Скачать</a>
+                </li>
+                {% endif %}
+                {% if delete_url %}
+                <li>
+                    <a class="dropdown-item text-danger"
+                       href="{{ delete_url }}"
+                       data-confirm-delete
+                       data-confirm-title="Удаление файла"
+                       data-confirm-message="Удалить файл «{{ attachment.title }}»?">Удалить</a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+    <div class="file-tile__preview">
+        {% attachment_preview_cell attachment preview_url=preview_url size='tile' %}
+    </div>
+    <div class="file-tile__footer">
+        <span class="file-tile__avatar" aria-hidden="true">{% if creator != "—" %}{{ creator|slice:":1"|upper }}{% else %}?{% endif %}</span>
+        <div class="file-tile__meta">
+            <span class="file-tile__meta-author" title="{{ creator }}">{% if creator != "—" %}{{ creator }}{% else %}Неизвестно{% endif %}</span>
+            <span class="file-tile__meta-sep" aria-hidden="true">•</span>
+            <time datetime="{{ attachment.uploaded_at|date:'c' }}">{{ attachment.uploaded_at|date:"d.m.Y H:i" }}</time>
+        </div>
+    </div>
+</article>
+{% endwith %}

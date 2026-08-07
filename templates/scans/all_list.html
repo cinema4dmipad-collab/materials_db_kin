@@ -12,62 +12,10 @@
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
         {% if scans %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle mb-0 app-data-table">
-                <thead>
-                    <tr>
-                        <th class="scan-preview-col">Превью</th>
-                        <th>Название</th>
-                        <th>Метод</th>
-                        <th>Образец</th>
-                        <th>Теги</th>
-                        <th>Материал</th>
-                        <th>Загрузил</th>
-                        <th>Загружен</th>
-                        <th class="text-end">Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for scan in scans %}
-                    <tr>
-                        <td class="scan-preview-col">
-                            <a href="{% url 'scans:detail' scan.sample.pk scan.pk %}" class="scan-preview-link">
-                                {% include 'includes/scan_preview_thumb.html' with scan=scan %}
-                            </a>
-                        </td>
-                        <td>
-                            <a href="{% url 'scans:detail' scan.sample.pk scan.pk %}">{{ scan.title }}</a>
-                        </td>
-                        <td>{% include 'includes/type_badge.html' with label=scan.get_method_display value=scan.method use_scan_method_filter=True %}</td>
-                        <td>
-                            {% url 'samples:detail' scan.sample.pk as scan_sample_url %}
-                            {% include 'includes/entity_code.html' with code=scan.sample.code url=scan_sample_url tone=scan.sample.material.struct_type.display_color %}
-                        </td>
-                        <td>{% url 'scans_all' as scans_all_url %}{% include 'includes/tag_badges.html' with tags=scan.tags.all filter_url=scans_all_url %}</td>
-                        <td>{{ scan.sample.material.code }}</td>
-                        <td>{% include 'includes/creator_filter_link.html' with obj=scan %}</td>
-                        <td>{{ scan.uploaded_at|date:"d.m.Y H:i" }}</td>
-                        <td class="text-end">
-                            <div class="table-actions">
-                            <button type="button"
-                               class="btn btn-sm table-action-btn btn-action-link"
-                               data-keenetix-open-scan
-                               data-scan-id="{{ scan.pk }}"
-                               data-workspace-id="{% firstof scan.workspace_id scan.sample.workspace_id active_workspace.pk %}"
-                               title="Открыть в KeenetiX"
-                               aria-label="Открыть в KeenetiX">
-                                {% include 'includes/table_action_icon_svg.html' with action='link' %}
-                            </button>
-                            {% url 'scans:download' scan.sample.pk scan.pk as scan_download_url %}
-                            {% include 'includes/table_action_icon.html' with action='download' url=scan_download_url title='Скачать' extra_class='file-download-link btn-action-download' download_name=scan.filename %}
-                            {% url 'scans:detail' scan.sample.pk scan.pk as scan_detail_url %}
-                            {% include 'includes/table_action_icon.html' with action='view' url=scan_detail_url title='Просмотр' %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="file-tile-grid">
+            {% for scan in scans %}
+            {% include 'includes/scan_tile.html' with scan=scan show_sample_code=1 %}
+            {% endfor %}
         </div>
 
         <div class="p-3">

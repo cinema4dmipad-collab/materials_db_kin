@@ -1,0 +1,70 @@
+{% load ui_tags %}
+{% with sample_obj=sample|default:scan.sample creator=scan|creator_display %}
+<article class="file-tile file-tile--scan">
+    <div class="file-tile__header">
+        <span class="file-tile__type file-tile__type--hdf5" title="HDF5" aria-hidden="true">
+            <i class="bi bi-hdd-stack-fill"></i>
+        </span>
+        <a class="file-tile__title"
+           href="{% url 'scans:detail' sample_obj.pk scan.pk %}"
+           title="{{ scan.title }}">{{ scan.title }}</a>
+        <div class="dropdown file-tile__menu-wrap">
+            <button type="button"
+                    class="file-tile__menu"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                    aria-label="Действия">
+                <i class="bi bi-three-dots-vertical" aria-hidden="true"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <a class="dropdown-item" href="{% url 'scans:detail' sample_obj.pk scan.pk %}">Открыть</a>
+                </li>
+                <li>
+                    <button type="button"
+                            class="dropdown-item"
+                            data-keenetix-open-scan
+                            data-scan-id="{{ scan.pk }}"
+                            data-workspace-id="{% firstof scan.workspace_id sample_obj.workspace_id active_workspace.pk %}">
+                        Открыть в KeenetiX
+                    </button>
+                </li>
+                <li>
+                    <a class="dropdown-item file-download-link"
+                       href="{% url 'scans:download' sample_obj.pk scan.pk %}"
+                       data-download-name="{{ scan.filename }}">Скачать</a>
+                </li>
+                {% if can_manage %}
+                <li>
+                    <a class="dropdown-item" href="{% url 'scans:edit' sample_obj.pk scan.pk %}">Изменить</a>
+                </li>
+                <li>
+                    <a class="dropdown-item text-danger"
+                       href="{% url 'scans:delete' sample_obj.pk scan.pk %}"
+                       data-confirm-delete
+                       data-confirm-title="Удаление скана"
+                       data-confirm-message="Удалить скан «{{ scan.title }}»?">Удалить</a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+    <a class="file-tile__preview file-tile__preview--link"
+       href="{% url 'scans:detail' sample_obj.pk scan.pk %}"
+       aria-label="Открыть скан {{ scan.title }}">
+        {% include 'includes/scan_preview_thumb.html' with scan=scan size='tile' %}
+    </a>
+    <div class="file-tile__footer">
+        <span class="file-tile__avatar" aria-hidden="true">{% if creator != "—" %}{{ creator|slice:":1"|upper }}{% else %}?{% endif %}</span>
+        <div class="file-tile__meta">
+            <span class="file-tile__meta-author" title="{{ creator }}">{% if creator != "—" %}{{ creator }}{% else %}Неизвестно{% endif %}</span>
+            <span class="file-tile__meta-sep" aria-hidden="true">•</span>
+            <time datetime="{{ scan.uploaded_at|date:'c' }}">{{ scan.uploaded_at|date:"d.m.Y H:i" }}</time>
+            {% if show_sample_code and sample_obj %}
+            <span class="file-tile__meta-sep" aria-hidden="true">•</span>
+            <span class="file-tile__meta-extra" title="Образец">{{ sample_obj.code }}</span>
+            {% endif %}
+        </div>
+    </div>
+</article>
+{% endwith %}

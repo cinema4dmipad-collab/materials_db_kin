@@ -13,8 +13,8 @@ register = template.Library()
 
 
 @register.inclusion_tag('includes/attachment_preview_cell.html')
-def attachment_preview_cell(attachment, preview_url=''):
-    """Render first-page thumbnail or status badge for an attachment row."""
+def attachment_preview_cell(attachment, preview_url='', size=''):
+    """Render first-page thumbnail or status badge for an attachment row/tile."""
     kind = attachment_kind(attachment)
     status = getattr(attachment, 'preview_status', 'none')
     href = preview_url if preview_url and attachment_has_preview(attachment) else ''
@@ -24,6 +24,7 @@ def attachment_preview_cell(attachment, preview_url=''):
         'kind_label': KIND_LABELS.get(kind, 'Файл'),
         'status': status,
         'preview_url': href,
+        'size': size or '',
         'is_excel': kind == KIND_EXCEL,
         'is_word': kind == KIND_WORD,
         'is_pdf': kind == KIND_PDF,

@@ -15,47 +15,17 @@
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
         {% if attachments %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover mb-0 align-middle">
-                <thead>
-                    <tr>
-                        <th>Превью</th>
-                        <th>Название</th>
-                        <th>Файл</th>
-                        <th>Описание</th>
-                        <th>Загрузил</th>
-                        <th>Загружен</th>
-                        <th class="text-end">Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for attachment in attachments %}
-                    <tr>
-                        <td>
-                            {% url 'material_attachments:preview' material.pk attachment.pk as att_preview_url %}
-                            {% attachment_preview_cell attachment preview_url=att_preview_url %}
-                        </td>
-                        <td>{{ attachment.title }}</td>
-                        <td>
-                            <a href="{% url 'material_attachments:download' material.pk attachment.pk %}" class="file-download-link" data-download-name="{{ attachment.filename }}">{{ attachment.filename }}</a>
-                        </td>
-                        <td>{{ attachment.description|default:"—"|truncatewords:12 }}</td>
-                        <td>{% include 'includes/creator_filter_link.html' with obj=attachment %}</td>
-                        <td>{{ attachment.uploaded_at|date:"d.m.Y H:i" }}</td>
-                        <td class="text-end text-nowrap">
-                            <div class="table-actions">
-                            {% url 'material_attachments:download' material.pk attachment.pk as attachment_download_url %}
-                            {% include 'includes/table_action_icon.html' with action='download' url=attachment_download_url title='Скачать' extra_class='file-download-link btn-action-download' download_name=attachment.filename %}
-                            {% if not material_is_readonly %}
-                            {% url 'material_attachments:delete' material.pk attachment.pk as attachment_delete_url %}
-                            {% include 'includes/table_action_icon.html' with action='delete' url=attachment_delete_url title='Удалить' %}
-                            {% endif %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="file-tile-grid">
+            {% for attachment in attachments %}
+            {% url 'material_attachments:preview' material.pk attachment.pk as att_preview_url %}
+            {% url 'material_attachments:download' material.pk attachment.pk as att_download_url %}
+            {% if not material_is_readonly %}
+            {% url 'material_attachments:delete' material.pk attachment.pk as att_delete_url %}
+            {% include 'includes/attachment_tile.html' with attachment=attachment preview_url=att_preview_url download_url=att_download_url delete_url=att_delete_url %}
+            {% else %}
+            {% include 'includes/attachment_tile.html' with attachment=attachment preview_url=att_preview_url download_url=att_download_url delete_url='' %}
+            {% endif %}
+            {% endfor %}
         </div>
         {% else %}
         <p class="p-3 mb-0 text-muted">
@@ -86,4 +56,3 @@
 </div>
 {% endif %}
 {% endblock %}
-
