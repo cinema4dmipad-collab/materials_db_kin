@@ -433,9 +433,8 @@ class ScanViewsTests(TestCase):
         list_response = self.client.get(reverse('scans:list', kwargs={'sample_pk': self.sample.pk}))
 
         self.assertContains(list_response, 'Surface scan')
-        self.assertContains(list_response, 'type-pill-link')
-        self.assertContains(list_response, 'Теневой')
-        self.assertContains(list_response, 'scan-preview-thumb')
+        self.assertContains(list_response, 'file-tile')
+        self.assertContains(list_response, 'file-tile__preview-img')
         preview_url = reverse('scans:preview', kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk})
         self.assertContains(list_response, preview_url)
         preview_response = self.client.get(preview_url)
@@ -522,7 +521,7 @@ class ScanViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Echo scan')
         self.assertNotContains(response, 'Shadow scan')
-        self.assertContains(response, 'type-pill-link')
+        self.assertContains(response, 'file-tile')
 
     def test_sample_scans_list_filters_by_method_search(self):
         ScanRecord.objects.create(
