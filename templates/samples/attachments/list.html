@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load attachment_tags ui_tags %}
+{% load static attachment_tags ui_tags %}
 
 {% block title %}Файлы — {{ sample.code }}{% endblock %}
 
@@ -12,7 +12,9 @@
             <h1 class="h5 mb-0">Прикреплённые файлы — {{ sample.code }}</h1>
             <p class="text-muted small mb-0 mt-1">Оригинал сохраняется; для PDF, Word и PPTX — миниатюра первой страницы; Excel — только иконка.</p>
         </div>
-        <a href="{% url 'attachments:create' sample.pk %}" class="btn btn-primary btn-sm">Добавить</a>
+        <a href="{% url 'attachments:create' sample.pk %}"
+           class="btn btn-primary btn-sm"
+           data-attachments-add-anchor>Добавить</a>
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
@@ -36,4 +38,10 @@
         {% endif %}
     </div>
 </div>
+{% url 'attachments:create' sample.pk as attachments_add_url %}
+{% include 'includes/attachments_add_fab.html' with add_url=attachments_add_url %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/attachments_add_fab.js' %}?v={{ app_version }}-aaf1"></script>
 {% endblock %}

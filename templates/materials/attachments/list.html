@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load attachment_tags ui_tags %}
+{% load static attachment_tags ui_tags %}
 
 {% block title %}Файлы — {{ material.code }}{% endblock %}
 
@@ -14,7 +14,9 @@
             <p class="text-muted small mb-0 mt-1">Оригинал сохраняется; для PDF, Word и PPTX — миниатюра первой страницы; Excel — только иконка.</p>
         </div>
         {% if not material_is_readonly %}
-        <a href="{% url 'material_attachments:create' material.pk %}" class="btn btn-primary btn-sm">Добавить</a>
+        <a href="{% url 'material_attachments:create' material.pk %}"
+           class="btn btn-primary btn-sm"
+           data-attachments-add-anchor>Добавить</a>
         {% endif %}
     </div>
     <div class="card-body p-0">
@@ -45,4 +47,12 @@
         {% endif %}
     </div>
 </div>
+{% if not material_is_readonly %}
+{% url 'material_attachments:create' material.pk as attachments_add_url %}
+{% include 'includes/attachments_add_fab.html' with add_url=attachments_add_url %}
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/attachments_add_fab.js' %}?v={{ app_version }}-aaf1"></script>
 {% endblock %}
