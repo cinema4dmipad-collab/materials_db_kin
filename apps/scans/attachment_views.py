@@ -3,7 +3,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
-from django.views.generic import DeleteView, ListView
+from django.views.generic import CreateView, DeleteView, ListView
 
 from apps.core.attachments.processing import schedule_attachment_preview
 from apps.core.creator import assign_creator
@@ -63,48 +63,43 @@ class ScanAttachmentListView(AppViewMixin, QuerySetFilterMixin, ScanAttachmentMi
     def get_custom_search_scope_filters(self):
         return {CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER}
 
-    def get_attachment_form(self):
-        if hasattr(self, '_attachment_form'):
-            return self._attachment_form
-        kwargs = {'prefix': 'attachment', 'scan': self.scan}
-        if self.request.method == 'POST':
-            kwargs['data'] = self.request.POST
-            kwargs['files'] = self.request.FILES
-        return ScanAttachmentForm(**kwargs)
+    def get_queryset(self):
+        return self.filter_queryset(self.scan.attachments.all())
 
-    def post(self, request, *args, **kwargs):
-        self.object_list = self.get_queryset()
-        form = ScanAttachmentForm(
-            request.POST,
-            request.FILES,
-            prefix='attachment',
-            scan=self.scan,
+
+class ScanAttachmentCreateView(AppViewMixin, ScanAttachmentMixin, CreateView):
+    model = ScanAttachment
+    form_class = ScanAttachmentForm
+    template_name = 'scans/attachments/form.html'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['prefix'] = 'attachment'
+        kwargs['scan'] = self.scan
+        return kwargs
+
+    def form_valid(self, form):
+        attachment = form.save(commit=False)
+        attachment.scan = self.scan
+        attachment.workspace = self.scan.workspace or self.request.active_workspace
+        assign_creator(attachment, self.request.user)
+        attachment.save()
+        schedule_attachment_preview(attachment)
+        messages.success(self.request, 'Файл прикреплён к скану.')
+        return redirect(
+            'scans:attachment_list',
+            sample_pk=self.sample.pk,
+            scan_pk=self.scan.pk,
         )
-        if form.is_valid():
-            attachment = form.save(commit=False)
-            attachment.scan = self.scan
-            attachment.workspace = self.scan.workspace or request.active_workspace
-            assign_creator(attachment, request.user)
-            attachment.save()
-            schedule_attachment_preview(attachment)
-            messages.success(request, 'Файл прикреплён к скану.')
-            return redirect(
-                'scans:attachment_list',
-                sample_pk=self.sample.pk,
-                scan_pk=self.scan.pk,
-            )
-
-        self._attachment_form = form
-        context = self.get_context_data(attachments=self.object_list, attachment_form=form)
-        return self.render_to_response(context)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.setdefault('attachment_form', self.get_attachment_form())
+        context['attachment_form'] = context['form']
+        context['cancel_url'] = reverse(
+            'scans:attachment_list',
+            kwargs={'sample_pk': self.sample.pk, 'scan_pk': self.scan.pk},
+        )
         return context
-
-    def get_queryset(self):
-        return self.filter_queryset(self.scan.attachments.all())
 
 
 class ScanAttachmentDeleteView(AppViewMixin, ScanAttachmentMixin, DeleteView):

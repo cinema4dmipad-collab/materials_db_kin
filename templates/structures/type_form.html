@@ -9,7 +9,7 @@
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 <link href="{% static 'css/structure_type_form.css' %}" rel="stylesheet">
 <script src="{% static 'js/reference_properties_picker.js' %}" defer></script>
-<script src="{% static 'js/structure_type_form.js' %}" defer></script>
+<script src="{% static 'js/structure_type_form.js' %}?v={{ app_version }}-stf2" defer></script>
 <script src="{% static 'js/structure_color_picker.js' %}" defer></script>
 {% endblock %}
 
@@ -107,6 +107,10 @@
                                             <div class="structure-field-item__meta">
                                                 <code data-field-summary="name">—</code>
                                                 <span class="badge rounded-pill structure-field-item__type" data-field-summary="type" data-field-type-value="">—</span>
+                                                <label class="structure-field-item__required form-check form-check-inline mb-0 ms-1">
+                                                    <input type="checkbox" class="form-check-input" data-structure-field-required-mirror checked>
+                                                    <span class="form-check-label small">Обязательное</span>
+                                                </label>
                                             </div>
                                         </div>
                                         <button type="button" class="btn btn-sm btn-outline-danger delete-row-btn">Удалить</button>
@@ -126,13 +130,14 @@
                                             <option value="MaterialLink">Материал</option>
                                             <option value="ChoiceField">Выбор из списка</option>
                                         </select>
-                                        <input type="checkbox" name="fields-__idx__-is_required" id="id_fields-__idx__-is_required">
+                                        <input type="checkbox" name="fields-__idx__-is_required" id="id_fields-__idx__-is_required" checked>
                                         <input type="number" name="fields-__idx__-sort_order" value="0" min="0" id="id_fields-__idx__-sort_order">
                                         <input type="number" name="fields-__idx__-max_length" value="255" min="1" max="4000" id="id_fields-__idx__-max_length">
                                         <input type="number" name="fields-__idx__-max_digits" value="10" min="1" max="18" id="id_fields-__idx__-max_digits">
                                         <input type="number" name="fields-__idx__-decimal_places" value="2" min="0" max="10" id="id_fields-__idx__-decimal_places">
                                         <input type="text" name="fields-__idx__-default_value" maxlength="500" id="id_fields-__idx__-default_value">
                                         <input type="hidden" name="fields-__idx__-choice_options" value="[]" data-structure-field-choices id="id_fields-__idx__-choice_options">
+                                        <input type="hidden" name="fields-__idx__-id" id="id_fields-__idx__-id" value="">
                                         <input type="checkbox" name="fields-__idx__-DELETE" id="id_fields-__idx__-DELETE" class="d-none">
                                     </div>
                                 </li>

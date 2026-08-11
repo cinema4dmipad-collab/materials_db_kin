@@ -14,7 +14,13 @@
             <h1 class="h4 mb-0">Типы структур</h1>
             <p class="text-muted small mb-0">Клик по названию открывает записи · шестерёнка — управление типом</p>
         </div>
-        <a href="{% url 'structures:type_create' %}" class="btn btn-primary btn-sm">Создать</a>
+        <div class="d-flex flex-wrap gap-2">
+            {% if request.user.is_superuser %}
+            <a href="{% url 'structures:diagnostics' %}" class="btn btn-outline-secondary btn-sm">Диагностика</a>
+            <a href="{% url 'structures:migrate' %}" class="btn btn-outline-primary btn-sm">Перенос</a>
+            {% endif %}
+            <a href="{% url 'structures:type_create' %}" class="btn btn-primary btn-sm">Создать</a>
+        </div>
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}

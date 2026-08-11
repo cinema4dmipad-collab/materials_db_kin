@@ -10,6 +10,10 @@ from apps.references.views import (
     PropertyBulkDeleteView,
     PropertyCreateView,
     PropertyDeleteView,
+    PropertyGroupCreateView,
+    PropertyGroupDeleteView,
+    PropertyGroupListView,
+    PropertyGroupUpdateView,
     PropertyListView,
     PropertyUpdateView,
 )
@@ -20,6 +24,10 @@ urlpatterns = [
     path('', PropertyListView.as_view(), name='list'),
     path('create/', PropertyCreateView.as_view(), name='create'),
     path('bulk-delete/', PropertyBulkDeleteView.as_view(), name='bulk_delete'),
+    path('groups/', PropertyGroupListView.as_view(), name='group_list'),
+    path('groups/create/', PropertyGroupCreateView.as_view(), name='group_create'),
+    path('groups/<uuid:pk>/edit/', PropertyGroupUpdateView.as_view(), name='group_edit'),
+    path('groups/<uuid:pk>/delete/', PropertyGroupDeleteView.as_view(), name='group_delete'),
     path('dictionaries/', DictionaryHubView.as_view(), name='dictionary_hub'),
     path(
         'dictionaries/<slug:slug>/',

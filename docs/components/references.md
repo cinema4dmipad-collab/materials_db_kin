@@ -22,6 +22,7 @@ Numeric values on materials/samples use kind **точное / диапазон /
 | `/properties/create/` | New property (**admin only**) |
 | `/properties/<pk>/edit/` | Edit (**admin only**) |
 | `/properties/<pk>/delete/` | Delete confirmation (**admin only**) |
+| `/properties/groups/` | Property groups list/CRUD (**admin only**) |
 | `/properties/dictionaries/` | Hub for metadata dictionaries |
 | `/properties/dictionaries/<slug>/` | List manufacturers / availabilities / technologies |
 | `/properties/dictionaries/<slug>/create|…/edit|…/delete` | CRUD (**admin only**) |
@@ -32,10 +33,10 @@ Forms: `apps/references/forms.py`. Access: `can_manage_properties()` / system ad
 
 ## Integration
 
-* **Materials / samples** — property picker adds rows to formset; user enters value only
+* **Materials / samples** — property picker adds rows to formset; user enters value only; material detail groups additional properties by `PropertyGroup`
 * **Import** — manufacturer / availability / technology resolve from global dictionaries; optional **create missing** with duplicate guards (name/code). Creates are deferred until apply and run inside the same DB transaction as materials (no orphan dictionary rows on failed import).
 * **Structure types** — `property_mapping.py` maps Property → StructureField when adding from catalog
-* **Admin** — property groups and bulk admin actions
+* **Admin** — still available; day-to-day group management is in `/properties/groups/`
 
 ## Workflow
 

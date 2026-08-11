@@ -112,12 +112,13 @@
                 {% if structure_properties or structure_message %}
                 {% include 'includes/structure_properties_tbody.html' %}
                 {% endif %}
-                {% if properties %}
+                {% if property_groups %}
+                {% for section in property_groups %}
                 <tbody class="material-props-section">
                     <tr class="material-props-section__header">
-                        <th scope="colgroup" colspan="4">Дополнительные свойства</th>
+                        <th scope="colgroup" colspan="4">{{ section.name }}</th>
                     </tr>
-                    {% for mp in properties %}
+                    {% for mp in section.items %}
                     <tr>
                         <th scope="row" class="material-props-section__name">{{ mp.property.base_display_name }}</th>
                         <td class="material-props-section__value">
@@ -142,6 +143,7 @@
                     </tr>
                     {% endfor %}
                 </tbody>
+                {% endfor %}
                 {% endif %}
             </table>
         </div>

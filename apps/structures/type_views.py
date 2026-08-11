@@ -196,6 +196,7 @@ class StructureTypeManageView(AppViewMixin, TemplateView):
         context['fields'] = structure_type.fields.all()
         context['can_create_table'] = not structure_type.is_created and not structure_type_is_readonly
         context['can_drop_table'] = structure_type.is_created and not structure_type_is_readonly
+        context['can_delete_draft'] = not structure_type.is_created and not structure_type_is_readonly
         context['linked_materials_count'] = Material.objects.filter(
             struct_type=structure_type,
         ).count()
@@ -292,6 +293,66 @@ class StructureTypeDropTableView(AppViewMixin, View):
         else:
             messages.error(request, f'Ошибка: {result["error"]}')
         return redirect('structures:type_manage', type_code=type_code)
+
+
+class StructureTypeDeleteDraftView(AppViewMixin, View):
+    """Delete a StructureType that has no SQL table yet (draft)."""
+
+    template_name = 'structures/type_delete_draft_confirm.html'
+
+    def get_structure_type(self, type_code):
+        return get_object_or_404(
+            structure_types_visible_in(self.request.active_workspace).prefetch_related('fields'),
+            code=type_code,
+            is_active=True,
+        )
+
+    def get(self, request, type_code):
+        structure_type = self.get_structure_type(type_code)
+        if not can_manage_structure_types(request.user):
+            raise PermissionDenied
+        if structure_type.is_created:
+            messages.warning(
+                request,
+                'Тип уже создан в БД. Сначала удалите SQL-таблицу, либо оставьте тип.',
+            )
+            return redirect('structures:type_manage', type_code=type_code)
+        return render(
+            request,
+            self.template_name,
+            {
+                'structure_type': structure_type,
+                'linked_materials_count': Material.objects.filter(
+                    struct_type=structure_type,
+                ).count(),
+                'fields_count': structure_type.fields.count(),
+            },
+        )
+
+    def post(self, request, type_code):
+        structure_type = self.get_structure_type(type_code)
+        if not can_manage_structure_types(request.user):
+            raise PermissionDenied
+        if structure_type.is_created:
+            messages.warning(
+                request,
+                'Тип уже создан в БД. Сначала удалите SQL-таблицу.',
+            )
+            return redirect('structures:type_manage', type_code=type_code)
+
+        linked = Material.objects.filter(struct_type=structure_type).count()
+        if linked:
+            messages.error(
+                request,
+                f'Нельзя удалить черновик: {linked} материал(ов) ссылаются на этот тип. '
+                'Сначала снимите тип структуры у материалов.',
+            )
+            return redirect('structures:type_manage', type_code=type_code)
+
+        name = structure_type.name
+        structure_type.delete()
+        messages.success(request, f'Черновик типа структуры «{name}» удалён.')
+        return redirect('structures:select_type')
 
 
 class StructureTypeVisibilityView(SystemAdminRequiredMixin, AppViewMixin, UpdateView):

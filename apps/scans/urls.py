@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.scans.attachment_views import (
+    ScanAttachmentCreateView,
     ScanAttachmentDeleteView,
     ScanAttachmentDownloadView,
     ScanAttachmentListView,
@@ -32,6 +33,11 @@ urlpatterns = [
         '<uuid:scan_pk>/attachments/',
         ScanAttachmentListView.as_view(),
         name='attachment_list',
+    ),
+    path(
+        '<uuid:scan_pk>/attachments/add/',
+        ScanAttachmentCreateView.as_view(),
+        name='attachment_create',
     ),
     path(
         '<uuid:scan_pk>/attachments/<uuid:pk>/download/',

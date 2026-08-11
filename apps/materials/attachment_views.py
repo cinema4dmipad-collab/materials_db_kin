@@ -1,10 +1,9 @@
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
-from django.views.generic import DeleteView, ListView
+from django.views.generic import CreateView, DeleteView, ListView
 
 from apps.core.attachments.processing import schedule_attachment_preview
 from apps.core.file_download import build_file_download_response
@@ -41,47 +40,50 @@ class MaterialAttachmentListView(AppViewMixin, QuerySetFilterMixin, MaterialAtta
             CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER,
         }
 
-    def get_attachment_form(self):
-        if hasattr(self, '_attachment_form'):
-            return self._attachment_form
-        kwargs = {'prefix': 'attachment', 'material': self.material}
-        if self.request.method == 'POST':
-            kwargs['data'] = self.request.POST
-            kwargs['files'] = self.request.FILES
-        return MaterialAttachmentForm(**kwargs)
-
-    def post(self, request, *args, **kwargs):
-        self._require_material_editable()
-        self.object_list = self.get_queryset()
-        form = MaterialAttachmentForm(
-            request.POST,
-            request.FILES,
-            prefix='attachment',
-            material=self.material,
-        )
-        if form.is_valid():
-            attachment = form.save(commit=False)
-            attachment.material = self.material
-            attachment.workspace = request.active_workspace
-            assign_creator(attachment, request.user)
-            attachment.save()
-            schedule_attachment_preview(attachment)
-            messages.success(request, 'Файл прикреплён к материалу.')
-            return redirect('material_attachments:list', material_pk=self.material.pk)
-
-        self._attachment_form = form
-        context = self.get_context_data(attachments=self.object_list, attachment_form=form)
-        return self.render_to_response(context)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.setdefault('attachment_form', self.get_attachment_form())
-        return context
-
     def get_queryset(self):
         return self.filter_queryset(
             material_attachments_for_material(self.material, self.request.active_workspace),
         )
+
+
+class MaterialAttachmentCreateView(AppViewMixin, MaterialAttachmentMixin, CreateView):
+    model = MaterialAttachment
+    form_class = MaterialAttachmentForm
+    template_name = 'materials/attachments/form.html'
+    http_method_names = ['get', 'post']
+
+    def get(self, request, *args, **kwargs):
+        self._require_material_editable()
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        self._require_material_editable()
+        return super().post(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['prefix'] = 'attachment'
+        kwargs['material'] = self.material
+        return kwargs
+
+    def form_valid(self, form):
+        attachment = form.save(commit=False)
+        attachment.material = self.material
+        attachment.workspace = self.request.active_workspace
+        assign_creator(attachment, self.request.user)
+        attachment.save()
+        schedule_attachment_preview(attachment)
+        messages.success(self.request, 'Файл прикреплён к материалу.')
+        return redirect('material_attachments:list', material_pk=self.material.pk)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['attachment_form'] = context['form']
+        context['cancel_url'] = reverse(
+            'material_attachments:list',
+            kwargs={'material_pk': self.material.pk},
+        )
+        return context
 
 
 class MaterialAttachmentDeleteView(AppViewMixin, MaterialAttachmentMixin, DeleteView):

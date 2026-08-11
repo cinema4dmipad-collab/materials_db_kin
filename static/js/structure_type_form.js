@@ -188,6 +188,7 @@
 
         if (newRow) {
             bindDeleteButtons(newRow);
+            bindRequiredMirror(newRow);
             updateEmptyState();
         }
         return newRow;
@@ -196,11 +197,24 @@
     function reindexForms() {
         const list = getFieldList();
         const totalInput = getTotalFormsInput();
+        const form = getStructureForm();
+        const initialInput = form?.querySelector('input[name="fields-INITIAL_FORMS"]');
         if (!list || !totalInput) {
             return;
         }
 
         const rows = Array.from(list.querySelectorAll('[data-structure-field-row]'));
+        // Existing instances (with id) must come first for Django formset INITIAL_FORMS.
+        rows.sort((a, b) => {
+            const aId = (a.querySelector('input[name$="-id"]')?.value || '').trim();
+            const bId = (b.querySelector('input[name$="-id"]')?.value || '').trim();
+            if (Boolean(aId) === Boolean(bId)) {
+                return 0;
+            }
+            return aId ? -1 : 1;
+        });
+        rows.forEach((row) => list.appendChild(row));
+
         rows.forEach((row, idx) => {
             row.querySelectorAll('[name]').forEach((input) => {
                 input.name = input.name.replace(/^fields-\d+-/, `fields-${idx}-`);
@@ -210,6 +224,13 @@
             });
         });
         totalInput.value = String(rows.length);
+        if (initialInput) {
+            const withId = rows.filter((row) => {
+                const value = (row.querySelector('input[name$="-id"]')?.value || '').trim();
+                return Boolean(value);
+            }).length;
+            initialInput.value = String(withId);
+        }
     }
 
     function bindDeleteButtons(row) {
@@ -234,6 +255,22 @@
         });
     }
 
+    function bindRequiredMirror(row) {
+        if (!row || row.dataset.requiredMirrorBound === 'true') {
+            return;
+        }
+        const mirror = row.querySelector('[data-structure-field-required-mirror]');
+        const hidden = row.querySelector('input[name$="-is_required"]');
+        if (!mirror || !hidden) {
+            return;
+        }
+        row.dataset.requiredMirrorBound = 'true';
+        mirror.checked = hidden.checked;
+        mirror.addEventListener('change', () => {
+            hidden.checked = mirror.checked;
+        });
+    }
+
     function fillRowFromPropertyData(row, data) {
         row.dataset.referencePropertyId = data.property_id;
         setRowInputValue(row, 'label', data.label);
@@ -249,6 +286,15 @@
         }
         const choices = data.choice_options || data.choices || [];
         setRowInputValue(row, 'choice_options', JSON.stringify(choices));
+        const requiredInput = row.querySelector('input[name$="-is_required"]');
+        if (requiredInput) {
+            requiredInput.checked = true;
+        }
+        bindRequiredMirror(row);
+        const mirror = row.querySelector('[data-structure-field-required-mirror]');
+        if (mirror) {
+            mirror.checked = true;
+        }
         syncRowSummary(row);
     }
 
@@ -420,7 +466,13 @@
                 row.classList.add('d-none');
             }
 
+            if (idEntry?.value) {
+                row.dataset.existingField = 'true';
+                row.querySelector('.structure-field-item__required')?.remove();
+            }
+
             bindDeleteButtons(row);
+            bindRequiredMirror(row);
             syncRowSummary(row);
         });
 
@@ -501,6 +553,7 @@
     function bindFieldRows() {
         document.querySelectorAll('[data-structure-field-row]').forEach((row) => {
             bindDeleteButtons(row);
+            bindRequiredMirror(row);
             syncRowSummary(row);
         });
         updateEmptyState();
@@ -513,6 +566,8 @@
         } else {
             document.querySelectorAll('[data-structure-field-row]').forEach((row) => {
                 bindDeleteButtons(row);
+                bindRequiredMirror(row);
+                syncRowSummary(row);
             });
         }
 

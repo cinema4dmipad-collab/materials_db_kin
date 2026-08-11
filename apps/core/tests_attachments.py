@@ -7,7 +7,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from apps.core.attachments.kinds import KIND_EXCEL, KIND_PDF, KIND_WORD, detect_attachment_kind
+from apps.core.attachments.kinds import (
+    KIND_EXCEL,
+    KIND_PDF,
+    KIND_PRESENTATION,
+    KIND_WORD,
+    detect_attachment_kind,
+)
 from apps.core.attachments.processing import process_attachment_preview
 from apps.core.attachments.statuses import PREVIEW_FAILED, PREVIEW_READY, PREVIEW_SKIPPED
 from apps.samples.models import SampleAttachment
@@ -39,6 +45,8 @@ class AttachmentKindTests(TestCase):
     def test_detect_kinds(self):
         self.assertEqual(detect_attachment_kind('a.PDF'), KIND_PDF)
         self.assertEqual(detect_attachment_kind('report.docx'), KIND_WORD)
+        self.assertEqual(detect_attachment_kind('deck.pptx'), KIND_PRESENTATION)
+        self.assertEqual(detect_attachment_kind('slides.odp'), KIND_PRESENTATION)
         self.assertEqual(detect_attachment_kind('table.xlsx'), KIND_EXCEL)
         self.assertEqual(detect_attachment_kind('photo.png'), 'other')
 
@@ -119,6 +127,28 @@ class AttachmentPreviewProcessingTests(TestCase):
         self.assertTrue(attachment.preview_image.name.lower().endswith('.png'))
         convert_mock.assert_called_once()
 
+    @patch('apps.core.attachments.processing.convert_office_to_pdf')
+    def test_pptx_uses_libreoffice(self, convert_mock):
+        pdf_dir = Path(tempfile.mkdtemp())
+        pdf_path = pdf_dir / 'out.pdf'
+        pdf_path.write_bytes(MINIMAL_PDF)
+        convert_mock.return_value = pdf_path
+
+        attachment = SampleAttachment.objects.create(
+            sample=self.sample,
+            title='Deck',
+            file=SimpleUploadedFile(
+                'slides.pptx',
+                b'PK\x03\x04pptx',
+                content_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            ),
+        )
+        process_attachment_preview(attachment)
+        attachment.refresh_from_db()
+        self.assertEqual(attachment.preview_status, PREVIEW_READY)
+        self.assertTrue(attachment.preview_image)
+        convert_mock.assert_called_once()
+
     def test_word_failure_marks_failed(self):
         from apps.core.attachments.convert import LibreOfficeConvertError
 
@@ -165,8 +195,13 @@ class ScanAttachmentViewsTests(TestCase):
         self.settings_override.disable()
 
     def test_attach_pdf_to_scan(self):
-        url = reverse(
+        list_url = reverse(
             'scans:attachment_list',
+            kwargs={'sample_pk': self.sample.pk, 'scan_pk': self.scan.pk},
+        )
+        self.assertContains(self.client.get(list_url), 'Добавить')
+        url = reverse(
+            'scans:attachment_create',
             kwargs={'sample_pk': self.sample.pk, 'scan_pk': self.scan.pk},
         )
         with self.captureOnCommitCallbacks(execute=True):

@@ -519,6 +519,16 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         self.assertContains(response, 'structure-materials-grid__col-unit')
         self.assertContains(response, '>mm<')
         self.assertContains(response, reverse('materials:detail', args=[material.pk]))
+        create_material_url = (
+            f"{reverse('materials:create')}?struct_type={self.structure_type.pk}"
+        )
+        self.assertContains(response, 'Создать материал')
+        self.assertContains(response, create_material_url)
+        self.assertNotContains(response, 'Создать запись')
+        self.assertNotContains(
+            response,
+            reverse('structures:detail', args=[self.structure_type.code, row_id]),
+        )
         self.assertNotContains(response, 'structure-material-expand')
         self.assertNotContains(response, 'structure_material_expand.js')
 
@@ -831,6 +841,58 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type.refresh_from_db()
         self.assertFalse(structure_type.is_created)
         self.assertFalse(SQLExecutor.table_exists(structure_type))
+
+    def test_delete_draft_structure_type_from_public_ui(self):
+        structure_type = StructureType.objects.create(
+            name='UI Draft Delete',
+            code='ui_draft_delete',
+            table_name='structures_ui_draft_delete',
+            is_created=False,
+        )
+        StructureField.objects.create(
+            structure_type=structure_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            sort_order=1,
+        )
+        manage = self.client.get(reverse('structures:type_manage', args=[structure_type.code]))
+        self.assertEqual(manage.status_code, 200)
+        self.assertContains(manage, 'Удалить черновик')
+        self.assertContains(manage, reverse('structures:type_delete', args=[structure_type.code]))
+
+        delete_get = self.client.get(reverse('structures:type_delete', args=[structure_type.code]))
+        self.assertEqual(delete_get.status_code, 200)
+
+        delete_post = self.client.post(reverse('structures:type_delete', args=[structure_type.code]))
+        self.assertRedirects(delete_post, reverse('structures:select_type'))
+        self.assertFalse(StructureType.objects.filter(pk=structure_type.pk).exists())
+
+    def test_delete_draft_blocked_when_table_created(self):
+        structure_type = StructureType.objects.create(
+            name='UI Draft Created',
+            code='ui_draft_created',
+            table_name='structures_ui_draft_created',
+        )
+        StructureField.objects.create(
+            structure_type=structure_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            sort_order=1,
+        )
+        self.assertTrue(SQLExecutor.create_table(structure_type)['success'])
+        try:
+            response = self.client.post(
+                reverse('structures:type_delete', args=[structure_type.code])
+            )
+            self.assertRedirects(
+                response,
+                reverse('structures:type_manage', args=[structure_type.code]),
+            )
+            self.assertTrue(StructureType.objects.filter(pk=structure_type.pk).exists())
+        finally:
+            SQLExecutor.drop_table(structure_type)
 
     def test_create_table_shows_error_for_invalid_integer_default(self):
         structure_type = StructureType.objects.create(

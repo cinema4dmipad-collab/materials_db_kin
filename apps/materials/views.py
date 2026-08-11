@@ -839,14 +839,32 @@ class MaterialDetailView(AppViewMixin, DetailView):
             self.object,
             active_ws,
         )[:5]
-        context['properties'] = (
+        properties = list(
             self.object.properties.select_related('property', 'property__group')
             .prefetch_related('property__choices')
             .order_by(
                 'property__group__sort_order',
+                'property__group__name',
+                'property__display_name',
                 'property__name',
             )
         )
+        context['properties'] = properties
+        property_groups = []
+        current_key = object()
+        current_section = None
+        for mp in properties:
+            group = mp.property.group
+            key = group.pk if group else None
+            if key != current_key:
+                current_key = key
+                current_section = {
+                    'name': group.name if group else 'Без группы',
+                    'items': [],
+                }
+                property_groups.append(current_section)
+            current_section['items'].append(mp)
+        context['property_groups'] = property_groups
         context['show_composite_layers'] = self.object.supports_layers
         context['composite_layers'] = (
             self.get_composite_layers() if self.object.supports_layers else []

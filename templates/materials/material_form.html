@@ -357,7 +357,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/property_number_value.js' %}"></script>
+<script src="{% static 'js/property_number_value.js' %}?v={{ app_version }}-pnv2"></script>
 <script src="{% static 'js/material_form.js' %}"></script>
 {% if show_create_based_on %}
 <script src="{% static 'js/material_create_based_on.js' %}"></script>
@@ -369,7 +369,6 @@
 <script src="{% static 'js/material_picker_fields.js' %}"></script>
 <script src="{% static 'js/choice_picker_fields.js' %}"></script>
 <script src="{% static 'js/material_dictionary_fields.js' %}?v={{ app_version }}-dict1"></script>
-<script src="{% static 'js/property_number_value.js' %}"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
 <script src="{% static 'js/composite_layer_diagram_live.js' %}"></script>
 <script src="{% static 'js/composite_layers_formset.js' %}"></script>

@@ -16,11 +16,14 @@
 |-----|--------|
 | PDF | первая страница → PNG |
 | Word (.doc/.docx/.odt/.rtf) | LibreOffice → PDF → первая страница → PNG |
+| PPTX (.ppt/.pptx/.odp) | LibreOffice Impress → PDF → первая страница → PNG |
 | Excel (.xls/.xlsx/…) | иконка, статус `skipped` |
 | прочее | без превью |
 
 Полный документ для просмотра не хранится — в UI только миниатюра на плитке (сетка как Google Drive: название, превью, автор, дата; действия в меню ⋮).
 
+Добавление файла — отдельная форма (кнопка **«Добавить»** в шапке вкладки «Файлы»), не inline под списком.
+
 Общий слой: `apps/core/attachments/` (`kinds`, `convert`, `thumbnail`, `processing`).
 
-В Docker установлен `libreoffice-writer-nogui`. Рендер PDF: `pypdfium2` + Pillow. Локально: LibreOffice или `LIBREOFFICE_PATH`.
+В Docker: `libreoffice-writer-nogui` и `libreoffice-impress-nogui`. Рендер PDF: `pypdfium2` + Pillow. Локально: LibreOffice или `LIBREOFFICE_PATH`.

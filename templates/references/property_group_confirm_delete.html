@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление {{ group.name }} — База композитов{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="h4 mb-0">Удаление группы свойств</h1>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            Удалить группу <strong>{{ group.name }}</strong>?
+            {% if property_count %}
+            У {{ property_count }} свойств(а) поле «Группа» станет пустым (сами свойства не удаляются).
+            {% else %}
+            В группе нет свойств.
+            {% endif %}
+        </div>
+        <form method="post" class="d-flex gap-2">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Удалить</button>
+            <a href="{% url 'references:group_list' %}" class="btn btn-outline-secondary">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

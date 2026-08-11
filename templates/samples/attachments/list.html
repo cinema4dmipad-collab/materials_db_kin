@@ -7,9 +7,12 @@
 {% include 'samples/includes/sample_tabs.html' %}
 
 <div class="card mb-4">
-    <div class="card-header">
-        <h1 class="h5 mb-0">Прикреплённые файлы — {{ sample.code }}</h1>
-        <p class="text-muted small mb-0 mt-1">Оригинал сохраняется; для PDF и Word — миниатюра первой страницы; Excel — только иконка.</p>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h1 class="h5 mb-0">Прикреплённые файлы — {{ sample.code }}</h1>
+            <p class="text-muted small mb-0 mt-1">Оригинал сохраняется; для PDF, Word и PPTX — миниатюра первой страницы; Excel — только иконка.</p>
+        </div>
+        <a href="{% url 'attachments:create' sample.pk %}" class="btn btn-primary btn-sm">Добавить</a>
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
@@ -27,19 +30,10 @@
             {% if has_active_filters %}
             По вашему запросу файлы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
             {% else %}
-            Файлы ещё не прикреплены.
+            Файлы ещё не прикреплены. <a href="{% url 'attachments:create' sample.pk %}">Добавить файл</a>.
             {% endif %}
         </p>
         {% endif %}
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header">
-        <h2 class="h5 mb-0">Прикрепить файл</h2>
-    </div>
-    <div class="card-body">
-        {% include 'samples/includes/attachment_form.html' %}
     </div>
 </div>
 {% endblock %}

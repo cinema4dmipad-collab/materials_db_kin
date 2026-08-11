@@ -7,13 +7,27 @@
                 <span class="badge rounded-pill structure-field-item__type" data-field-summary="type" data-field-type-value="{{ field_form.field_type.value|default:'' }}">
                     {% if field_form.instance.pk %}{{ field_form.instance.get_field_type_display }}{% else %}—{% endif %}
                 </span>
+                {% if not field_form.instance.pk %}
+                <label class="structure-field-item__required form-check form-check-inline mb-0 ms-1">
+                    <input type="checkbox"
+                           class="form-check-input"
+                           data-structure-field-required-mirror
+                           {% if field_form.is_required.value %}checked{% endif %}>
+                    <span class="form-check-label small">Обязательное</span>
+                </label>
+                {% elif field_form.is_required.value %}
+                <span class="badge text-bg-secondary">Обязательное</span>
+                {% endif %}
             </div>
-            {% if field_form.label.errors or field_form.name.errors or field_form.field_type.errors or field_form.default_value.errors %}
+            {% if field_form.non_field_errors or field_form.id.errors or field_form.label.errors or field_form.name.errors or field_form.field_type.errors or field_form.default_value.errors or field_form.is_required.errors %}
             <div class="structure-field-item__errors">
+                {% for error in field_form.non_field_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                {% for error in field_form.id.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                 {% for error in field_form.label.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                 {% for error in field_form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                 {% for error in field_form.field_type.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                 {% for error in field_form.default_value.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                {% for error in field_form.is_required.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
             </div>
             {% endif %}
         </div>
@@ -32,7 +46,7 @@
         {{ field_form.decimal_places }}
         {{ field_form.default_value }}
         {{ field_form.choice_options }}
-        {% if field_form.id %}{{ field_form.id }}{% endif %}
+        {% if field_form.id %}{{ field_form.id }}{% else %}<input type="hidden" name="{{ field_form.prefix }}-id" id="id_{{ field_form.prefix }}-id">{% endif %}
         {% if field_form.DELETE %}{{ field_form.DELETE }}{% endif %}
     </div>
 </li>

@@ -440,3 +440,41 @@ class PropertyViewsTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Property.objects.filter(pk=self.property.pk).exists())
+
+    def test_property_group_crud(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
+        list_page = self.client.get(reverse('references:list'))
+        self.assertContains(list_page, reverse('references:group_list'))
+
+        create = self.client.post(
+            reverse('references:group_create'),
+            {
+                'name': 'Thermal',
+                'description': 'Heat props',
+                'sort_order': '10',
+            },
+        )
+        self.assertRedirects(create, reverse('references:group_list'))
+        group = PropertyGroup.objects.get(name='Thermal')
+        self.assertEqual(group.sort_order, 10)
+
+        edit = self.client.post(
+            reverse('references:group_edit', args=[group.pk]),
+            {
+                'name': 'Thermal props',
+                'description': 'Updated',
+                'sort_order': '5',
+            },
+        )
+        self.assertRedirects(edit, reverse('references:group_list'))
+        group.refresh_from_db()
+        self.assertEqual(group.name, 'Thermal props')
+
+        delete = self.client.post(reverse('references:group_delete', args=[group.pk]))
+        self.assertRedirects(delete, reverse('references:group_list'))
+        self.assertFalse(PropertyGroup.objects.filter(pk=group.pk).exists())
+
+    def test_operator_cannot_manage_property_groups(self):
+        login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
+        response = self.client.get(reverse('references:group_list'))
+        self.assertEqual(response.status_code, 403)

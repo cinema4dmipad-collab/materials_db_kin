@@ -157,7 +157,7 @@ class StructureTypeAdmin(admin.ModelAdmin):
         if not obj.pk:
             return '—'
         if obj.is_created:
-            return format_html('<span class="text-success">Таблица создана</span>')
+            return format_html('<span class="text-success">{}</span>', 'Таблица создана')
         url = reverse('admin:structures_structuretype_create_table', args=[obj.pk])
         return format_html('<a class="button" href="{}">Создать таблицу в БД</a>', url)
 

@@ -433,16 +433,18 @@ class SampleViewsTests(TestCase):
     def test_attachments_tab(self):
 
         attachments_url = reverse('attachments:list', kwargs={'sample_pk': self.sample.pk})
+        create_url = reverse('attachments:create', kwargs={'sample_pk': self.sample.pk})
 
         get_response = self.client.get(attachments_url)
 
         self.assertContains(get_response, 'Файлы')
 
-        self.assertContains(get_response, 'Создать')
+        self.assertContains(get_response, 'Добавить')
+        self.assertContains(get_response, create_url)
 
         post_response = self.client.post(
 
-            attachments_url,
+            create_url,
 
             {
 
@@ -459,9 +461,9 @@ class SampleViewsTests(TestCase):
         self.assertTrue(SampleAttachment.objects.filter(title='Photo').exists())
 
     def test_attachments_tab_prefills_title_with_sample_name_and_sequence(self):
-        attachments_url = reverse('attachments:list', kwargs={'sample_pk': self.sample.pk})
+        create_url = reverse('attachments:create', kwargs={'sample_pk': self.sample.pk})
 
-        response = self.client.get(attachments_url)
+        response = self.client.get(create_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(
@@ -476,8 +478,8 @@ class SampleViewsTests(TestCase):
             title=f'{self.sample.name} #0001',
             file=SimpleUploadedFile('a.txt', b'a', content_type='text/plain'),
         )
-        attachments_url = reverse('attachments:list', kwargs={'sample_pk': self.sample.pk})
-        response = self.client.get(attachments_url)
+        create_url = reverse('attachments:create', kwargs={'sample_pk': self.sample.pk})
+        response = self.client.get(create_url)
         self.assertContains(
             response,
             f'value="{self.sample.name} #0002"',

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Удаление черновика — {{ structure_type.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h1 class="h5 mb-0">Удаление черновика типа структуры</h1>
+            </div>
+            <div class="card-body">
+                <p>
+                    Удалить черновик типа <strong>{{ structure_type.name }}</strong>
+                    (<code>{{ structure_type.code }}</code>)?
+                </p>
+                <p class="text-danger mb-2">Действие необратимо. SQL-таблица ещё не создавалась.</p>
+                <ul class="small text-muted">
+                    <li>Полей в черновике: {{ fields_count }}</li>
+                    {% if linked_materials_count %}
+                    <li class="text-danger">Материалов с этим типом: {{ linked_materials_count }} — удаление недоступно, пока тип привязан к материалам</li>
+                    {% endif %}
+                </ul>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger"{% if linked_materials_count %} disabled{% endif %}>Удалить черновик</button>
+                        <a href="{% url 'structures:type_manage' structure_type.code %}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

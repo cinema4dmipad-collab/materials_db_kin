@@ -20,6 +20,18 @@ class LocalizedDecimalWidget(forms.TextInput):
         merged = {**LOCALIZED_DECIMAL_WIDGET_ATTRS, **(attrs or {})}
         super().__init__(attrs=merged)
 
+    def value_from_datadict(self, data, files, name):
+        """Prefer first non-empty when scalar and ± modes both render ``…-value``."""
+        if hasattr(data, 'getlist'):
+            values = data.getlist(name)
+            if not values:
+                return None
+            for value in values:
+                if value not in (None, ''):
+                    return value
+            return values[-1]
+        return data.get(name)
+
 
 class LocalizedDecimalField(forms.DecimalField):
     widget = LocalizedDecimalWidget

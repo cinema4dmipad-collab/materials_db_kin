@@ -24,6 +24,7 @@ from apps.references.forms import (
     ManufacturerForm,
     PropertyChoiceInlineFormSet,
     PropertyForm,
+    PropertyGroupForm,
     TechnologyForm,
 )
 from apps.references.models import Property, PropertyChoice, PropertyGroup
@@ -221,6 +222,68 @@ class PropertyChoiceFormMixin:
             elif self.object.pk:
                 self.object.choices.all().delete()
         return self.object, choice_formset
+
+
+class PropertyGroupListView(SystemAdminRequiredMixin, AppViewMixin, ListView):
+    model = PropertyGroup
+    template_name = 'references/property_group_list.html'
+    context_object_name = 'groups'
+
+    def get_queryset(self):
+        return PropertyGroup.objects.annotate(property_count=Count('property')).order_by(
+            'sort_order', 'name'
+        )
+
+
+class PropertyGroupCreateView(SystemAdminRequiredMixin, AppViewMixin, CreateView):
+    model = PropertyGroup
+    form_class = PropertyGroupForm
+    template_name = 'references/property_group_form.html'
+    success_url = reverse_lazy('references:group_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['cancel_url'] = reverse_lazy('references:group_list')
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Группа «{form.instance.name}» создана.')
+        return super().form_valid(form)
+
+
+class PropertyGroupUpdateView(SystemAdminRequiredMixin, AppViewMixin, UpdateView):
+    model = PropertyGroup
+    form_class = PropertyGroupForm
+    template_name = 'references/property_group_form.html'
+    context_object_name = 'group'
+    success_url = reverse_lazy('references:group_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['cancel_url'] = reverse_lazy('references:group_list')
+        return context
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Группа «{form.instance.name}» сохранена.')
+        return super().form_valid(form)
+
+
+class PropertyGroupDeleteView(SystemAdminRequiredMixin, AppViewMixin, DeleteView):
+    model = PropertyGroup
+    template_name = 'references/property_group_confirm_delete.html'
+    context_object_name = 'group'
+    success_url = reverse_lazy('references:group_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['property_count'] = self.object.property_set.count()
+        return context
+
+    def form_valid(self, form):
+        name = self.object.name
+        response = super().form_valid(form)
+        messages.success(self.request, f'Группа «{name}» удалена.')
+        return response
 
 
 class PropertyListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, ListView):

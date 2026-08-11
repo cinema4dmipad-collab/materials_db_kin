@@ -30,6 +30,9 @@
             {% if can_publish_structure_type %}
             <a href="{% url 'structures:type_visibility' structure_type.code %}" class="btn btn-outline-secondary btn-sm">Видимость</a>
             {% endif %}
+            {% if request.user.is_superuser and structure_type.is_created %}
+            <a href="{% url 'structures:migrate' %}" class="btn btn-outline-primary btn-sm">Перенос материалов</a>
+            {% endif %}
             <a href="{% url 'structures:select_type' %}" class="btn btn-outline-secondary btn-sm">К типам</a>
         </div>
     </div>
@@ -128,6 +131,12 @@
             {% include 'structures/includes/table_name_field.html' with input_id='create-table-name-card' table_name_value=structure_type.table_name %}
             <button type="submit" class="btn btn-success">Создать</button>
         </form>
+        {% if can_delete_draft %}
+        <div class="mt-3 pt-3 border-top">
+            <p class="text-muted small mb-2">Черновик ещё не создан в БД — его можно удалить целиком.</p>
+            <a href="{% url 'structures:type_delete' structure_type.code %}" class="btn btn-outline-danger">Удалить черновик</a>
+        </div>
+        {% endif %}
         {% elif structure_type.is_created %}
         <p class="mb-3">
             Таблица <code>{{ structure_type.table_name }}</code> создана.

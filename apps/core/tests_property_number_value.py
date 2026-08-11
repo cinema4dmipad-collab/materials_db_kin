@@ -1,8 +1,10 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.http import QueryDict
 from django.test import SimpleTestCase, TestCase
 
+from apps.core.fields import LocalizedDecimalWidget
 from apps.core.property_number_value import (
     VALUE_KIND_RANGE,
     VALUE_KIND_SCALAR,
@@ -17,6 +19,14 @@ from apps.materials.forms import MaterialPropertyForm
 from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Property
 from apps.workspaces.models import Workspace
+
+
+class LocalizedDecimalWidgetMultiValueTests(SimpleTestCase):
+    def test_prefers_first_non_empty_when_duplicate_names(self):
+        data = QueryDict(mutable=True)
+        data.setlist('properties-0-value', ['2.10', ''])
+        widget = LocalizedDecimalWidget()
+        self.assertEqual(widget.value_from_datadict(data, {}, 'properties-0-value'), '2.10')
 
 
 class PropertyNumberValueFormatTests(SimpleTestCase):

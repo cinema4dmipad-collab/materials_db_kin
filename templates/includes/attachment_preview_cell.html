@@ -21,7 +21,7 @@
 </span>
 {% else %}
 <span class="file-tile__preview-placeholder" title="{{ kind_label }}">
-    <i class="bi bi-file-earmark{% if is_pdf %}-pdf{% elif is_word %}-word{% endif %}" aria-hidden="true"></i>
+    <i class="bi bi-file-earmark{% if is_pdf %}-pdf{% elif is_word %}-word{% elif is_presentation %}-ppt{% endif %}" aria-hidden="true"></i>
     <span>{{ kind_label }}</span>
 </span>
 {% endif %}
@@ -47,9 +47,9 @@
      width="200"
      height="266"
      loading="lazy">
-{% elif is_pdf or is_word %}
+{% elif is_pdf or is_word or is_presentation %}
 <span class="attachment-preview-badge" title="{{ kind_label }}">
-    <i class="bi bi-file-earmark{% if is_pdf %}-pdf{% elif is_word %}-word{% endif %}" aria-hidden="true"></i>
+    <i class="bi bi-file-earmark{% if is_pdf %}-pdf{% elif is_word %}-word{% elif is_presentation %}-ppt{% endif %}" aria-hidden="true"></i>
     <span>{{ kind_label }}</span>
 </span>
 {% else %}

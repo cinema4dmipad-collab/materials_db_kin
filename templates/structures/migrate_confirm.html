@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Подтверждение переноса — структуры{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h1 class="h4 mb-0">Подтверждение переноса</h1>
+            <p class="text-muted small mb-0 mt-1">
+                Шаг 3 из 3 · {{ material_count }} материал(ов): «{{ source.name }}» → «{{ target.name }}»
+            </p>
+        </div>
+        <a href="{% url 'structures:migrate' %}?step=map" class="btn btn-outline-secondary btn-sm">К сопоставлению</a>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            Операция изменит тип структуры у всех материалов исходного типа и создаст новые SQL-строки в целевой таблице.
+            Отменить автоматически нельзя — сделайте бэкап при необходимости.
+        </div>
+
+        <h2 class="h6">Сопоставление</h2>
+        <ul class="mb-4">
+            {% for row in map_rows %}
+            <li>
+                <strong>{{ row.target.label }}</strong>
+                {% if row.skipped %}
+                ← <span class="text-muted">не заполняется</span>
+                {% else %}
+                ← {{ row.source.label }} (<code>{{ row.source.name }}</code>)
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="confirm">
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="delete_source" id="delete_source">
+                <label class="form-check-label" for="delete_source">
+                    После переноса удалить исходный тип «{{ source.name }}» вместе с SQL-таблицей
+                    (только если не останется материалов)
+                </label>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-danger"
+                        data-confirm-delete
+                        data-confirm-title="Перенос материалов"
+                        data-confirm-message="Перенести {{ material_count }} материал(ов) в «{{ target.name }}»?"
+                        data-confirm-submit="Перенести">
+                    Выполнить перенос
+                </button>
+                <a href="{% url 'structures:migrate' %}?step=map" class="btn btn-outline-secondary">Назад</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -753,7 +753,10 @@ class MaterialEditAccessTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, attachment.title)
         self.assertNotContains(response, 'Local attachment')
-        self.assertNotContains(response, 'Прикрепить файл')
+        self.assertNotContains(
+            response,
+            reverse('material_attachments:create', kwargs={'material_pk': self.shared_material.pk}),
+        )
 
 
 class MaterialsPickerDataTests(TestCase):

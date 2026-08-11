@@ -62,6 +62,25 @@ class TechnologyForm(_DictionaryItemFormBase):
         model = Technology
 
 
+class PropertyGroupForm(forms.ModelForm):
+    class Meta:
+        model = PropertyGroup
+        fields = ['name', 'description', 'sort_order']
+        widgets = {
+            'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
+            'description': forms.Textarea(attrs=_BOOTSTRAP_TEXTAREA),
+            'sort_order': forms.NumberInput(attrs=_BOOTSTRAP_INPUT),
+        }
+        labels = {
+            'name': 'Название',
+            'description': 'Описание',
+            'sort_order': 'Порядок',
+        }
+        help_texts = {
+            'sort_order': 'Меньшее значение — выше в списках и на карточке материала.',
+        }
+
+
 class PropertyForm(forms.ModelForm):
     class Meta:
         model = Property

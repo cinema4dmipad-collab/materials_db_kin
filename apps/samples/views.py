@@ -479,43 +479,35 @@ class AttachmentListView(AppViewMixin, QuerySetFilterMixin, SampleAttachmentMixi
             CREATOR_SEARCH_SCOPE: UPLOADED_BY_CREATOR_FILTER,
         }
 
-    def get_attachment_form(self):
-        if hasattr(self, '_attachment_form'):
-            return self._attachment_form
-        kwargs = {'prefix': 'attachment', 'sample': self.sample}
-        if self.request.method == 'POST':
-            kwargs['data'] = self.request.POST
-            kwargs['files'] = self.request.FILES
-        return SampleAttachmentForm(**kwargs)
+    def get_queryset(self):
+        return self.filter_queryset(self.sample.attachments.all())
 
-    def post(self, request, *args, **kwargs):
-        self.object_list = self.get_queryset()
-        form = SampleAttachmentForm(
-            request.POST,
-            request.FILES,
-            prefix='attachment',
-            sample=self.sample,
-        )
-        if form.is_valid():
-            attachment = form.save(commit=False)
-            attachment.sample = self.sample
-            assign_creator(attachment, request.user)
-            attachment.save()
-            schedule_attachment_preview(attachment)
-            messages.success(request, 'Файл прикреплён к образцу.')
-            return redirect('attachments:list', sample_pk=self.sample.pk)
 
-        self._attachment_form = form
-        context = self.get_context_data(attachments=self.object_list, attachment_form=form)
-        return self.render_to_response(context)
+class AttachmentCreateView(AppViewMixin, SampleAttachmentMixin, CreateView):
+    model = SampleAttachment
+    form_class = SampleAttachmentForm
+    template_name = 'samples/attachments/form.html'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['prefix'] = 'attachment'
+        kwargs['sample'] = self.sample
+        return kwargs
+
+    def form_valid(self, form):
+        attachment = form.save(commit=False)
+        attachment.sample = self.sample
+        assign_creator(attachment, self.request.user)
+        attachment.save()
+        schedule_attachment_preview(attachment)
+        messages.success(self.request, 'Файл прикреплён к образцу.')
+        return redirect('attachments:list', sample_pk=self.sample.pk)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.setdefault('attachment_form', self.get_attachment_form())
+        context['attachment_form'] = context['form']
+        context['cancel_url'] = reverse('attachments:list', kwargs={'sample_pk': self.sample.pk})
         return context
-
-    def get_queryset(self):
-        return self.filter_queryset(self.sample.attachments.all())
 
 
 class AttachmentDeleteView(AppViewMixin, SampleAttachmentMixin, DeleteView):

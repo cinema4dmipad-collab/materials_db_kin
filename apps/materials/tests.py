@@ -1244,6 +1244,55 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
             '1.62',
         )
 
+    def test_material_edit_keeps_density_when_duplicate_value_posted(self):
+        """Browser renders two inputs named …-value; empty tolerance must not wipe scalar."""
+        density = Property.objects.create(
+            name='density',
+            display_name='Density',
+            unit='g/cm3',
+            data_type='number',
+        )
+        material = self.create_material(
+            code='MAT-DENSITY-KEEP',
+            name='Density material',
+        )
+        MaterialProperty.objects.create(material=material, property=density, value='2.10')
+
+        prop_pk = str(
+            MaterialProperty.objects.get(material=material, property=density).pk
+        )
+        base = self._post_data(
+            code='MAT-DENSITY-KEEP',
+            name='Density material renamed',
+            **self._property_formset_management_data(total='1', initial='1'),
+            **self._property_formset_data(
+                density,
+                **{
+                    'properties-0-id': prop_pk,
+                    'properties-0-value': '2.10',
+                    'properties-0-DELETE': '',
+                },
+            ),
+        )
+        # urlencode(doseq=True) keeps duplicate keys; Client multipart collapses them.
+        from urllib.parse import urlencode
+
+        post = [(key, value) for key, value in base.items() if key != 'properties-0-value']
+        post.append(('properties-0-value', '2.10'))
+        post.append(('properties-0-value', ''))
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            urlencode(post, doseq=True),
+            content_type='application/x-www-form-urlencoded',
+        )
+        self.assertEqual(response.status_code, 302)
+        material.refresh_from_db()
+        self.assertEqual(material.name, 'Density material renamed')
+        link = MaterialProperty.objects.get(material=material, property=density)
+        self.assertIn(link.value, ('2.1', '2.10'))
+        self.assertTrue(link.value)
+
     def test_material_property_form_saves_material_link_as_uuid(self):
         target = self.create_material(code='MAT-TARGET-LINK', name='Target link material')
         link_prop = Property.objects.create(
@@ -2196,16 +2245,19 @@ class MaterialAttachmentViewsTests(TestCase):
         from apps.materials.models import MaterialAttachment
 
         attachments_url = reverse('material_attachments:list', kwargs={'material_pk': self.material.pk})
+        create_url = reverse('material_attachments:create', kwargs={'material_pk': self.material.pk})
         get_response = self.client.get(attachments_url)
-        self.assertContains(get_response, 'Создать')
+        self.assertContains(get_response, 'Добавить')
+        self.assertContains(get_response, create_url)
+        create_get = self.client.get(create_url)
         self.assertContains(
-            get_response,
+            create_get,
             f'value="{self.material.name} #0001"',
             html=False,
         )
 
         post_response = self.client.post(
-            attachments_url,
+            create_url,
             {
                 'attachment-title': 'Datasheet',
                 'attachment-file': SimpleUploadedFile(

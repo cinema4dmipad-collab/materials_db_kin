@@ -29,7 +29,7 @@ WORKDIR /app
 ARG POSTGRES_CLIENT_MAJOR=18
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl gnupg libpq5 libpq-dev gcc \
-        libreoffice-writer-nogui fonts-dejavu-core \
+        libreoffice-writer-nogui libreoffice-impress-nogui fonts-dejavu-core \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \

@@ -15,7 +15,7 @@
             <p class="text-muted small mb-0">Материалы структуры · всего {{ total }}</p>
         </div>
         <div class="text-nowrap d-inline-flex align-items-center gap-1">
-            <a href="{% url 'structures:create' structure_type.code %}" class="btn btn-primary btn-sm">Создать запись</a>
+            <a href="{% url 'materials:create' %}?struct_type={{ structure_type.pk }}" class="btn btn-primary btn-sm">Создать материал</a>
             <a href="{% url 'structures:select_type' %}" class="btn btn-outline-secondary btn-sm">К типам</a>
         </div>
     </div>
@@ -58,12 +58,9 @@
                                 </a>
                             </td>
                             <td class="structure-materials-grid__code">
-                                {% if row.structure_record_id %}
-                                <a href="{% url 'structures:detail' structure_type.code row.structure_record_id %}"
-                                   title="Параметры структуры">{{ row.material.code }}</a>
-                                {% else %}
-                                {{ row.material.code }}
-                                {% endif %}
+                                <a href="{% url 'materials:detail' row.material.pk %}" title="{{ row.material.code }}">
+                                    {{ row.material.code }}
+                                </a>
                             </td>
                             {% for cell in row.cells %}
                             <td class="structure-materials-grid__cell{% if cell == '—' %} is-empty{% endif %}"
@@ -106,7 +103,7 @@
             По вашему запросу материалы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
             {% else %}
             Материалов с этой структурой пока нет.
-            <a href="{% url 'structures:create' structure_type.code %}">Создать запись параметров</a>
+            <a href="{% url 'materials:create' %}?struct_type={{ structure_type.pk }}">Создать материал</a>
             или привяжите структуру к материалу.
             {% endif %}
         </div>

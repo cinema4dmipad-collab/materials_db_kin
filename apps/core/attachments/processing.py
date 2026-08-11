@@ -21,7 +21,7 @@ from apps.core.attachments.kinds import (
     KIND_EXCEL,
     KIND_OTHER,
     KIND_PDF,
-    KIND_WORD,
+    OFFICE_PREVIEW_KINDS,
     detect_attachment_kind,
 )
 from apps.core.attachments.statuses import (
@@ -47,7 +47,7 @@ def schedule_attachment_preview(attachment) -> None:
     if kind == KIND_OTHER:
         _set_status(attachment, PREVIEW_NONE)
         return
-    if kind in (KIND_PDF, KIND_WORD):
+    if kind == KIND_PDF or kind in OFFICE_PREVIEW_KINDS:
         _set_status(attachment, PREVIEW_PENDING)
         pk = attachment.pk
         model = type(attachment)
@@ -81,8 +81,8 @@ def process_attachment_preview(attachment) -> None:
     try:
         if kind == KIND_PDF:
             _store_pdf_thumbnail(attachment, use_original=True)
-        elif kind == KIND_WORD:
-            _convert_word_to_thumbnail(attachment)
+        elif kind in OFFICE_PREVIEW_KINDS:
+            _convert_office_to_thumbnail(attachment)
         else:
             _set_status(attachment, PREVIEW_NONE)
             return
@@ -141,7 +141,8 @@ def _store_pdf_thumbnail(attachment, *, use_original: bool) -> None:
     _save_preview_png(attachment, png_bytes)
 
 
-def _convert_word_to_thumbnail(attachment) -> None:
+def _convert_office_to_thumbnail(attachment) -> None:
+    """LibreOffice → PDF → first-page PNG (Word, PPTX, ODP, …)."""
     storage = attachment.file.storage
     suffix = os.path.splitext(attachment.filename)[1] or '.docx'
     tmp_dir = Path(tempfile.mkdtemp(prefix='lab_attach_'))
@@ -157,3 +158,7 @@ def _convert_word_to_thumbnail(attachment) -> None:
         if pdf_path is not None:
             shutil.rmtree(pdf_path.parent, ignore_errors=True)
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# Backward-compatible alias used by older tests/imports.
+_convert_word_to_thumbnail = _convert_office_to_thumbnail

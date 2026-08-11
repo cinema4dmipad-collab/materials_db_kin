@@ -1,6 +1,12 @@
 from django import template
 
-from apps.core.attachments.kinds import KIND_EXCEL, KIND_PDF, KIND_WORD, KIND_LABELS
+from apps.core.attachments.kinds import (
+    KIND_EXCEL,
+    KIND_PDF,
+    KIND_PRESENTATION,
+    KIND_WORD,
+    KIND_LABELS,
+)
 from apps.core.attachments.model_api import attachment_has_preview, attachment_kind
 from apps.core.attachments.statuses import (
     PREVIEW_FAILED,
@@ -27,6 +33,7 @@ def attachment_preview_cell(attachment, preview_url='', size=''):
         'size': size or '',
         'is_excel': kind == KIND_EXCEL,
         'is_word': kind == KIND_WORD,
+        'is_presentation': kind == KIND_PRESENTATION,
         'is_pdf': kind == KIND_PDF,
         'is_ready': status == PREVIEW_READY,
         'is_pending': status == PREVIEW_PENDING,

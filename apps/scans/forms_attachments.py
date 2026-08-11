@@ -25,5 +25,5 @@ class ScanAttachmentForm(forms.ModelForm):
         self.fields['description'].widget.attrs.setdefault('rows', 3)
         self.fields['file'].widget.attrs.setdefault(
             'accept',
-            '.pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.xlsm,.ods,application/pdf',
+            '.pdf,.doc,.docx,.odt,.rtf,.ppt,.pptx,.odp,.xls,.xlsx,.xlsm,.ods,application/pdf',
         )

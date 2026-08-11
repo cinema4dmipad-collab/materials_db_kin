@@ -9,7 +9,7 @@ Glossary of terms used in Materials DB and related composite / NDT workflows.
 | **Material** | Card for a composite or prepreg system: code, name, structure type, properties, optional layer stack. |
 | **Sample** | Physical specimen (plate, part, control element) made from a material; may override property values. |
 | **Property** | Entry in the reference catalog: name, code, unit, data type (number, string, boolean, date). |
-| **Property group** | Optional grouping of properties in the reference catalog (admin). |
+| **Property group** | Optional grouping of properties in the reference catalog (`/properties/groups/`). |
 | **Tag** | Normalized label attached to materials, samples, or scans; used for filtering. |
 
 ## Structure Types

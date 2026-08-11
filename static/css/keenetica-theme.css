@@ -1851,6 +1851,7 @@ a.entity-tag.tone-neutral:hover {
 
 .file-tile__type--pdf { color: #d93025; }
 .file-tile__type--word { color: #1a73e8; }
+.file-tile__type--presentation { color: #e37400; }
 .file-tile__type--excel { color: #188038; }
 .file-tile__type--other { color: #5f6368; }
 .file-tile__type--hdf5 { color: var(--kx-brand); }
