@@ -121,7 +121,6 @@ class StructureMigrateWizardView(SystemAdminRequiredMixin, AppViewMixin, View):
                     'target': row.target,
                     'source_name': source_name or '',
                     'source_label': source_field.label if source_field else '',
-                    'auto': row.auto and source_name == row.source_name and bool(source_name),
                     'warning': row.warning,
                 }
             )

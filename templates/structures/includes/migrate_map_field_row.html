@@ -34,17 +34,9 @@
     </td>
     <td class="import-map-row__parse">
         <span class="badge text-bg-light border">{{ row.target.get_field_type_display }}</span>
-        {% if row.auto %}
-        <div class="form-text text-success mb-0">Авто по имени</div>
-        {% endif %}
         {% if row.warning %}
         <div class="form-text text-warning mb-0">{{ row.warning }}</div>
         {% endif %}
     </td>
-    <td class="import-map-row__actions">
-        <button type="button"
-                class="btn btn-link btn-sm text-danger migrate-map-clear-row p-0{% if not row.source_name %} d-none{% endif %}"
-                title="Очистить"
-                data-migrate-clear-row>×</button>
-    </td>
+    <td class="import-map-row__actions"></td>
 </tr>

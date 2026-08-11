@@ -33,10 +33,6 @@
         return row ? row.querySelector('[data-drop-slot]') : null;
     }
 
-    function clearBtn(row) {
-        return row ? row.querySelector('[data-migrate-clear-row]') : null;
-    }
-
     function setSelected(row) {
         rows().forEach(function (item) {
             item.classList.toggle('is-selected', item === row);
@@ -77,7 +73,6 @@
         var input = sourceInput(row);
         var slot = dropSlot(row);
         var labelEl = slot ? slot.querySelector('.import-map-expr-label') : null;
-        var btn = clearBtn(row);
         if (!input || !slot || !labelEl) {
             return;
         }
@@ -98,9 +93,6 @@
             slot.classList.remove('is-empty');
             slot.setAttribute('draggable', 'true');
             row.classList.remove('is-unmapped');
-            if (btn) {
-                btn.classList.remove('d-none');
-            }
         } else {
             input.value = '';
             input.setAttribute('data-label', '');
@@ -108,9 +100,6 @@
             slot.classList.add('is-empty');
             slot.removeAttribute('draggable');
             row.classList.add('is-unmapped');
-            if (btn) {
-                btn.classList.add('d-none');
-            }
         }
         syncCatalogUsed();
         updateSectionCount();
@@ -148,10 +137,7 @@
     }
 
     function bindRow(row) {
-        row.addEventListener('click', function (event) {
-            if (event.target.closest('[data-migrate-clear-row]')) {
-                return;
-            }
+        row.addEventListener('click', function () {
             if (suppressNextClick) {
                 suppressNextClick = false;
                 return;
@@ -164,16 +150,6 @@
                 setSelected(row);
             }
         });
-
-        var btn = clearBtn(row);
-        if (btn) {
-            btn.addEventListener('click', function (event) {
-                event.preventDefault();
-                event.stopPropagation();
-                setRowSource(row, '', '');
-                setSelected(row);
-            });
-        }
 
         var slot = dropSlot(row);
         if (!slot) {

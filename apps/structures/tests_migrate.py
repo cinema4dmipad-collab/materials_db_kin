@@ -236,7 +236,7 @@ class StructureMigrateViewsTests(TransactionTestCase):
         self.assertEqual(map_page.status_code, 200)
         self.assertContains(map_page, 'Поля целевой структуры')
         self.assertContains(map_page, 'Поля исходной структуры')
-        self.assertContains(map_page, 'Авто по имени')
+        self.assertNotContains(map_page, 'Авто по имени')
         self.assertContains(map_page, 'name="map_title"')
         self.assertContains(map_page, 'structure_migrate_mapping.js')
 
