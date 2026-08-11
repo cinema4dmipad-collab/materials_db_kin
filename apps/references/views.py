@@ -224,7 +224,20 @@ class PropertyChoiceFormMixin:
         return self.object, choice_formset
 
 
-class PropertyGroupListView(SystemAdminRequiredMixin, AppViewMixin, ListView):
+class PropertySectionTabsMixin:
+    """Shared Свойства / Группы tabs under the properties section."""
+
+    property_section_tab = 'properties'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['property_section_tab'] = self.property_section_tab
+        return context
+
+
+class PropertyGroupListView(PropertySectionTabsMixin, AppViewMixin, PermissionRequiredMixin, ListView):
+    permission_codename = WorkspacePerm.PROPERTY_VIEW
+    property_section_tab = 'groups'
     model = PropertyGroup
     template_name = 'references/property_group_list.html'
     context_object_name = 'groups'
@@ -286,8 +299,11 @@ class PropertyGroupDeleteView(SystemAdminRequiredMixin, AppViewMixin, DeleteView
         return response
 
 
-class PropertyListView(AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, ListView):
+class PropertyListView(
+    PropertySectionTabsMixin, AppViewMixin, PermissionRequiredMixin, QuerySetFilterMixin, ListView
+):
     permission_codename = WorkspacePerm.PROPERTY_VIEW
+    property_section_tab = 'properties'
     model = Property
     template_name = 'references/property_list.html'
     context_object_name = 'properties'
@@ -399,6 +415,22 @@ class PropertyUpdateView(PropertyChoiceFormMixin, SystemAdminRequiredMixin, AppV
         return reverse_lazy('references:list')
 
 
+def _property_material_usage_count(prop: Property) -> int:
+    annotated = getattr(prop, 'material_count', None)
+    if annotated is not None:
+        return int(annotated)
+    return prop.material_values.count()
+
+
+def _property_delete_block_reason(prop: Property) -> str | None:
+    count = _property_material_usage_count(prop)
+    if count <= 0:
+        return None
+    if count == 1:
+        return 'используется у 1 материала'
+    return f'используется у {count} материалов'
+
+
 class PropertyDeleteView(SystemAdminRequiredMixin, AppViewMixin, DeleteView):
     model = Property
     template_name = 'references/property_confirm_delete.html'
@@ -407,10 +439,20 @@ class PropertyDeleteView(SystemAdminRequiredMixin, AppViewMixin, DeleteView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['material_count'] = self.object.material_values.count()
+        material_count = _property_material_usage_count(self.object)
+        context['material_count'] = material_count
+        context['delete_blocked'] = material_count > 0
+        context['block_reason'] = _property_delete_block_reason(self.object)
         return context
 
     def form_valid(self, form):
+        reason = _property_delete_block_reason(self.object)
+        if reason:
+            messages.error(
+                self.request,
+                f'Нельзя удалить свойство «{self.object.display_name}»: {reason}.',
+            )
+            return redirect('references:list')
         display_name = self.object.display_name
         response = super().form_valid(form)
         messages.success(self.request, f'Свойство «{display_name}» удалено.')
@@ -430,9 +472,29 @@ class PropertyBulkDeleteView(SystemAdminRequiredMixin, AppViewMixin, View):
             messages.warning(request, 'Не выбрано ни одного свойства.')
             return redirect('references:list')
 
-        props = list(Property.objects.filter(pk__in=ids))
+        props = list(
+            Property.objects.filter(pk__in=ids).annotate(
+                material_count=Count('material_values')
+            )
+        )
         by_pk = {str(p.pk): p for p in props}
-        deletable = [by_pk[i] for i in ids if i in by_pk]
+        deletable = []
+        blocked = []
+        for key in ids:
+            prop = by_pk.get(key)
+            if prop is None:
+                continue
+            reason = _property_delete_block_reason(prop)
+            if reason:
+                blocked.append(
+                    {
+                        'label': prop.display_name,
+                        'code': prop.name,
+                        'reason': reason,
+                    }
+                )
+                continue
+            deletable.append(prop)
 
         if request.POST.get('confirm') != '1':
             return TemplateResponse(
@@ -441,8 +503,10 @@ class PropertyBulkDeleteView(SystemAdminRequiredMixin, AppViewMixin, View):
                 {
                     'page_title': 'Удаление выбранных свойств',
                     'warning_text': (
-                        f'Будут удалены <strong>{len(deletable)}</strong> свойств(а). '
-                        'Значения этих свойств у материалов и образцов также будут удалены.'
+                        f'Будут удалены <strong>{len(deletable)}</strong> свойств(а), '
+                        'которые не привязаны к материалам.'
+                        if deletable
+                        else 'Нет свойств, которые можно удалить.'
                     ),
                     'deletable': [
                         {
@@ -451,21 +515,31 @@ class PropertyBulkDeleteView(SystemAdminRequiredMixin, AppViewMixin, View):
                         }
                         for p in deletable
                     ],
-                    'blocked': [],
+                    'blocked': blocked,
                     'ids': [str(p.pk) for p in deletable],
                     'cancel_url': reverse('references:list'),
                 },
             )
 
         if not deletable:
-            messages.warning(request, 'Нет свойств для удаления.')
+            messages.warning(
+                request,
+                'Нет свойств для удаления: выбранные привязаны к материалам.',
+            )
             return redirect('references:list')
 
         deleted = 0
         for prop in deletable:
+            if _property_delete_block_reason(prop):
+                continue
             prop.delete()
             deleted += 1
         messages.success(request, f'Удалено свойств: {deleted}.')
+        if blocked:
+            messages.warning(
+                request,
+                f'Пропущено (привязаны к материалам): {len(blocked)}.',
+            )
         return redirect('references:list')
 
 

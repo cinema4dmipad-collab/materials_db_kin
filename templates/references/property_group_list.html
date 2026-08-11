@@ -5,17 +5,25 @@
 
 {% block content %}
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-            <h1 class="h4 mb-0">Группы свойств</h1>
-            <p class="text-muted small mb-0 mt-1">Группы упорядочивают свойства в справочнике и на карточке материала.</p>
+    <div class="card-header">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h1 class="h4 mb-0">Справочник свойств</h1>
+            {% if is_system_admin %}
+            <a href="{% url 'references:group_create' %}" class="btn btn-primary btn-sm">Создать группу</a>
+            {% endif %}
         </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{% url 'references:list' %}" class="btn btn-outline-secondary btn-sm">К свойствам</a>
-            <a href="{% url 'references:group_create' %}" class="btn btn-primary btn-sm">Создать</a>
-        </div>
+        {% include 'references/includes/property_section_tabs.html' %}
     </div>
     <div class="card-body p-0">
+        <p class="text-muted small px-3 pt-3 mb-0">
+            Группы общие для всей системы (не зависят от пространства).
+            Они упорядочивают свойства в справочнике и на карточке материала.
+            {% if is_system_admin %}
+            Создавать и менять группы могут администраторы.
+            {% else %}
+            Просмотр доступен всем; изменение — только администраторам.
+            {% endif %}
+        </p>
         {% if groups %}
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle mb-0 app-data-table">
@@ -36,12 +44,16 @@
                         <td>{{ group.property_count }}</td>
                         <td class="text-muted">{{ group.description|default:"—"|truncatechars:80 }}</td>
                         <td class="text-end">
+                            {% if is_system_admin %}
                             <div class="table-actions">
                                 {% url 'references:group_edit' group.pk as group_edit_url %}
                                 {% include 'includes/table_action_icon.html' with action='edit' url=group_edit_url title='Изменить' %}
                                 {% url 'references:group_delete' group.pk as group_delete_url %}
                                 {% include 'includes/table_action_icon.html' with action='delete' url=group_delete_url title='Удалить' %}
                             </div>
+                            {% else %}
+                            —
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -50,7 +62,10 @@
         </div>
         {% else %}
         <p class="p-3 mb-0 text-muted">
-            Групп пока нет. <a href="{% url 'references:group_create' %}">Создать группу</a>.
+            Групп пока нет.
+            {% if is_system_admin %}
+            <a href="{% url 'references:group_create' %}">Создать группу</a>.
+            {% endif %}
         </p>
         {% endif %}
     </div>

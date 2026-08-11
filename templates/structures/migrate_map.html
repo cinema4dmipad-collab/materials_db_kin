@@ -1,9 +1,14 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Сопоставление полей — перенос структуры{% endblock %}
 
+{% block extra_head %}
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-migrate-map1" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="card">
+<div class="card import-map-page">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h1 class="h4 mb-0">Сопоставление полей</h1>
@@ -15,51 +20,108 @@
     </div>
     <div class="card-body">
         <p class="mb-3">
-            Для каждого поля целевой структуры выберите поле исходной.
-            Совпадения по имени подставлены автоматически; остальные оставьте пустыми или сопоставьте вручную.
+            Слева — все поля целевой структуры. Справа — поля исходной.
+            Совпадения по имени подставлены автоматически; остальные перетащите или кликните.
         </p>
-        <form method="post" novalidate>
+        <form method="post"
+              novalidate
+              class="migrate-map-constructor-form import-map-constructor-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="map">
-            <div class="table-responsive">
-                <table class="table table-striped align-middle mb-0 app-data-table">
-                    <thead>
-                        <tr>
-                            <th>Поле цели</th>
-                            <th>Тип</th>
-                            <th>Источник</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in rows %}
-                        <tr>
-                            <td>
-                                {{ row.target.label }}
-                                {% if row.target.is_required %}<span class="text-danger" title="Обязательное">★</span>{% endif %}
-                                <div class="small text-muted"><code>{{ row.target.name }}</code></div>
-                            </td>
-                            <td><span class="badge text-bg-secondary">{{ row.target.get_field_type_display }}</span></td>
-                            <td>
-                                <select class="form-select form-select-sm" name="map_{{ row.target.name }}">
-                                    <option value="">— не заполнять —</option>
-                                    {% for sf in source_fields %}
-                                    <option value="{{ sf.name }}"{% if row.source_name == sf.name %} selected{% endif %}>
-                                        {{ sf.label }} ({{ sf.name }} · {{ sf.get_field_type_display }})
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                {% if row.auto %}
-                                <div class="form-text text-success">Авто по имени поля</div>
-                                {% endif %}
-                                {% if row.warning %}
-                                <div class="form-text text-warning">{{ row.warning }}</div>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+
+            <div class="import-map-constructor mb-3">
+                <section class="import-map-panel import-map-constructor__main" aria-label="Поля целевой структуры">
+                    <div class="import-map-panel__head">
+                        <div>
+                            <div class="import-map-panel__title">Поля целевой структуры</div>
+                            <p class="import-map-panel__hint mb-0">Сюда кладутся поля исходной →</p>
+                        </div>
+                        <div class="import-map-constructor__toolbar">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="migrate-map-clear-row">
+                                Очистить строку
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="migrate-map-reset-all">
+                                Сбросить всё
+                            </button>
+                        </div>
+                    </div>
+                    <div class="import-map-table-wrap">
+                        <table class="table table-sm align-middle mb-0 import-map-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Поле цели</th>
+                                    <th scope="col">Поле источника</th>
+                                    <th scope="col" class="import-map-table__parse-col">Тип</th>
+                                    <th scope="col" class="import-map-table__actions-col"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="import-map-section" data-map-section="target">
+                                <tr class="import-map-section__header">
+                                    <th scope="colgroup" colspan="4">
+                                        <button type="button"
+                                                class="import-map-section__toggle"
+                                                data-map-section-toggle
+                                                aria-expanded="true">
+                                            <span class="import-map-section__chevron" aria-hidden="true"></span>
+                                            <span class="import-map-section__title">{{ target.name }}</span>
+                                            <span class="badge text-bg-light border import-map-section__count"
+                                                  data-map-section-count>0 / 0</span>
+                                        </button>
+                                    </th>
+                                </tr>
+                                {% for row in rows %}
+                                {% include 'structures/includes/migrate_map_field_row.html' with row=row %}
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-muted small">В целевой структуре нет полей.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <aside class="import-map-panel import-map-catalog"
+                       aria-label="Поля исходной структуры"
+                       id="migrate-map-catalog">
+                    <div class="import-map-panel__head import-map-catalog__head">
+                        <div>
+                            <div class="import-map-panel__title">Поля исходной структуры</div>
+                            <p class="import-map-panel__hint mb-0">Перетащите в поля слева ←</p>
+                        </div>
+                        <input type="search"
+                               class="form-control form-control-sm import-map-catalog__search"
+                               id="migrate-map-catalog-search"
+                               placeholder="Поиск…"
+                               autocomplete="off"
+                               aria-label="Поиск в каталоге полей">
+                    </div>
+                    <div class="import-map-catalog__body">
+                        <section class="import-map-catalog__group" data-catalog-group="source">
+                            <h3 class="import-map-catalog__group-title">{{ source.name }}</h3>
+                            <ul class="import-map-catalog__list list-unstyled mb-0">
+                                {% for sf in source_fields %}
+                                <li class="import-map-catalog__item"
+                                    data-catalog-label="{{ sf.label|lower }} {{ sf.name|lower }}">
+                                    <button type="button"
+                                            class="import-map-catalog-item"
+                                            draggable="true"
+                                            data-source-name="{{ sf.name }}"
+                                            data-label="{{ sf.label|escape }}"
+                                            title="{{ sf.label }} ({{ sf.name }} · {{ sf.get_field_type_display }})">
+                                        <span class="import-map-catalog-item__mark" aria-hidden="true"></span>
+                                        <span class="import-map-catalog-item__text">{{ sf.label }}</span>
+                                    </button>
+                                </li>
+                                {% empty %}
+                                <li class="text-muted small px-2 py-1">Нет полей в исходной структуре.</li>
+                                {% endfor %}
+                            </ul>
+                        </section>
+                    </div>
+                </aside>
             </div>
+
             <div class="mt-3 d-flex flex-wrap gap-2">
                 <button type="submit" class="btn btn-primary">Далее · подтверждение</button>
                 <a href="{% url 'structures:migrate' %}" class="btn btn-outline-secondary">Отмена</a>
@@ -67,4 +129,8 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/structure_migrate_mapping.js' %}?v={{ app_version }}-migrate-map1"></script>
 {% endblock %}

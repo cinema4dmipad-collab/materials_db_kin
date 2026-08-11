@@ -5,22 +5,24 @@
 
 {% block content %}
 <div class="card{% if is_system_admin %} list-bulk{% endif %}"{% if is_system_admin %} data-list-bulk{% endif %}>
-    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <h1 class="h4 mb-0">Справочник свойств</h1>
-        {% if is_system_admin %}
-        <div class="d-flex flex-wrap gap-2 align-items-center">
-            <a href="{% url 'references:group_list' %}" class="btn btn-outline-secondary btn-sm">Группы</a>
-            {% if properties %}
-            <button type="button"
-                    class="btn btn-outline-secondary btn-sm"
-                    data-list-bulk-toggle
-                    aria-pressed="false">
-                Выбрать
-            </button>
+    <div class="card-header">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h1 class="h4 mb-0">Справочник свойств</h1>
+            {% if is_system_admin %}
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                {% if properties %}
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm"
+                        data-list-bulk-toggle
+                        aria-pressed="false">
+                    Выбрать
+                </button>
+                {% endif %}
+                <a href="{% url 'references:create' %}" class="btn btn-primary btn-sm">Создать</a>
+            </div>
             {% endif %}
-            <a href="{% url 'references:create' %}" class="btn btn-primary btn-sm">Создать</a>
         </div>
-        {% endif %}
+        {% include 'references/includes/property_section_tabs.html' %}
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
@@ -29,7 +31,7 @@
               action="{% url 'references:bulk_delete' %}"
               data-list-bulk-form
               data-confirm-title="Удаление свойств"
-              data-confirm-message="Удалить выбранные свойства ({count})? Значения у материалов и образцов также будут удалены."
+              data-confirm-message="Удалить выбранные свойства ({count})? Свойства, привязанные к материалам, будут пропущены."
               data-confirm-submit="Удалить выбранные">
             {% csrf_token %}
             {% include 'includes/list_bulk_toolbar.html' with bulk_id='properties' %}
@@ -79,8 +81,18 @@
                                 <div class="table-actions">
                                 {% url 'references:edit' property.pk as property_edit_url %}
                                 {% include 'includes/table_action_icon.html' with action='edit' url=property_edit_url title='Изменить' %}
+                                {% if property.material_count %}
+                                <button type="button"
+                                        class="btn btn-sm table-action-btn btn-action-delete"
+                                        disabled
+                                        title="Нельзя удалить: свойство используется у материалов"
+                                        aria-label="Нельзя удалить: свойство используется у материалов">
+                                    {% include 'includes/table_action_icon_svg.html' with action='delete' %}
+                                </button>
+                                {% else %}
                                 {% url 'references:delete' property.pk as property_delete_url %}
                                 {% include 'includes/table_action_icon.html' with action='delete' url=property_delete_url title='Удалить' %}
+                                {% endif %}
                                 </div>
                                 {% else %}
                                 —

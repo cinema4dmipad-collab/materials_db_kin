@@ -1,0 +1,16 @@
+<ul class="nav nav-tabs card-header-tabs mb-0">
+    <li class="nav-item">
+        <a class="nav-link{% if property_section_tab == 'properties' %} active{% endif %}"
+           href="{% url 'references:list' %}"
+           {% if property_section_tab == 'properties' %}aria-current="page"{% endif %}>
+            Свойства
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link{% if property_section_tab == 'groups' %} active{% endif %}"
+           href="{% url 'references:group_list' %}"
+           {% if property_section_tab == 'groups' %}aria-current="page"{% endif %}>
+            Группы
+        </a>
+    </li>
+</ul>

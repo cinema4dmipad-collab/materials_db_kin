@@ -111,14 +111,17 @@ class StructureMigrateWizardView(SystemAdminRequiredMixin, AppViewMixin, View):
             return redirect('structures:migrate')
         mapping = state.get('mapping') or {}
         suggested = suggest_field_mapping(source, target)
+        source_by_name = {f.name: f for f in supported_fields(source)}
         rows = []
         for row in suggested:
             source_name = mapping.get(row.target.name, row.source_name)
+            source_field = source_by_name.get(source_name)
             rows.append(
                 {
                     'target': row.target,
-                    'source_name': source_name,
-                    'auto': row.auto and source_name == row.source_name,
+                    'source_name': source_name or '',
+                    'source_label': source_field.label if source_field else '',
+                    'auto': row.auto and source_name == row.source_name and bool(source_name),
                     'warning': row.warning,
                 }
             )

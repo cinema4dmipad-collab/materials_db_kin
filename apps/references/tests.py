@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
+from apps.materials.models import Material, MaterialProperty
 from apps.references.forms import PropertyForm
 from apps.references.models import Property, PropertyChoice, PropertyGroup
 from apps.workspaces.models import BUILTIN_GROUP_OPERATOR, Workspace
@@ -314,6 +315,32 @@ class PropertyViewsTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Property.objects.filter(pk=self.property.pk).exists())
 
+    def test_property_delete_blocked_when_used_by_material(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
+        material = Material.objects.create(
+            code='MAT-PROP-DEL',
+            name='Linked',
+            home_workspace=self.workspace,
+        )
+        MaterialProperty.objects.create(
+            material=material,
+            property=self.property,
+            value='1.2',
+        )
+
+        list_page = self.client.get(reverse('references:list'))
+        self.assertContains(list_page, 'Нельзя удалить: свойство используется у материалов')
+        self.assertNotContains(
+            list_page,
+            f'href="{reverse("references:delete", kwargs={"pk": self.property.pk})}"',
+        )
+
+        response = self.client.post(
+            reverse('references:delete', kwargs={'pk': self.property.pk}),
+        )
+        self.assertRedirects(response, reverse('references:list'))
+        self.assertTrue(Property.objects.filter(pk=self.property.pk).exists())
+
     def test_operator_cannot_delete_property(self):
         login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
         response = self.client.post(
@@ -432,6 +459,46 @@ class PropertyViewsTests(TestCase):
         self.assertFalse(Property.objects.filter(pk=self.property.pk).exists())
         self.assertFalse(Property.objects.filter(pk=extra.pk).exists())
 
+    def test_property_bulk_delete_skips_used_by_material(self):
+        login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
+        free = Property.objects.create(
+            name='free_prop',
+            display_name='Free Prop',
+            unit='',
+            data_type='string',
+            group=self.group,
+        )
+        material = Material.objects.create(
+            code='MAT-PROP-BULK',
+            name='Linked bulk',
+            home_workspace=self.workspace,
+        )
+        MaterialProperty.objects.create(
+            material=material,
+            property=self.property,
+            value='9',
+        )
+
+        confirm = self.client.post(
+            reverse('references:bulk_delete'),
+            {'ids': [str(self.property.pk), str(free.pk)]},
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, 'Free Prop')
+        self.assertContains(confirm, 'используется у 1 материала')
+        self.assertContains(confirm, 'Density')
+
+        done = self.client.post(
+            reverse('references:bulk_delete'),
+            {
+                'ids': [str(self.property.pk), str(free.pk)],
+                'confirm': '1',
+            },
+        )
+        self.assertRedirects(done, reverse('references:list'))
+        self.assertTrue(Property.objects.filter(pk=self.property.pk).exists())
+        self.assertFalse(Property.objects.filter(pk=free.pk).exists())
+
     def test_operator_cannot_bulk_delete_properties(self):
         login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
         response = self.client.post(
@@ -445,6 +512,13 @@ class PropertyViewsTests(TestCase):
         login_test_client(self.client, user=self.admin, workspace=self.workspace, password='pass-123')
         list_page = self.client.get(reverse('references:list'))
         self.assertContains(list_page, reverse('references:group_list'))
+        self.assertContains(list_page, 'card-header-tabs')
+        self.assertContains(list_page, '>Группы<')
+
+        groups_tab = self.client.get(reverse('references:group_list'))
+        self.assertEqual(groups_tab.status_code, 200)
+        self.assertContains(groups_tab, 'общие для всей системы')
+        self.assertContains(groups_tab, reverse('references:group_create'))
 
         create = self.client.post(
             reverse('references:group_create'),
@@ -474,7 +548,11 @@ class PropertyViewsTests(TestCase):
         self.assertRedirects(delete, reverse('references:group_list'))
         self.assertFalse(PropertyGroup.objects.filter(pk=group.pk).exists())
 
-    def test_operator_cannot_manage_property_groups(self):
+    def test_operator_can_view_but_not_manage_property_groups(self):
         login_test_client(self.client, user=self.operator, workspace=self.workspace, password='pass-123')
         response = self.client.get(reverse('references:group_list'))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Группы')
+        self.assertNotContains(response, reverse('references:group_create'))
+        create = self.client.get(reverse('references:group_create'))
+        self.assertEqual(create.status_code, 403)

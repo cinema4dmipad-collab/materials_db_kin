@@ -25,22 +25,37 @@ class FieldMapRow:
 
 
 def supported_fields(structure_type: StructureType):
+    """All structure columns for mapping (including legacy ForeignKey → material link)."""
     return list(
-        structure_type.fields.exclude(field_type='ForeignKey').order_by('sort_order', 'name')
+        StructureField.objects.filter(structure_type=structure_type).order_by(
+            'sort_order', 'name'
+        )
     )
 
 
+def _normalized_type(field_type: str) -> str:
+    if field_type == 'ForeignKey':
+        return 'MaterialLink'
+    return field_type or ''
+
+
 def fields_compatible(source: StructureField, target: StructureField) -> tuple[bool, str]:
-    if source.field_type == target.field_type:
+    src_type = _normalized_type(source.field_type)
+    tgt_type = _normalized_type(target.field_type)
+    if src_type == tgt_type:
         return True, ''
     # Soft conversions into text
-    if target.field_type == 'CharField':
+    if tgt_type in {'CharField', 'TextField'}:
         return True, 'Значение будет сохранено как строка.'
-    if source.field_type == 'IntegerField' and target.field_type == 'DecimalField':
+    if src_type == 'IntegerField' and tgt_type == 'DecimalField':
         return True, 'Целое будет записано как десятичное.'
-    if source.field_type == 'DecimalField' and target.field_type == 'IntegerField':
+    if src_type == 'FloatField' and tgt_type == 'DecimalField':
+        return True, ''
+    if src_type == 'DecimalField' and tgt_type in {'IntegerField', 'FloatField'}:
         return True, 'Дробная часть может быть потеряна.'
-    if source.field_type == 'BooleanField' and target.field_type in {'CharField', 'IntegerField'}:
+    if src_type == 'BooleanField' and tgt_type in {'CharField', 'TextField', 'IntegerField'}:
+        return True, ''
+    if src_type == 'MaterialLink' and tgt_type == 'MaterialLink':
         return True, ''
     return False, f'Типы несовместимы: {source.field_type} → {target.field_type}.'
 
@@ -83,7 +98,12 @@ def parse_mapping_from_post(post, target: StructureType) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for field in supported_fields(target):
         key = f'map_{field.name}'
-        mapping[field.name] = (post.get(key) or '').strip()
+        # Constructor may post multiple keys; prefer non-empty.
+        if hasattr(post, 'getlist'):
+            values = [v.strip() for v in post.getlist(key) if (v or '').strip()]
+            mapping[field.name] = values[0] if values else ''
+        else:
+            mapping[field.name] = (post.get(key) or '').strip()
     return mapping
 
 
@@ -97,6 +117,9 @@ def validate_mapping(
     source_by_name = {f.name: f for f in supported_fields(source)}
     claimed: dict[str, str] = {}
     for target_field in supported_fields(target):
+        # Legacy ForeignKey has no SQL column — show in UI, but do not require/copy.
+        if target_field.field_type == 'ForeignKey':
+            continue
         src_name = (mapping.get(target_field.name) or '').strip()
         if not src_name:
             if target_field.is_required and not (target_field.default_value or '').strip():
@@ -171,10 +194,14 @@ def build_target_payload(
     source_by_name = {f.name: f for f in supported_fields(source)}
     payload: dict = {}
     for target_field in supported_fields(target):
+        if target_field.field_type == 'ForeignKey':
+            continue
         src_name = (mapping.get(target_field.name) or '').strip()
         if not src_name:
             continue
-        source_field = source_by_name[src_name]
+        source_field = source_by_name.get(src_name)
+        if source_field is None or source_field.field_type == 'ForeignKey':
+            continue
         payload.update(
             _copy_value_for_target(
                 source_row=source_row,

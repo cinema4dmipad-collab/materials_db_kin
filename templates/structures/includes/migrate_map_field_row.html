@@ -1,0 +1,50 @@
+<tr class="import-map-row{% if row.target.is_required %} is-required-row{% endif %}{% if not row.source_name %} is-unmapped{% endif %}"
+    data-migrate-map-row
+    data-target-field="{{ row.target.name }}"
+    data-field-label="{{ row.target.label|escape }}"
+    data-is-required="{% if row.target.is_required %}1{% else %}0{% endif %}"
+    tabindex="0"
+    role="option"
+    aria-selected="false"
+    aria-label="Поле {{ row.target.label }}">
+    <td class="import-map-row__file">
+        <div class="import-map-row__head">
+            <div class="import-map-row__title">{{ row.target.label }}</div>
+            {% if row.target.is_required %}
+            <span class="import-required-badge">★ обязательно</span>
+            {% endif %}
+        </div>
+        <div class="import-map-row__sample">
+            <code>{{ row.target.name }}</code>
+            · {{ row.target.get_field_type_display }}
+        </div>
+    </td>
+    <td class="import-map-row__expr">
+        <span class="import-map-expr-slot{% if not row.source_name %} is-empty{% endif %}"
+              data-drop-slot
+              {% if row.source_name %}draggable="true"{% endif %}
+              title="{% if not row.source_name %}Перетащите поле исходной структуры сюда{% else %}Перетащите в другое поле или обратно в каталог{% endif %}">
+            <span class="import-map-expr-label">{% if row.source_name %}{{ row.source_label }}{% endif %}</span>
+        </span>
+        <input type="hidden"
+               name="map_{{ row.target.name }}"
+               class="migrate-map-source-value"
+               value="{{ row.source_name }}"
+               data-label="{% if row.source_name %}{{ row.source_label|escape }}{% endif %}">
+    </td>
+    <td class="import-map-row__parse">
+        <span class="badge text-bg-light border">{{ row.target.get_field_type_display }}</span>
+        {% if row.auto %}
+        <div class="form-text text-success mb-0">Авто по имени</div>
+        {% endif %}
+        {% if row.warning %}
+        <div class="form-text text-warning mb-0">{{ row.warning }}</div>
+        {% endif %}
+    </td>
+    <td class="import-map-row__actions">
+        <button type="button"
+                class="btn btn-link btn-sm text-danger migrate-map-clear-row p-0{% if not row.source_name %} d-none{% endif %}"
+                title="Очистить"
+                data-migrate-clear-row>×</button>
+    </td>
+</tr>

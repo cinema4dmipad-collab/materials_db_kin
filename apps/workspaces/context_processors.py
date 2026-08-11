@@ -65,7 +65,10 @@ def workspace_navigation(request):
             'icon': 'bi-sliders',
             'url': reverse('references:list'),
             'visible': can(WorkspacePerm.PROPERTY_VIEW),
-            'is_active': lambda n, u: n == 'references' and not (u or '').startswith('dictionary'),
+            'is_active': lambda n, u: (
+                n == 'references'
+                and not (u or '').startswith('dictionary')
+            ),
         },
         {
             'label': 'Справочники',

@@ -7,6 +7,7 @@ from apps.structures.diagnostics import SEVERITY_ERROR, run_structure_normalizat
 from apps.structures.migrate_service import (
     migrate_materials,
     suggest_field_mapping,
+    supported_fields,
     validate_mapping,
 )
 from apps.structures.models import StructureField, StructureType
@@ -95,6 +96,29 @@ class StructureMigrateServiceTests(TransactionTestCase):
         self.assertTrue(by_target['title'].auto)
         self.assertEqual(by_target['notes'].source_name, '')
         self.assertFalse(by_target['notes'].auto)
+
+    def test_supported_fields_lists_every_target_field(self):
+        StructureField.objects.create(
+            structure_type=self.target,
+            name='linked_mat',
+            label='Linked',
+            field_type='MaterialLink',
+            is_required=False,
+            sort_order=9,
+        )
+        StructureField.objects.create(
+            structure_type=self.target,
+            name='kind',
+            label='Kind',
+            field_type='ChoiceField',
+            is_required=False,
+            sort_order=10,
+            choice_options='a\nb',
+        )
+        names = {f.name for f in supported_fields(self.target)}
+        self.assertEqual(names, {'title', 'notes', 'linked_mat', 'kind'})
+        rows = suggest_field_mapping(self.source, self.target)
+        self.assertEqual({r.target.name for r in rows}, names)
 
     def test_migrate_copies_mapped_fields_and_optional_delete(self):
         row_id = insert_row(
@@ -210,7 +234,11 @@ class StructureMigrateViewsTests(TransactionTestCase):
 
         map_page = self.client.get(f'{reverse("structures:migrate")}?step=map')
         self.assertEqual(map_page.status_code, 200)
-        self.assertContains(map_page, 'Авто по имени поля')
+        self.assertContains(map_page, 'Поля целевой структуры')
+        self.assertContains(map_page, 'Поля исходной структуры')
+        self.assertContains(map_page, 'Авто по имени')
+        self.assertContains(map_page, 'name="map_title"')
+        self.assertContains(map_page, 'structure_migrate_mapping.js')
 
         mapped = self.client.post(
             reverse('structures:migrate'),

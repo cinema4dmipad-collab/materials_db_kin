@@ -8,18 +8,25 @@
         <h1 class="h4 mb-0">Удаление свойства</h1>
     </div>
     <div class="card-body">
+        {% if delete_blocked %}
+        <div class="alert alert-danger">
+            Нельзя удалить свойство
+            <strong>{{ property_obj.display_name }}</strong> (<code>{{ property_obj.name }}</code>):
+            {{ block_reason }}.
+            Сначала уберите это свойство у материалов.
+        </div>
+        <a href="{% url 'references:list' %}" class="btn btn-outline-secondary">К списку свойств</a>
+        {% else %}
         <div class="alert alert-warning">
             Вы уверены, что хотите удалить свойство
             <strong>{{ property_obj.display_name }}</strong> (<code>{{ property_obj.name }}</code>)?
-            {% if material_count %}
-            Значения этого свойства будут удалены у {{ material_count }} материал{{ material_count|pluralize:"а,ов" }}.
-            {% endif %}
         </div>
         <form method="post" class="d-flex gap-2">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">Удалить</button>
             <a href="{% url 'references:list' %}" class="btn btn-outline-secondary">Отмена</a>
         </form>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
