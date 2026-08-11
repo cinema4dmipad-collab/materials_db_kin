@@ -95,7 +95,10 @@ class MaterialAttachmentDeleteView(AppViewMixin, MaterialAttachmentMixin, Delete
         return material_attachments_for_material(self.material, self.request.active_workspace)
 
     def get_success_url(self):
-        return reverse('material_attachments:list', material_pk=self.material.pk)
+        return reverse(
+            'material_attachments:list',
+            kwargs={'material_pk': self.material.pk},
+        )
 
     def delete(self, request, *args, **kwargs):
         self._require_material_editable()
