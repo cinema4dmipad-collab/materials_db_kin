@@ -38,12 +38,17 @@
         overlay.setAttribute('aria-busy', isBusy ? 'true' : 'false');
     }
 
+    function setTitle(text) {
+        titleEl.textContent = text || '';
+        titleEl.setAttribute('title', text || '');
+    }
+
     function showProgress(mode, label) {
         var title = mode === 'download' ? 'Скачивание файла' : 'Загрузка файла';
         if (label) {
             title += ': ' + label;
         }
-        titleEl.textContent = title;
+        setTitle(title);
         barEl.style.width = '0%';
         barEl.classList.remove('progress-bar-animated');
         progressRoot.setAttribute('aria-valuenow', '0');
@@ -81,7 +86,7 @@
         if (!overlay && !initOverlay()) {
             return;
         }
-        titleEl.textContent = title || 'Передача';
+        setTitle(title || 'Передача');
         barEl.style.width = '35%';
         barEl.classList.add('progress-bar-animated', 'progress-bar-striped');
         progressRoot.setAttribute('aria-valuenow', '0');
