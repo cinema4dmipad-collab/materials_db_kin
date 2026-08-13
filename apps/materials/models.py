@@ -102,6 +102,14 @@ class Material(WorkspaceVisibilityMixin, models.Model):
         verbose_name='Источник импорта',
         help_text='Имя файла последнего импорта, затронувшего материал.',
     )
+    layers_symmetric = models.BooleanField(
+        default=False,
+        verbose_name='Симметричная укладка',
+        help_text=(
+            'В таблице задаётся первая половина слоёв (при нечёте последний — центральный); '
+            'вторая половина зеркалируется в превью и на карточке.'
+        ),
+    )
 
     def __str__(self):
         return f'{self.code} - {self.name}'

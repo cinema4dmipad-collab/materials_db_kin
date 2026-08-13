@@ -38,6 +38,14 @@ class PropertyNumberValueFormatTests(SimpleTestCase):
         )
         self.assertEqual(text, '1250,00')
 
+    def test_format_scalar_zero_decimal_places(self):
+        text = format_property_number_display(
+            value_kind=VALUE_KIND_SCALAR,
+            value=Decimal('1250'),
+            decimal_places=0,
+        )
+        self.assertEqual(text, '1250')
+
     def test_format_closed_range(self):
         text = format_property_number_display(
             value_kind=VALUE_KIND_RANGE,
@@ -129,6 +137,25 @@ class MaterialPropertyRangeFormTests(TestCase):
             data_type='number',
             decimal_places=2,
         )
+
+    def test_form_respects_zero_decimal_places(self):
+        prop = Property.objects.create(
+            name='wave_speed',
+            display_name='Wave speed',
+            unit='m/s',
+            data_type='number',
+            decimal_places=0,
+        )
+        link = MaterialProperty(
+            material=self.material,
+            property=prop,
+            value='2800',
+        )
+        form = MaterialPropertyForm(instance=link, workspace=self.workspace)
+        self.assertEqual(form.fields['value'].decimal_places, 0)
+        self.assertEqual(form.fields['value'].prepare_value('2800'), '2800')
+        self.assertEqual(form.fields['value'].widget.attrs.get('data-decimal-places'), '0')
+        self.assertEqual(link.display_value(), '2800')
 
     def test_form_saves_closed_range(self):
         form = MaterialPropertyForm(

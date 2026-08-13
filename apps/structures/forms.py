@@ -3,16 +3,19 @@ import uuid
 from django import forms
 from django.core.exceptions import ValidationError
 
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
 from apps.core.fields import LocalizedDecimalField, LocalizedFloatField
 from apps.core.number_utils import normalize_decimal_input, parse_decimal
 
 from apps.materials.form_widgets import material_select_widget_attrs
 from apps.materials.models import Material
 from apps.structures.choice_options import choice_pairs, resolved_choice_options
+from apps.structures.constants import (
+    DEFAULT_MAX_DIGITS,
+    STRUCTURE_FIELD_PREFIX,
+    resolve_structure_field_decimal_places,
+)
 from apps.structures.models import CHOICE_FIELD_TYPE, MATERIAL_LINK_FIELD_TYPE, StructureField
 from apps.structures import table_storage
-from apps.structures.constants import STRUCTURE_FIELD_PREFIX
 from apps.structures.structure_decimal_forms import (
     add_structure_decimal_fields,
     apply_structure_decimal_initial,
@@ -158,7 +161,7 @@ def _build_dynamic_field(structure_field: StructureField, workspace=None) -> for
             help_text=help_text,
             initial=initial,
             max_digits=structure_field.max_digits or DEFAULT_MAX_DIGITS,
-            decimal_places=structure_field.decimal_places or DEFAULT_DECIMAL_PLACES,
+            decimal_places=resolve_structure_field_decimal_places(structure_field),
         )
     if structure_field.field_type == 'FloatField':
         return LocalizedFloatField(

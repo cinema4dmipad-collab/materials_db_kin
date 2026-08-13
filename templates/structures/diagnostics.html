@@ -8,7 +8,7 @@
         <div>
             <h1 class="h4 mb-0">Диагностика нормализации структур</h1>
             <p class="text-muted small mb-0 mt-1">
-                Проверка связей материалов ↔ SQL-таблиц, колонок и флагов is_created
+                Проверка связей материалов ↔ SQL-таблиц, колонок, переименований и справочника свойств
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -32,6 +32,7 @@
                         <th>Проблема</th>
                         <th>Детали</th>
                         <th>Тип / материал</th>
+                        <th class="text-end">Действие</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -51,6 +52,27 @@
                         <td class="small">
                             {% if issue.structure_code %}<code>{{ issue.structure_code }}</code>{% endif %}
                             {% if issue.material_code %} · {{ issue.material_code }}{% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if issue.repair.action == 'rename_column' %}
+                            <form method="post"
+                                  class="d-inline"
+                                  data-confirm-delete-form
+                                  data-confirm-title="Переименовать колонку"
+                                  data-confirm-message="Переименовать «{{ issue.repair.old_name }}» → «{{ issue.repair.new_name }}» в таблице структуры?"
+                                  data-confirm-submit="Переименовать">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="rename_column">
+                                <input type="hidden" name="structure_code" value="{{ issue.repair.structure_code }}">
+                                <input type="hidden" name="old_name" value="{{ issue.repair.old_name }}">
+                                <input type="hidden" name="new_name" value="{{ issue.repair.new_name }}">
+                                <button type="submit" class="btn btn-sm btn-primary">
+                                    Переименовать колонку
+                                </button>
+                            </form>
+                            {% else %}
+                            —
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

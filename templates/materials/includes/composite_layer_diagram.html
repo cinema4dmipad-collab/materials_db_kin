@@ -1,31 +1,59 @@
+{% load ui_tags %}
 {% if layer_diagram %}
-<div class="composite-layer-diagram p-3 p-lg-4">
-    <h3 class="composite-layer-diagram__title">Схема укладки</h3>
-
-    {% if layer_diagram.material_legend %}
-    <div class="layer-material-legend mb-3">
-        {% for entry in layer_diagram.material_legend %}
-        <span class="layer-material-chip">
-            <span class="layer-material-chip-swatch" style="background-color: {{ entry.color }};"></span>
-            {{ entry.material_label }}
-        </span>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <div class="layer-stack-panel">
-        <div class="layer-stack-title">Сверху ↓ вниз</div>
-        <div class="layer-stack-column" style="--layer-stack-count: {{ layer_diagram.layer_count }};">
-            {% for item in layer_diagram.layers %}
-            <div class="layer-stack-segment"
-                 style="flex: {{ item.flex_grow }} 1 0%; background-color: {{ item.color }};"
-                 title="Слой {{ item.layer_number }}: {{ item.material_label }} · {{ item.thickness }} мм">
-                <span class="layer-stack-segment-index">#{{ item.layer_number }}</span>
-                <span class="layer-stack-material-code">{{ item.material_code }}</span>
+{{ layer_diagram.layers|json_script:"composite-layer-diagram-layers" }}
+<div id="composite-layer-diagram-static" class="h-100" data-layer-diagram-static>
+    <div class="composite-layer-diagram p-3 p-lg-4">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
+            <h3 class="composite-layer-diagram__title mb-0">Схема укладки</h3>
+            <div class="layer-legend-mode">
+                <label class="layer-legend-mode__label" for="layer-legend-mode-select">Режим легенды</label>
+                <select id="layer-legend-mode-select" class="form-select form-select-sm layer-legend-mode__select">
+                    {% for mode in layer_diagram.legend_modes %}
+                    <option value="{{ mode.value }}"{% if mode.value == layer_diagram.legend_mode %} selected{% endif %}>
+                        {{ mode.label }}
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
+        </div>
+
+        {% if layer_diagram.legend_mode == 'material' and layer_diagram.material_legend %}
+        <div class="layer-material-legend mb-3">
+            {% for entry in layer_diagram.material_legend %}
+            <span class="layer-material-chip">
+                <span class="layer-material-chip-swatch" style="background-color: {{ entry.color }};"></span>
+                {{ entry.material_label }}
+            </span>
             {% endfor %}
         </div>
-        <div class="layer-stack-caption">Один материал — один цвет</div>
+        {% elif layer_diagram.scale %}
+        <div class="layer-scale-legend mb-3" aria-label="Цветовая шкала">
+            <div class="layer-scale-legend__bar"></div>
+            <div class="layer-scale-legend__labels">
+                <span>{{ layer_diagram.scale.min|decimal_comma }} {{ layer_diagram.scale.unit }}</span>
+                <span>среднее</span>
+                <span>{{ layer_diagram.scale.max|decimal_comma }} {{ layer_diagram.scale.unit }}</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="layer-stack-panel">
+            <div class="layer-stack-title">Сверху ↓ вниз</div>
+            <div class="layer-stack-column" style="--layer-stack-count: {{ layer_diagram.layer_count }};">
+                {% for item in layer_diagram.layers %}
+                <div class="layer-stack-segment"
+                     style="flex: {{ item.flex_grow }} 1 0%; background-color: {{ item.color }};"
+                     data-material-id="{{ item.material_id }}"
+                     data-thickness="{{ item.thickness_value }}"
+                     data-angle="{{ item.angle_value }}"
+                     title="Слой {{ item.layer_number }}: {{ item.material_label }} · {{ item.thickness }} мм · {{ item.angle }}°">
+                    <span class="layer-stack-segment-index">#{{ item.layer_number }}</span>
+                    <span class="layer-stack-material-code">{{ item.material_code }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="layer-stack-caption">{{ layer_diagram.legend_caption }}</div>
+        </div>
     </div>
 </div>
 {% endif %}

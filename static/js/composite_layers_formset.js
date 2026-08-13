@@ -53,7 +53,7 @@
             return false;
         }
         return Boolean(element.closest(
-            'input:not([type="hidden"]):not([readonly]), select, textarea, .material-picker-field__label',
+            'input:not([type="hidden"]):not([readonly]), select, textarea, .material-picker-field__label, .layer-thickness-lock-btn',
         ));
     }
 
@@ -62,8 +62,246 @@
             return false;
         }
         return Boolean(element.closest(
-            '.layer-drag-handle, input, select, textarea, button, .material-picker-field',
+            '.layer-drag-handle, input, select, textarea, button, .material-picker-field, .layer-thickness-lock-btn',
         ));
+    }
+
+    function parseLocalizedNumber(value) {
+        var text = String(value == null ? '' : value).trim().replace(/\u00a0/g, '').replace(/\s/g, '');
+        if (!text) {
+            return NaN;
+        }
+        return parseFloat(text.replace(',', '.'));
+    }
+
+    function formatLocalizedNumber(value, decimals) {
+        var places = decimals == null ? 4 : decimals;
+        var fixed = Number(value).toFixed(places);
+        fixed = fixed.replace(/\.?0+$/, '');
+        if (!fixed || fixed === '-') {
+            fixed = '0';
+        }
+        return fixed.replace('.', ',');
+    }
+
+    function isThicknessLocked(row) {
+        var input = row.querySelector('input[name$="-thickness_locked"]');
+        return Boolean(input && input.checked);
+    }
+
+    function syncThicknessLockUI(row) {
+        var lockInput = row.querySelector('input[name$="-thickness_locked"]');
+        var lockBtn = row.querySelector('.layer-thickness-lock-btn');
+        var thicknessInput = row.querySelector('input[name$="-thickness"]');
+        if (!lockInput || !lockBtn) {
+            return;
+        }
+        var locked = Boolean(lockInput.checked);
+        lockBtn.setAttribute('aria-pressed', locked ? 'true' : 'false');
+        lockBtn.title = locked ? 'Снять фиксацию толщины' : 'Зафиксировать толщину';
+        lockBtn.setAttribute('aria-label', lockBtn.title);
+        var icon = lockBtn.querySelector('i');
+        if (icon) {
+            icon.className = locked ? 'bi bi-lock-fill' : 'bi bi-unlock';
+        }
+        if (thicknessInput) {
+            thicknessInput.readOnly = locked;
+        }
+        row.classList.toggle('layer-form-row--thickness-locked', locked);
+    }
+
+    function setThicknessLocked(row, locked) {
+        var lockInput = row.querySelector('input[name$="-thickness_locked"]');
+        if (!lockInput) {
+            return;
+        }
+        lockInput.checked = Boolean(locked);
+        syncThicknessLockUI(row);
+    }
+
+    function currentLayersTotal(container) {
+        return getVisibleRows(container).reduce(function (sum, row) {
+            var thicknessInput = row.querySelector('input[name$="-thickness"]');
+            var value = parseLocalizedNumber(thicknessInput && thicknessInput.value);
+            if (Number.isNaN(value) || value < 0) {
+                return sum;
+            }
+            return sum + value;
+        }, 0);
+    }
+
+    function distributeThicknesses(thicknesses, locked, targetTotal, decimals) {
+        var places = decimals == null ? 4 : decimals;
+        if (!thicknesses.length) {
+            return { error: 'Нет слоёв для расчёта.' };
+        }
+        if (!(targetTotal > 0)) {
+            return { error: 'Укажите целевую общую толщину больше 0.' };
+        }
+
+        var result = thicknesses.map(function (value) {
+            return Number(value) || 0;
+        });
+        var unlockedIndexes = [];
+        var lockedSum = 0;
+
+        for (var i = 0; i < result.length; i += 1) {
+            if (locked[i]) {
+                if (result[i] < 0) {
+                    return { error: 'Зафиксированная толщина не может быть отрицательной.' };
+                }
+                lockedSum += result[i];
+            } else {
+                unlockedIndexes.push(i);
+            }
+        }
+
+        if (!unlockedIndexes.length) {
+            return { error: 'Все слои зафиксированы — нечего пересчитывать.' };
+        }
+
+        var remaining = targetTotal - lockedSum;
+        if (remaining < 0) {
+            return { error: 'Сумма зафиксированных толщин больше целевой общей толщины.' };
+        }
+        if (remaining === 0) {
+            return { error: 'На незафиксированные слои не осталось толщины.' };
+        }
+
+        var factor = Math.pow(10, places);
+        var share = Math.round((remaining / unlockedIndexes.length) * factor) / factor;
+        var assigned = 0;
+        unlockedIndexes.forEach(function (index, position) {
+            var value;
+            if (position === unlockedIndexes.length - 1) {
+                value = Math.round((remaining - assigned) * factor) / factor;
+            } else {
+                value = share;
+                assigned += value;
+            }
+            result[index] = value;
+        });
+        return { thicknesses: result };
+    }
+
+    function isSymmetricMode() {
+        var checkbox = document.getElementById('id_layers_symmetric');
+        return Boolean(checkbox && checkbox.checked);
+    }
+
+    function applyThicknessCalculation(container, targetInput) {
+        var rows = getVisibleRows(container);
+        if (!rows.length) {
+            window.alert('Добавьте хотя бы один слой.');
+            return;
+        }
+
+        var targetRaw = targetInput ? String(targetInput.value || '').trim() : '';
+        var targetTotal = parseLocalizedNumber(targetRaw);
+        var symmetric = isSymmetricMode();
+        if (!targetRaw || Number.isNaN(targetTotal)) {
+            targetTotal = currentLayersTotal(container);
+            if (symmetric && window.CompositeLayerDiagramLive) {
+                var seed = rows.map(function (row) {
+                    var thicknessInput = row.querySelector('input[name$="-thickness"]');
+                    return {
+                        thickness: parseLocalizedNumber(thicknessInput && thicknessInput.value) || 0,
+                    };
+                });
+                var expandedSeed = window.CompositeLayerDiagramLive.expandSymmetricLayers(seed);
+                targetTotal = expandedSeed.reduce(function (sum, layer) {
+                    return sum + (layer.thickness > 0 ? layer.thickness : 0);
+                }, 0);
+            }
+            if (targetInput && targetTotal > 0) {
+                targetInput.value = formatLocalizedNumber(targetTotal, 4);
+            }
+        }
+        if (!(targetTotal > 0)) {
+            window.alert('Укажите целевую общую толщину больше 0.');
+            if (targetInput) {
+                targetInput.focus();
+            }
+            return;
+        }
+
+        var thicknesses = [];
+        var locked = [];
+        rows.forEach(function (row) {
+            var thicknessInput = row.querySelector('input[name$="-thickness"]');
+            thicknesses.push(parseLocalizedNumber(thicknessInput && thicknessInput.value) || 0);
+            locked.push(isThicknessLocked(row));
+        });
+
+        var resultThicknesses;
+        if (symmetric && window.CompositeLayerDiagramLive) {
+            var defining = thicknesses.map(function (value, index) {
+                return {
+                    thickness: value,
+                    thickness_locked: locked[index],
+                };
+            });
+            var expanded = window.CompositeLayerDiagramLive.expandSymmetricLayers(defining);
+            var expandedThicknesses = expanded.map(function (layer) {
+                return layer.thickness || 0;
+            });
+            var expandedLocked = expanded.map(function (layer) {
+                return Boolean(layer.thickness_locked);
+            });
+            var expandedResult = distributeThicknesses(
+                expandedThicknesses,
+                expandedLocked,
+                targetTotal,
+                4,
+            );
+            if (expandedResult.error) {
+                window.alert(expandedResult.error);
+                return;
+            }
+            resultThicknesses = expandedResult.thicknesses.slice(0, rows.length);
+        } else {
+            var result = distributeThicknesses(thicknesses, locked, targetTotal, 4);
+            if (result.error) {
+                window.alert(result.error);
+                return;
+            }
+            resultThicknesses = result.thicknesses;
+        }
+
+        rows.forEach(function (row, index) {
+            if (locked[index]) {
+                return;
+            }
+            var thicknessInput = row.querySelector('input[name$="-thickness"]');
+            if (thicknessInput) {
+                thicknessInput.value = formatLocalizedNumber(resultThicknesses[index], 4);
+            }
+        });
+        refreshDiagram(container);
+    }
+
+    function bindThicknessLocks(container) {
+        if (container.dataset.thicknessLockBound === 'true') {
+            return;
+        }
+        container.dataset.thicknessLockBound = 'true';
+
+        container.addEventListener('click', function (event) {
+            var lockBtn = event.target.closest('.layer-thickness-lock-btn');
+            if (!lockBtn || !container.contains(lockBtn)) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            var row = lockBtn.closest('.layer-form-row');
+            if (!row) {
+                return;
+            }
+            setThicknessLocked(row, !isThicknessLocked(row));
+        });
+
+        getVisibleRows(container).forEach(syncThicknessLockUI);
+        container.querySelectorAll('.layer-form-row').forEach(syncThicknessLockUI);
     }
 
     function updateEmptyState(container) {
@@ -167,6 +405,7 @@
             if (newRow) {
                 copyRowValues(sourceRow, newRow);
                 bindRow(container, newRow, totalFormsInput, ui, state);
+                syncThicknessLockUI(newRow);
             }
         });
         renumberLayers(container);
@@ -474,6 +713,7 @@
         row.setAttribute('aria-selected', 'false');
 
         if (row.dataset.rowBound === 'true') {
+            syncThicknessLockUI(row);
             return;
         }
         row.dataset.rowBound = 'true';
@@ -491,6 +731,7 @@
             }
             handleRowSelection(container, row, event, ui, state);
         });
+        syncThicknessLockUI(row);
     }
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -501,6 +742,8 @@
         var deleteBtn = document.getElementById('delete-layers-btn');
         var moveUpBtn = document.getElementById('move-layers-up-btn');
         var moveDownBtn = document.getElementById('move-layers-down-btn');
+        var calculateBtn = document.getElementById('calculate-layer-thickness-btn');
+        var targetThicknessInput = document.getElementById('composite-target-thickness');
         var selectionMeta = document.getElementById('layers-selection-meta');
         var totalFormsInput = document.getElementById('id_layers-TOTAL_FORMS');
         var form = container ? container.closest('form') : null;
@@ -529,6 +772,7 @@
             if (lastRow) {
                 copyRowValues(lastRow, row);
             }
+            syncThicknessLockUI(row);
             renumberLayers(container);
             refreshDiagram(container);
             clearSelection(container);
@@ -562,6 +806,7 @@
         });
 
         bindLiveUpdates(container);
+        bindThicknessLocks(container);
 
         if (window.MaterialPickerFields) {
             window.MaterialPickerFields.init(container);
@@ -586,6 +831,17 @@
                 updateToolbarState(container, ui);
             });
         }
+        if (calculateBtn) {
+            calculateBtn.addEventListener('click', function () {
+                applyThicknessCalculation(container, targetThicknessInput);
+            });
+        }
+        var symmetricCheckbox = document.getElementById('id_layers_symmetric');
+        if (symmetricCheckbox) {
+            symmetricCheckbox.addEventListener('change', function () {
+                refreshDiagram(container);
+            });
+        }
 
         bindDragAndDrop(container, totalFormsInput, ui);
         bindKeyboardShortcuts(container, totalFormsInput, ui);
@@ -600,5 +856,17 @@
         renumberLayers(container);
         refreshDiagram(container);
         updateToolbarState(container, ui);
+        if (targetThicknessInput && !String(targetThicknessInput.value || '').trim()) {
+            var initialTotal = currentLayersTotal(container);
+            if (initialTotal > 0) {
+                targetThicknessInput.value = formatLocalizedNumber(initialTotal, 4);
+            }
+        }
     });
+
+    window.CompositeLayerThicknessCalc = {
+        distributeThicknesses: distributeThicknesses,
+        formatLocalizedNumber: formatLocalizedNumber,
+        parseLocalizedNumber: parseLocalizedNumber,
+    };
 })();

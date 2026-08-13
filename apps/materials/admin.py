@@ -94,7 +94,7 @@ class CompositeLayerInline(admin.TabularInline):
     fk_name = 'parent_material'
     form = CompositeLayerForm
     formset = CompositeLayerFormSet
-    fields = ['layer_number', 'material', 'angle', 'thickness']
+    fields = ['layer_number', 'material', 'angle', 'thickness', 'thickness_locked']
     extra = 0
     verbose_name = 'слой'
     verbose_name_plural = 'слои композита'

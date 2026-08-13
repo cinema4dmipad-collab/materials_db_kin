@@ -10,7 +10,7 @@ from apps.core.property_number_value import (
     VALUE_KIND_TOLERANCE,
     clean_number_property_fields,
 )
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES
+from apps.structures.constants import resolve_structure_field_decimal_places
 from apps.structures.decimal_range import decimal_storage_columns, pack_decimal_field_data
 from apps.structures.models import StructureField
 
@@ -89,7 +89,7 @@ def _is_blank_sql_value(value) -> bool:
 
 def _decimal_sql(structure_field: StructureField, parsed: dict) -> dict | None:
     kind = parsed.get('value_kind') or VALUE_KIND_SCALAR
-    places = structure_field.decimal_places or DEFAULT_DECIMAL_PLACES
+    places = resolve_structure_field_decimal_places(structure_field)
     try:
         if kind == VALUE_KIND_RANGE:
             normalized = clean_number_property_fields(

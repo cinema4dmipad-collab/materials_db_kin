@@ -54,6 +54,8 @@ Once `is_created=True`:
 
 Templates: `templates/structures/type_form.html`, `type_manage.html`, `list.html`, `includes/table_name_field.html`.
 
+Field picker (`structure_type_form.js` + `reference_properties_picker.js`): blocks properties already present by **property id**, **column name**, or **label** (prevents `matrix` + `matrix_mat` both labeled «Матрица»). Round-trip «Создать свойство» saves a sessionStorage draft, restores it, and auto-adds `created_property` once.
+
 ## Admin
 
 Structure types and fields in admin; **Create table** action calls `SQLExecutor.create_table()`.

@@ -6,7 +6,7 @@ Physical **specimens** derived from materials.
 
 ## Model
 
-**Sample** — code, name, material (FK), object type (test, control, product, …), tags, workspace, creator, description.
+**Sample** — code, name, material (FK), object type (test, control, product, …), tags, workspace, creator, description; optional `struct_type` + `struct_props_id` for a **per-sample copy** of structure parameters (SQL row), independent of the material row.
 
 **SampleProperty** — property values; copied from material on create, editable per sample. Numeric properties support scalar / range / ± (same as materials).
 
@@ -33,13 +33,18 @@ Sample form uses the shared **material picker** modal with tabs:
 
 `SampleForm` limits `material` queryset to `materials_visible_in(workspace)`.
 
-## Property Inheritance
+## Property and structure inheritance
 
-When material is selected in the form, properties **prefill** from the material card. Changed values save only on the sample.
+When material is selected (or changed) in the form:
+
+* **Structure parameters** prefill from the material’s SQL row and save to the sample’s own `struct_props_id` (never writes the material row). Changing material discards the previous sample row and copies from the new material.
+* **Catalog properties** prefill into `SampleProperty` rows; changed values save only on the sample.
+
+Legacy samples without `struct_props_id` still **display** material structure params on the detail page until first save of the sample form.
 
 Adding a property not present on the material shows a warning (allowed — sample may have extra parameters).
 
-Formset: `static/js/sample_properties_formset.js`.
+Form / JS: `apps/samples/forms.py` (`SampleForm` structure fields), `static/js/sample_properties_formset.js` (material change → `_apply_material` re-render).
 
 ## Relation to Scans
 

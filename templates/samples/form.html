@@ -36,11 +36,15 @@
                 {{ form.name }}
                 {% if form.name.errors %}<div class="invalid-feedback d-block">{{ form.name.errors }}</div>{% endif %}
             </div>
+            <input type="hidden" name="_apply_material" value="" id="apply-material-flag">
             <div class="mb-3">
                 <label for="{{ form.material.id_for_label }}" class="form-label">{{ form.material.label }}</label>
                 {{ form.material }}
                 {% if form.material.errors %}<div class="invalid-feedback d-block">{{ form.material.errors }}</div>{% endif %}
-                <div class="form-text">При смене материала его свойства подставятся автоматически; значения можно изменить для образца.</div>
+                <div class="form-text">
+                    При смене материала параметры структуры и свойства подставятся автоматически;
+                    правки сохраняются только для этого образца.
+                </div>
             </div>
             <div class="mb-3">
                 <label for="{{ form.object_type.id_for_label }}" class="form-label">{{ form.object_type.label }}</label>
@@ -81,10 +85,15 @@
 </div>
 {% endblock %}
 
+{% block extra_head %}
+<link href="{% static 'css/choice_picker.css' %}?v={{ app_version }}-dict1" rel="stylesheet">
+{% endblock %}
+
 {% block extra_scripts %}
-<script src="{% static 'js/reference_properties_picker.js' %}"></script>
+<script src="{% static 'js/reference_properties_picker.js' %}?v={{ app_version }}-rpp2"></script>
 <script src="{% static 'js/reference_materials_picker.js' %}"></script>
 <script src="{% static 'js/material_picker_fields.js' %}"></script>
+<script src="{% static 'js/choice_picker_fields.js' %}"></script>
 <script src="{% static 'js/property_number_value.js' %}?v={{ app_version }}-pnv2"></script>
-<script src="{% static 'js/sample_properties_formset.js' %}"></script>
+<script src="{% static 'js/sample_properties_formset.js' %}?v={{ app_version }}-spf2"></script>
 {% endblock %}

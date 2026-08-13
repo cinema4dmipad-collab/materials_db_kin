@@ -15,6 +15,11 @@
                     <strong>{{ structure_type.name }}</strong>?
                 </p>
                 <p class="text-danger">Все данные в таблице будут безвозвратно потеряны.</p>
+                <p class="mb-0">
+                    Тип структуры и список полей <strong>останутся как черновик</strong>.
+                    Потом можно снова нажать «Создать» таблицу или удалить черновик целиком.
+                    Создавать новый тип с теми же именами полей не нужно.
+                </p>
                 {% if linked_materials_count %}
                 <div class="alert alert-warning">
                     {{ linked_materials_count }} материал(ов) ссылаются на этот тип структуры.

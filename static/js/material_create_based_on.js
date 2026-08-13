@@ -1,13 +1,16 @@
 (function () {
     'use strict';
 
-    document.addEventListener('DOMContentLoaded', function () {
-        var button = document.getElementById('create-based-on-btn');
-        if (!button || !window.ReferenceMaterialsPicker) {
+    function bindCreateBasedOn(button) {
+        if (!button || button.dataset.boundCreateBasedOn === 'true') {
             return;
         }
+        button.dataset.boundCreateBasedOn = 'true';
 
         button.addEventListener('click', function () {
+            if (!window.ReferenceMaterialsPicker) {
+                return;
+            }
             var createUrl = button.dataset.createUrl;
             if (!createUrl) {
                 return;
@@ -22,5 +25,13 @@
                 },
             });
         });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-create-based-on]').forEach(bindCreateBasedOn);
+        var legacy = document.getElementById('create-based-on-btn');
+        if (legacy) {
+            bindCreateBasedOn(legacy);
+        }
     });
 })();

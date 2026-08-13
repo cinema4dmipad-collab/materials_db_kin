@@ -473,8 +473,16 @@ class MaterialFormsetMixin:
                     if layer_formset is not None:
                         layer_formset.save()
                     saved = True
-        except forms.ValidationError as exc:
-            form.add_error(None, exc)
+        except (forms.ValidationError, ValidationError) as exc:
+            # Layer/property formsets may raise field-keyed errors; MaterialForm
+            # must only receive non-field messages here.
+            error_dict = getattr(exc, 'error_dict', None)
+            if error_dict:
+                for messages_list in error_dict.values():
+                    for message in messages_list:
+                        form.add_error(None, message)
+            else:
+                form.add_error(None, exc)
 
         if saved:
             return HttpResponseRedirect(self.get_success_url())
@@ -633,6 +641,11 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
             if can_link_material_to_workspace(user, material, workspace)
         }
         context['material_linked_pks'] = material_pks_linked_in_workspace(workspace)
+        if scope == MATERIAL_SCOPE_WORKSPACE:
+            from apps.materials.picker_data import materials_for_picker
+
+            context['reference_materials'] = materials_for_picker(workspace)
+            context['show_create_based_on'] = True
         context.update(_import_debug_context(self.request))
         return context
 
@@ -885,8 +898,12 @@ class MaterialDetailView(AppViewMixin, DetailView):
 
     def get_layer_diagram(self, composite_layers):
         from apps.composites.layer_diagram import build_layer_diagram
+        from apps.composites.layer_symmetry import expand_symmetric_layer_objects
 
-        return build_layer_diagram(composite_layers)
+        layers = list(composite_layers)
+        if self.object.layers_symmetric:
+            layers = expand_symmetric_layer_objects(layers)
+        return build_layer_diagram(layers)
 
     def get_composite_layers(self):
         return self.object.composite_layers.select_related('material').order_by('layer_number')

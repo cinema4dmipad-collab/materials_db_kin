@@ -915,6 +915,8 @@ class DashboardTests(AuthenticatedWorkspaceTestCase):
         self.assertContains(response, self.workspace.name)
         self.assertContains(response, 'Недавние материалы')
         self.assertContains(response, 'Недавние образцы')
+        self.assertContains(response, 'data-create-based-on')
+        self.assertContains(response, 'Создать на основе')
 
     def test_dashboard_shows_russian_date(self):
         from django.utils import timezone

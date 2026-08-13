@@ -1,7 +1,11 @@
 (function () {
     'use strict';
 
-    const DRAFT_STORAGE_KEY = 'structure-type-form-draft';
+    function getDraftStorageKey() {
+        const form = document.getElementById('structure-type-form');
+        const scope = form?.dataset?.structureDraftKey || 'new';
+        return `structure-type-form-draft:${scope}`;
+    }
 
     const CYRILLIC = {
         а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z',
@@ -162,6 +166,62 @@
         return ids;
     }
 
+    function getUsedLabels() {
+        const labels = new Set();
+        getVisibleFieldRows().forEach((row) => {
+            const value = row.querySelector('[name$="-label"]')?.value?.trim().toLowerCase();
+            if (value) {
+                labels.add(value);
+            }
+        });
+        return labels;
+    }
+
+    function annotateReferencePropertyIds() {
+        const picker = window.ReferencePropertiesPicker;
+        if (!picker?.getReferenceProperties) {
+            return;
+        }
+        const byName = new Map();
+        picker.getReferenceProperties().forEach((item) => {
+            if (item?.name && item.property_id) {
+                byName.set(String(item.name).toLowerCase(), String(item.property_id));
+            }
+        });
+        getVisibleFieldRows().forEach((row) => {
+            if (row.dataset.referencePropertyId) {
+                return;
+            }
+            const name = row.querySelector('[name$="-name"]')?.value?.trim().toLowerCase();
+            if (name && byName.has(name)) {
+                row.dataset.referencePropertyId = byName.get(name);
+            }
+        });
+    }
+
+    function markRowAsExisting(row) {
+        if (!row) {
+            return;
+        }
+        row.dataset.existingField = 'true';
+        const requiredWrap = row.querySelector('.structure-field-item__required');
+        const isRequired = Boolean(row.querySelector('input[name$="-is_required"]')?.checked);
+        if (requiredWrap) {
+            requiredWrap.remove();
+        }
+        const meta = row.querySelector('.structure-field-item__meta');
+        if (isRequired && meta && !meta.querySelector('.badge.text-bg-secondary')) {
+            const badge = document.createElement('span');
+            badge.className = 'badge text-bg-secondary';
+            badge.textContent = 'Обязательное';
+            meta.appendChild(badge);
+        }
+        const list = getFieldList();
+        if (list?.dataset.canDeleteExisting === 'false') {
+            row.querySelector('.delete-row-btn')?.remove();
+        }
+    }
+
     function getNextSortOrder() {
         let maxOrder = 0;
         getVisibleFieldRows().forEach((row) => {
@@ -298,6 +358,15 @@
         syncRowSummary(row);
     }
 
+    function propertyMetaLine(item) {
+        const picker = window.ReferencePropertiesPicker;
+        const escapeHtml = picker.escapeHtml;
+        const typeLabel = item.data_type === 'choice'
+            ? (picker.DATA_TYPE_LABELS.choice || 'Выбор из списка')
+            : fieldTypeLabel(item.field_type);
+        return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(typeLabel)}`;
+    }
+
     function renderReferencePropertiesList(filterText = '') {
         const picker = window.ReferencePropertiesPicker;
         if (!picker) {
@@ -307,13 +376,8 @@
             filterText,
             getUsedPropertyIds,
             getUsedColumnNames,
-            metaLine(item) {
-                const escapeHtml = picker.escapeHtml;
-                const typeLabel = item.data_type === 'choice'
-                    ? (picker.DATA_TYPE_LABELS.choice || 'Выбор из списка')
-                    : fieldTypeLabel(item.field_type);
-                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(typeLabel)}`;
-            },
+            getUsedLabels,
+            metaLine: propertyMetaLine,
         });
     }
 
@@ -369,15 +433,15 @@
             }
         });
 
-        sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ entries, referenceIds }));
+        sessionStorage.setItem(getDraftStorageKey(), JSON.stringify({ entries, referenceIds }));
     }
 
     function clearFormDraft() {
-        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+        sessionStorage.removeItem(getDraftStorageKey());
     }
 
     function restoreFormDraft() {
-        const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+        const raw = sessionStorage.getItem(getDraftStorageKey());
         if (!raw) {
             return false;
         }
@@ -467,8 +531,7 @@
             }
 
             if (idEntry?.value) {
-                row.dataset.existingField = 'true';
-                row.querySelector('.structure-field-item__required')?.remove();
+                markRowAsExisting(row);
             }
 
             bindDeleteButtons(row);
@@ -477,9 +540,58 @@
         });
 
         reindexForms();
+        annotateReferencePropertyIds();
         updateEmptyState();
         clearFormDraft();
         return true;
+    }
+
+    function getCreatedPropertyIdFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const values = params.getAll('created_property');
+        return values.length ? values[values.length - 1] : '';
+    }
+
+    function cleanupCreatedPropertyParam() {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has('created_property')) {
+            return;
+        }
+        url.searchParams.delete('created_property');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    }
+
+    function findPropertyPayload(propertyId) {
+        const picker = window.ReferencePropertiesPicker;
+        if (!picker?.getReferenceProperties || !propertyId) {
+            return null;
+        }
+        return picker.getReferenceProperties().find((item) => item.property_id === propertyId) || null;
+    }
+
+    function addCreatedPropertyFromUrl() {
+        const propertyId = getCreatedPropertyIdFromUrl();
+        cleanupCreatedPropertyParam();
+        if (!propertyId) {
+            return;
+        }
+        if (getUsedPropertyIds().has(propertyId)) {
+            return;
+        }
+        const payload = findPropertyPayload(propertyId);
+        if (!payload) {
+            return;
+        }
+        const name = (payload.name || '').toLowerCase();
+        const label = (payload.label || '').toLowerCase();
+        if (getUsedColumnNames().has(name) || getUsedLabels().has(label)) {
+            return;
+        }
+        const row = appendRowFromTemplate();
+        if (row) {
+            fillRowFromPropertyData(row, payload);
+            updateEmptyState();
+        }
     }
 
     function shouldOpenPropertiesModal() {
@@ -505,18 +617,35 @@
             openButtonId: 'add-from-properties-btn',
             getUsedPropertyIds,
             getUsedColumnNames,
-            metaLine(item) {
-                const escapeHtml = picker.escapeHtml;
-                const typeLabel = item.data_type === 'choice'
-                    ? (picker.DATA_TYPE_LABELS.choice || 'Выбор из списка')
-                    : fieldTypeLabel(item.field_type);
-                return `<code>${escapeHtml(item.name)}</code> · ${escapeHtml(typeLabel)}`;
-            },
+            getUsedLabels,
+            metaLine: propertyMetaLine,
             onConfirm(payloads) {
+                const usedIds = getUsedPropertyIds();
+                const usedNames = getUsedColumnNames();
+                const usedLabels = getUsedLabels();
                 payloads.forEach((payload) => {
+                    const propertyId = payload.property_id;
+                    const name = (payload.name || '').toLowerCase();
+                    const label = (payload.label || '').toLowerCase();
+                    if (
+                        (propertyId && usedIds.has(propertyId))
+                        || (name && usedNames.has(name))
+                        || (label && usedLabels.has(label))
+                    ) {
+                        return;
+                    }
                     const row = appendRowFromTemplate();
                     if (row) {
                         fillRowFromPropertyData(row, payload);
+                        if (propertyId) {
+                            usedIds.add(propertyId);
+                        }
+                        if (name) {
+                            usedNames.add(name);
+                        }
+                        if (label) {
+                            usedLabels.add(label);
+                        }
                     }
                 });
                 updateEmptyState();
@@ -536,6 +665,7 @@
             const createUrl = new URL(link.href, window.location.origin);
             const returnUrl = new URL(window.location.href);
             returnUrl.searchParams.delete('open_properties');
+            returnUrl.searchParams.delete('created_property');
             createUrl.searchParams.set('next', returnUrl.pathname + returnUrl.search);
             link.href = createUrl.toString();
         });
@@ -556,6 +686,7 @@
             bindRequiredMirror(row);
             syncRowSummary(row);
         });
+        annotateReferencePropertyIds();
         updateEmptyState();
     }
 
@@ -569,11 +700,13 @@
                 bindRequiredMirror(row);
                 syncRowSummary(row);
             });
+            annotateReferencePropertyIds();
         }
 
         const modal = bindPropertiesModal();
         bindCreatePropertyLink();
         bindFormSubmitClearDraft();
+        addCreatedPropertyFromUrl();
 
         if (shouldOpenPropertiesModal()) {
             cleanupOpenPropertiesParam();

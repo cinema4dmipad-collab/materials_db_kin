@@ -40,7 +40,11 @@ from apps.structures.property_mapping import (
     structure_column_name_from_property,
     structure_field_label_from_property,
 )
-from apps.structures.type_forms import StructureFieldForm, StructureTypeForm
+from apps.structures.type_forms import (
+    StructureFieldForm,
+    StructureFieldInlineFormSet,
+    StructureTypeForm,
+)
 
 
 from apps.references.models import Property, PropertyGroup
@@ -80,6 +84,100 @@ class PropertyMappingTests(TestCase):
         data = property_to_structure_field_data(prop)
 
         self.assertEqual(data['decimal_places'], 2)
+
+    def test_property_maps_zero_decimal_places(self):
+        prop = Property.objects.create(
+            name='wave_speed',
+            display_name='Скорость волн',
+            unit='m/s',
+            data_type='number',
+            decimal_places=0,
+            group=self.group,
+        )
+        data = property_to_structure_field_data(prop)
+        self.assertEqual(data['decimal_places'], 0)
+
+    def test_resolve_structure_field_decimal_places_prefers_property(self):
+        from apps.structures.constants import resolve_structure_field_decimal_places
+        from apps.structures.decimal_places_sync import sync_structure_decimal_places_from_catalog
+
+        Property.objects.create(
+            name='thickness',
+            display_name='Толщина',
+            unit='мм',
+            data_type='number',
+            decimal_places=4,
+            group=self.group,
+        )
+        structure_type = StructureType.objects.create(
+            name='Ares decimal sync',
+            code='ares_decimal_sync',
+            table_name='structures_ares_decimal_sync',
+        )
+        field = StructureField.objects.create(
+            structure_type=structure_type,
+            name='thickness',
+            label='Толщина',
+            field_type='DecimalField',
+            max_digits=10,
+            decimal_places=2,
+            sort_order=1,
+        )
+        self.assertEqual(resolve_structure_field_decimal_places(field), 4)
+        sync_structure_decimal_places_from_catalog([field])
+        field.refresh_from_db()
+        self.assertEqual(field.decimal_places, 4)
+
+    def test_structure_decimal_form_allows_property_precision(self):
+        from apps.structures.structure_decimal_forms import (
+            add_structure_decimal_fields,
+            clean_structure_decimal_fields,
+            structure_decimal_field_names,
+        )
+
+        Property.objects.create(
+            name='density',
+            display_name='Плотность',
+            unit='г/см³',
+            data_type='number',
+            decimal_places=3,
+            group=self.group,
+        )
+        structure_type = StructureType.objects.create(
+            name='Ares precision form',
+            code='ares_precision_form',
+            table_name='structures_ares_precision_form',
+        )
+        field = StructureField.objects.create(
+            structure_type=structure_type,
+            name='density',
+            label='Плотность',
+            field_type='DecimalField',
+            max_digits=10,
+            decimal_places=2,
+            sort_order=1,
+        )
+        names = structure_decimal_field_names(field.pk)
+
+        class _Form(forms.Form):
+            def __init__(self, *args, structure_field=None, **kwargs):
+                super().__init__(*args, **kwargs)
+                add_structure_decimal_fields(self, structure_field)
+
+        form = _Form(
+            {
+                names['value']: '1,234',
+                names['min']: '',
+                names['max']: '',
+                names['tolerance']: '',
+                names['kind']: 'scalar',
+            },
+            structure_field=field,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        clean_structure_decimal_fields(form, field, form.cleaned_data)
+        self.assertEqual(form.cleaned_data[names['value']], '1.234')
+        self.assertEqual(form.fields[names['value']].widget.attrs.get('data-decimal-places'), '3')
 
     def test_property_string_maps_to_char_field(self):
         prop = Property.objects.create(
@@ -216,6 +314,20 @@ class StructureIdentifierTests(TestCase):
         )
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['name'], 'tolschina_mm')
+
+    def test_structure_field_form_keeps_zero_decimal_places(self):
+        form = StructureFieldForm(
+            data={
+                'label': 'Скорость',
+                'name': 'speed',
+                'field_type': 'DecimalField',
+                'sort_order': '1',
+                'max_digits': '10',
+                'decimal_places': '0',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['decimal_places'], 0)
 
     def test_structure_field_form_rejects_duplicate_reserved_name(self):
         form = StructureFieldForm(
@@ -524,6 +636,8 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
         self.assertContains(response, 'Создать материал')
         self.assertContains(response, create_material_url)
+        self.assertContains(response, 'data-create-based-on')
+        self.assertContains(response, 'Создать на основе')
         self.assertNotContains(response, 'Создать запись')
         self.assertNotContains(
             response,
@@ -800,7 +914,7 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         self.assertFalse(structure_type.is_created)
         self.assertContains(table_response, 'snake_case')
 
-    def test_manage_page_prompts_create_table_for_existing_unsaved_type(self):
+    def test_manage_page_does_not_prompt_create_table_without_query(self):
         structure_type = StructureType.objects.create(
             name='UI Prompt Existing',
             code='ui_prompt_existing',
@@ -810,9 +924,8 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         response = self.client.get(manage_url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'create-table-prompt-modal')
-        self.assertContains(response, 'SQL-таблица ещё не создана')
-        self.assertNotContains(response, 'сохранён')
+        self.assertNotContains(response, 'create-table-prompt-modal')
+        self.assertContains(response, 'Создать')
 
     def test_drop_table_from_public_ui(self):
         structure_type = StructureType.objects.create(
@@ -841,6 +954,68 @@ class PublicStructureTypeManageViewsTests(TransactionTestCase):
         structure_type.refresh_from_db()
         self.assertFalse(structure_type.is_created)
         self.assertFalse(SQLExecutor.table_exists(structure_type))
+        self.assertTrue(structure_type.fields.filter(name='title').exists())
+        manage = self.client.get(reverse('structures:type_manage', args=[structure_type.code]))
+        self.assertContains(manage, 'Удалить черновик')
+        self.assertContains(manage, 'остаётся черновиком')
+
+    def test_structure_field_formset_rejects_duplicate_name_against_db(self):
+        structure_type = StructureType.objects.create(
+            name='Dup Field Draft',
+            code='dup_field_draft',
+            table_name='structures_dup_field_draft',
+            is_created=False,
+        )
+        StructureField.objects.create(
+            structure_type=structure_type,
+            name='matrix',
+            label='Матрица',
+            field_type='CharField',
+            sort_order=1,
+        )
+        formset = StructureFieldInlineFormSet(
+            data={
+                'fields-TOTAL_FORMS': '1',
+                'fields-INITIAL_FORMS': '0',
+                'fields-MIN_NUM_FORMS': '0',
+                'fields-MAX_NUM_FORMS': '1000',
+                'fields-0-id': '',
+                'fields-0-name': 'matrix',
+                'fields-0-label': 'Матрица ещё раз',
+                'fields-0-field_type': 'CharField',
+                'fields-0-is_required': '',
+                'fields-0-sort_order': '2',
+                'fields-0-max_length': '255',
+                'fields-0-max_digits': '',
+                'fields-0-decimal_places': '',
+                'fields-0-default_value': '',
+                'fields-0-help_text': '',
+                'fields-0-choice_options': '[]',
+            },
+            instance=structure_type,
+        )
+        self.assertFalse(formset.is_valid())
+        self.assertIn(
+            StructureFieldInlineFormSet.DUPLICATE_FIELD_NAME_ERROR,
+            formset.forms[0].errors.get('name', []),
+        )
+
+    def test_structure_type_form_rejects_existing_draft_name(self):
+        StructureType.objects.create(
+            name='Монослой',
+            code='monolayer_draft',
+            table_name='structures_monolayer_draft',
+            is_created=False,
+        )
+        form = StructureTypeForm(
+            data={
+                'name': 'Монослой',
+                'description': '',
+                'display_color': '#007679',
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('черновик', form.errors['name'][0])
 
     def test_delete_draft_structure_type_from_public_ui(self):
         structure_type = StructureType.objects.create(

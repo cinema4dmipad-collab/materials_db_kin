@@ -1,12 +1,8 @@
+            {% include 'samples/includes/sample_structure_fields.html' %}
+
             <div class="card mb-4">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span>Свойства из материала</span>
-                    {% if structure_type %}
-                    <div class="text-muted small">
-                        Тип структуры:
-                        {% include 'includes/type_badge.html' with label=structure_type.name tone=structure_type.display_color %}
-                    </div>
-                    {% endif %}
                 </div>
                 <div class="card-body p-0">
                     {{ formset.management_form }}
@@ -25,7 +21,6 @@
                                     <th scope="col" class="material-properties-table__unit-col">Ед.</th>
                                 </tr>
                             </thead>
-                            {% include 'includes/structure_properties_tbody.html' with structure_tbody_id='sample-structure-properties-section' show_property_value_spacer=False %}
                             <tbody class="material-props-section">
                                 <tr class="material-props-section__header">
                                     <th scope="colgroup" colspan="3">Из свойств материала</th>

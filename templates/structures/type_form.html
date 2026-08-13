@@ -8,8 +8,8 @@
 {% block extra_head %}
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 <link href="{% static 'css/structure_type_form.css' %}" rel="stylesheet">
-<script src="{% static 'js/reference_properties_picker.js' %}" defer></script>
-<script src="{% static 'js/structure_type_form.js' %}?v={{ app_version }}-stf2" defer></script>
+<script src="{% static 'js/reference_properties_picker.js' %}?v={{ app_version }}-rpp2" defer></script>
+<script src="{% static 'js/structure_type_form.js' %}?v={{ app_version }}-stf4" defer></script>
 <script src="{% static 'js/structure_color_picker.js' %}" defer></script>
 {% endblock %}
 
@@ -28,7 +28,8 @@
                 </h1>
             </div>
             <div class="card-body">
-                <form method="post" novalidate id="structure-type-form">
+                <form method="post" novalidate id="structure-type-form"
+                      data-structure-draft-key="{% if is_edit %}{{ structure_type.pk }}{% else %}new{% endif %}">
                     {% csrf_token %}
                     {% if form.non_field_errors %}
                     <div class="alert alert-danger">{{ form.non_field_errors }}</div>

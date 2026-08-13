@@ -481,6 +481,14 @@ class MaterialEditAccessTests(TestCase):
         self.assertContains(response, 'create-based-on-btn')
         self.assertContains(response, 'Создать на основе')
 
+    def test_material_list_has_create_based_on_split_button(self):
+        response = self.client.get(reverse('materials:list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-create-based-on')
+        self.assertContains(response, 'dropdown-toggle-split')
+        self.assertContains(response, 'Создать на основе')
+        self.assertContains(response, 'material_create_based_on.js')
+
     def test_create_based_on_prefills_form_from_shared_material(self):
         response = self.client.get(
             reverse('materials:create'),

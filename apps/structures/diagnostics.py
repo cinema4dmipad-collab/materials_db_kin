@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dc_field
 
 from apps.materials.models import Material
-from apps.structures.decimal_range import decimal_storage_columns
+from apps.references.models import Property
+from apps.structures.decimal_range import (
+    decimal_base_column_name,
+    decimal_storage_columns,
+    is_decimal_companion_column,
+    legacy_decimal_column_names,
+)
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
-from apps.structures.table_storage import get_row
+from apps.structures.table_storage import SERVICE_COLUMNS, get_row
 
 
 SEVERITY_ERROR = 'error'
@@ -25,6 +31,34 @@ class DiagnosticIssue:
     structure_code: str = ''
     material_code: str = ''
     count: int = 1
+    repair: dict = dc_field(default_factory=dict)
+
+
+def _expected_columns(structure_type: StructureType) -> set[str]:
+    expected = set(SERVICE_COLUMNS)
+    for fld in structure_type.fields.exclude(field_type='ForeignKey'):
+        if fld.field_type == 'DecimalField':
+            expected.update(decimal_storage_columns(fld.name))
+            expected.update(legacy_decimal_column_names(fld.name))
+        else:
+            expected.add(fld.name)
+    return expected
+
+
+def _orphan_base_columns(physical: set[str], expected: set[str]) -> list[str]:
+    orphans = []
+    for col in sorted(physical - expected):
+        if col in SERVICE_COLUMNS:
+            continue
+        if is_decimal_companion_column(col):
+            base = decimal_base_column_name(col)
+            # Companion of an expected base is not an orphan base column.
+            if base and base in expected:
+                continue
+            # Companion of an orphan base — skip here; base reported separately.
+            continue
+        orphans.append(col)
+    return orphans
 
 
 def run_structure_normalization_diagnostics(
@@ -34,6 +68,7 @@ def run_structure_normalization_diagnostics(
     """Scan all structure types and materials for link / schema integrity issues."""
     issues: list[DiagnosticIssue] = []
     types = list(StructureType.objects.prefetch_related('fields').order_by('name'))
+    property_names = set(Property.objects.values_list('name', flat=True))
 
     for st in types:
         table_exists = SQLExecutor.table_exists(st)
@@ -67,10 +102,13 @@ def run_structure_normalization_diagnostics(
         if not table_exists:
             continue
 
-        for field in st.fields.exclude(field_type='ForeignKey'):
-            if field.field_type == 'DecimalField':
-                for col in decimal_storage_columns(field.name):
-                    if not SQLExecutor.column_exists(st, col):
+        expected = _expected_columns(st)
+        physical = set(SQLExecutor.list_column_names(st))
+        missing_fields: list[str] = []
+        for fld in st.fields.exclude(field_type='ForeignKey'):
+            if fld.field_type == 'DecimalField':
+                for col in decimal_storage_columns(fld.name):
+                    if col not in physical:
                         issues.append(
                             DiagnosticIssue(
                                 code='missing_decimal_column',
@@ -80,19 +118,75 @@ def run_structure_normalization_diagnostics(
                                 structure_code=st.code,
                             )
                         )
-            elif not SQLExecutor.column_exists(st, field.name):
+                if fld.name not in physical:
+                    missing_fields.append(fld.name)
+            elif fld.name not in physical:
+                missing_fields.append(fld.name)
                 issues.append(
                     DiagnosticIssue(
                         code='missing_column',
                         severity=SEVERITY_ERROR,
                         title='Нет колонки поля',
                         detail=(
-                            f'«{st.name}»: поле «{field.name}» есть в метаданных, '
+                            f'«{st.name}»: поле «{fld.name}» есть в метаданных, '
                             'колонки в таблице нет.'
                         ),
                         structure_code=st.code,
                     )
                 )
+
+            if fld.name and fld.name not in property_names:
+                issues.append(
+                    DiagnosticIssue(
+                        code='field_without_catalog_property',
+                        severity=SEVERITY_WARNING,
+                        title='Нет свойства в справочнике',
+                        detail=(
+                            f'«{st.name}»: поле «{fld.name}» не найдено в справочнике '
+                            'свойств (по коду). Колонка структуры может работать, '
+                            'но синхронизация/внешние клиенты могут считать тип '
+                            'невалидным.'
+                        ),
+                        structure_code=st.code,
+                    )
+                )
+
+        orphan_bases = _orphan_base_columns(physical, expected)
+        for col in orphan_bases:
+            issues.append(
+                DiagnosticIssue(
+                    code='orphan_sql_column',
+                    severity=SEVERITY_WARNING,
+                    title='Лишняя SQL-колонка',
+                    detail=(
+                        f'«{st.name}»: колонка «{col}» есть в таблице, но нет поля '
+                        'в метаданных (возможное переименование без ALTER TABLE).'
+                    ),
+                    structure_code=st.code,
+                )
+            )
+
+        # Suggest rename when one metadata field is missing and one orphan base remains.
+        if len(missing_fields) == 1 and len(orphan_bases) == 1:
+            old_name, new_name = orphan_bases[0], missing_fields[0]
+            issues.append(
+                DiagnosticIssue(
+                    code='rename_column_suggested',
+                    severity=SEVERITY_ERROR,
+                    title='Похоже на переименование без таблицы',
+                    detail=(
+                        f'«{st.name}»: в метаданных «{new_name}», в таблице осталась '
+                        f'«{old_name}». Можно переименовать колонку SQL.'
+                    ),
+                    structure_code=st.code,
+                    repair={
+                        'action': 'rename_column',
+                        'structure_code': st.code,
+                        'old_name': old_name,
+                        'new_name': new_name,
+                    },
+                )
+            )
 
     # Material link integrity
     half_type = Material.objects.filter(struct_type__isnull=False, struct_props_id__isnull=True)

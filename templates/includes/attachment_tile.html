@@ -47,6 +47,9 @@
     <div class="file-tile__preview">
         {% attachment_preview_cell attachment preview_url=preview_url size='tile' %}
     </div>
+    {% if attachment.description %}
+    <p class="file-tile__description" title="{{ attachment.description }}">{{ attachment.description }}</p>
+    {% endif %}
     <div class="file-tile__footer">
         <span class="file-tile__avatar" aria-hidden="true">{% if creator != "—" %}{{ creator|slice:":1"|upper }}{% else %}?{% endif %}</span>
         <div class="file-tile__meta">

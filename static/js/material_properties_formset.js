@@ -178,6 +178,11 @@
             ensureChoiceValueField(row, payload.choices || [], payload.value || '');
             setRowPropertyMeta(row, payload.label, '');
         } else if (payload.data_type === 'number') {
+            if (payload.decimal_places != null && payload.decimal_places !== '') {
+                row.querySelectorAll('input.localized-number-input').forEach(function (input) {
+                    input.setAttribute('data-decimal-places', String(payload.decimal_places));
+                });
+            }
             if (window.PropertyNumberValue && window.PropertyNumberValue.initRow) {
                 window.PropertyNumberValue.initRow(row);
             }

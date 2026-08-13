@@ -419,10 +419,18 @@
             return;
         }
 
-        var initialMaterialId = materialSelect.value;
-        var hasMaterialRows = materialContainer.querySelector('.property-form-row') !== null;
+        var applyMaterialFlag = document.getElementById('apply-material-flag');
 
         materialSelect.addEventListener('change', function () {
+            if (applyMaterialFlag) {
+                applyMaterialFlag.value = '1';
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+                return;
+            }
             loadMaterialProperties(
                 materialSelect.value,
                 materialTemplate,
@@ -432,23 +440,11 @@
             );
         });
 
-        fetchMaterialProperties(initialMaterialId, propertiesUrlTemplate).then(function (data) {
-            if (!hasMaterialRows && initialMaterialId) {
-                return loadMaterialProperties(
-                    initialMaterialId,
-                    materialTemplate,
-                    totalFormsInput,
-                    propertiesUrlTemplate,
-                    materialDetailUrlTemplate,
-                );
-            }
-            renderStructurePropertiesSection(data, materialDetailUrlTemplate);
-            removeExtraDuplicates();
-            reindexForms(totalFormsInput);
-            updateMaterialEmptyState();
-            updateExtraEmptyState();
-            return null;
-        });
+        // Structure params are server-rendered and editable; do not inject read-only rows.
+        removeExtraDuplicates();
+        reindexForms(totalFormsInput);
+        updateMaterialEmptyState();
+        updateExtraEmptyState();
     }
 
     if (document.readyState === 'loading') {

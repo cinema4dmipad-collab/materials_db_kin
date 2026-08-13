@@ -13,7 +13,11 @@ from django.urls import reverse
 from apps.composites.models import CompositeLayer
 from apps.core.tag_utils import assign_tags
 from apps.materials.admin import CompositeLayerInline, MaterialAdmin, MaterialForm
-from apps.materials.forms import CompositeLayerFormSet, MaterialForm as PublicMaterialForm
+from apps.materials.forms import (
+    CompositeLayerFormSet,
+    MaterialForm as PublicMaterialForm,
+    get_composite_layer_formset,
+)
 from apps.materials.models import Material, MaterialProperty
 from apps.references.models import Availability, Manufacturer, Property, PropertyGroup, Technology
 from apps.structures.models import StructureField, StructureType
@@ -901,6 +905,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
     def test_dictionary_fields_are_separate_from_base_bound_fields(self):
         form = PublicMaterialForm(workspace=self.legacy_workspace)
         base_names = {field.name for field in form.base_bound_fields}
+        self.assertNotIn('layers_symmetric', base_names)
         dictionary_names = [field.name for field in form.dictionary_bound_fields]
         self.assertEqual(dictionary_names, ['manufacturer', 'availability', 'technology'])
         self.assertTrue({'manufacturer', 'availability', 'technology'}.isdisjoint(base_names))
@@ -1742,6 +1747,149 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(layer.angle, 90)
         self.assertEqual(layer.thickness, 0.5)
 
+    def test_public_material_update_saves_layer_thickness_locked(self):
+        row_id = self.insert_structure_row(title='Locked thickness panel', thickness='8.25')
+        layer_material = self.create_material(
+            code='MAT-LAYER-LOCK-001',
+            name='Lockable layer material',
+        )
+        material = self.create_material(
+            code='MAT-PUBLIC-LAYER-LOCK',
+            name='Material with locked layer thickness',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        layer = CompositeLayer.objects.create(
+            parent_material=material,
+            material=layer_material,
+            layer_number=1,
+            angle=0,
+            thickness='0.20',
+            thickness_locked=False,
+        )
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-LAYER-LOCK',
+                name='Material with locked layer thickness',
+                **self._layer_formset_management_data(initial='1'),
+                **self._layer_formset_data(
+                    layer_material,
+                    **{
+                        'layers-0-id': str(layer.pk),
+                        'layers-0-angle': '0',
+                        'layers-0-thickness': '0.20',
+                        'layers-0-thickness_locked': 'on',
+                    },
+                ),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        layer.refresh_from_db()
+        self.assertTrue(layer.thickness_locked)
+
+    def test_public_material_update_adds_second_layer_without_500(self):
+        row_id = self.insert_structure_row(title='Two layers panel', thickness='8.25')
+        first_layer_material = self.create_material(
+            code='MAT-LAYER-SECOND-A',
+            name='First layer material',
+        )
+        second_layer_material = self.create_material(
+            code='MAT-LAYER-SECOND-B',
+            name='Second layer material',
+        )
+        material = self.create_material(
+            code='MAT-PUBLIC-LAYER-SECOND',
+            name='Material gaining second layer',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        layer = CompositeLayer.objects.create(
+            parent_material=material,
+            material=first_layer_material,
+            layer_number=1,
+            angle=0,
+            thickness='0.20',
+        )
+
+        response = self.client.post(
+            reverse('materials:edit', kwargs={'pk': material.pk}),
+            self._post_data(
+                code='MAT-PUBLIC-LAYER-SECOND',
+                name='Material gaining second layer',
+                **self._layer_formset_management_data(total='2', initial='1'),
+                **self._layer_formset_data(
+                    first_layer_material,
+                    prefix='layers-0',
+                    **{
+                        'layers-0-id': str(layer.pk),
+                        'layers-0-layer_number': '1',
+                        'layers-0-angle': '0',
+                        'layers-0-thickness': '0.20',
+                    },
+                ),
+                **self._layer_formset_data(
+                    second_layer_material,
+                    prefix='layers-1',
+                    **{
+                        'layers-1-layer_number': '1',
+                        'layers-1-angle': '90',
+                        'layers-1-thickness': '0.30',
+                    },
+                ),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302, response.content[:500] if response.status_code == 500 else '')
+        layers = list(
+            CompositeLayer.objects.filter(parent_material=material).order_by('layer_number')
+        )
+        self.assertEqual(len(layers), 2)
+        self.assertEqual(layers[0].layer_number, 1)
+        self.assertEqual(layers[1].layer_number, 2)
+        self.assertEqual(layers[1].material, second_layer_material)
+
+    def test_composite_layer_validate_unique_ignores_unsaved_uuid_pk(self):
+        """New CompositeLayer instances get UUID pk before INSERT; must not break exclude."""
+        from apps.materials.forms import CompositeLayerForm
+
+        parent = self.create_material(
+            code='MAT-LAYER-UUID-PARENT',
+            name='Parent for uuid unique check',
+            struct_type=self.structure_type,
+            struct_props_id=self.insert_structure_row(title='UUID panel', thickness='1'),
+        )
+        layer_material = self.create_material(
+            code='MAT-LAYER-UUID-CHILD',
+            name='Layer material',
+        )
+        CompositeLayer.objects.create(
+            parent_material=parent,
+            material=layer_material,
+            layer_number=1,
+            angle=0,
+            thickness=0.1,
+        )
+        formset = get_composite_layer_formset()(
+            data={
+                'layers-TOTAL_FORMS': '1',
+                'layers-INITIAL_FORMS': '0',
+                'layers-MIN_NUM_FORMS': '0',
+                'layers-MAX_NUM_FORMS': '1000',
+                'layers-0-layer_number': '1',
+                'layers-0-material': str(layer_material.pk),
+                'layers-0-angle': '45',
+                'layers-0-thickness': '0.2',
+            },
+            instance=parent,
+            prefix='layers',
+            workspace=self.legacy_workspace,
+        )
+        self.assertFalse(formset.is_valid())
+        self.assertIn('layer_number', formset.forms[0].errors)
+
     def test_public_material_update_accepts_duplicated_layers_with_same_posted_layer_number(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
         layer_material = self.create_material(
@@ -2260,6 +2408,7 @@ class MaterialAttachmentViewsTests(TestCase):
             create_url,
             {
                 'attachment-title': 'Datasheet',
+                'attachment-description': 'Техническое описание панели',
                 'attachment-file': SimpleUploadedFile(
                     'datasheet.pdf',
                     b'%PDF-1.4 test',
@@ -2270,7 +2419,11 @@ class MaterialAttachmentViewsTests(TestCase):
         self.assertRedirects(post_response, attachments_url)
         attachment = MaterialAttachment.objects.get(title='Datasheet')
         self.assertEqual(attachment.material, self.material)
+        self.assertEqual(attachment.description, 'Техническое описание панели')
         self.assertTrue(attachment.file.storage.exists(attachment.file.name))
+        list_after = self.client.get(attachments_url)
+        self.assertContains(list_after, 'file-tile__description')
+        self.assertContains(list_after, 'Техническое описание панели')
 
     def test_material_delete_removes_attachment_files(self):
         from django.core.files.uploadedfile import SimpleUploadedFile

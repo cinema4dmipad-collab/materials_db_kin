@@ -203,7 +203,12 @@ class StructureTypeManageView(AppViewMixin, TemplateView):
         context['table_exists'] = (
             structure_type.is_created or SQLExecutor.table_exists(structure_type)
         )
-        context['prompt_create_table'] = not structure_type.is_created
+        # Only after creating a new type (?prompt_create_table=1) — not on every draft visit
+        # (e.g. after dropping the SQL table the modal would be annoying).
+        context['prompt_create_table'] = (
+            self.request.GET.get('prompt_create_table') == '1'
+            and not structure_type.is_created
+        )
         from apps.core.bookmarks import bookmark_context
         from apps.core.models import BookmarkEntityType
 
@@ -238,6 +243,11 @@ class StructureTypeCreateTableView(AppViewMixin, View):
         if table_name_error:
             messages.error(request, table_name_error)
             return redirect('structures:type_manage', type_code=type_code)
+
+        from apps.structures.decimal_places_sync import sync_structure_decimal_places_from_catalog
+
+        sync_structure_decimal_places_from_catalog(structure_type.fields.all())
+        structure_type.refresh_from_db()
 
         result = SQLExecutor.create_table(structure_type)
         if result['success']:
@@ -289,7 +299,15 @@ class StructureTypeDropTableView(AppViewMixin, View):
 
         result = SQLExecutor.drop_table(structure_type)
         if result['success']:
-            messages.success(request, f'Таблица {structure_type.table_name} удалена из БД.')
+            messages.success(
+                request,
+                (
+                    f'Таблица {structure_type.table_name} удалена из БД. '
+                    f'Тип «{structure_type.name}» остался черновиком с полями — '
+                    'нажмите «Создать» таблицу снова или удалите черновик целиком. '
+                    'Не создавайте новый тип с теми же именами полей.'
+                ),
+            )
         else:
             messages.error(request, f'Ошибка: {result["error"]}')
         return redirect('structures:type_manage', type_code=type_code)

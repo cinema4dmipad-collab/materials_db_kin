@@ -2028,6 +2028,22 @@ a.file-tile__title:hover {
 .file-tile__preview-placeholder--pending { color: var(--tone-amber-text); }
 .file-tile__preview-placeholder--failed { color: #b91c1c; }
 
+.file-tile__description {
+    margin: 0.45rem 0.75rem 0;
+    min-width: 0;
+    max-height: 2.5em;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    color: var(--kx-text-muted);
+    white-space: pre-line;
+    word-break: break-word;
+}
+
 .file-tile__footer {
     display: flex;
     align-items: center;

@@ -596,3 +596,213 @@ class ScanUiViewsTests(TestCase):
         scan.refresh_from_db()
 
         self.assertEqual(scan.title, 'Echo scan updated')
+
+from django.test import TransactionTestCase
+
+from apps.structures.models import StructureField, StructureType
+from apps.structures.sql_executor import SQLExecutor
+
+
+class SampleStructureParamsTests(TransactionTestCase):
+    def setUp(self):
+        self.legacy_workspace = ensure_legacy_workspace()
+        self.structure_type = StructureType.objects.create(
+            name='Sample Panel Struct',
+            code='sample_panel_struct',
+            table_name='structures_sample_panel_struct',
+        )
+        StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='title',
+            label='Title',
+            field_type='CharField',
+            is_required=True,
+            sort_order=1,
+        )
+        StructureField.objects.create(
+            structure_type=self.structure_type,
+            name='thickness',
+            label='Thickness, mm',
+            field_type='DecimalField',
+            max_digits=8,
+            decimal_places=2,
+            sort_order=2,
+        )
+        create_result = SQLExecutor.create_table(self.structure_type)
+        self.assertTrue(create_result['success'], create_result.get('error'))
+
+        insert = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Material panel', 'thickness': '10.00'},
+        )
+        self.assertTrue(insert['success'], insert.get('error'))
+        self.material = Material.objects.create(
+            code='MAT-SMP-STRUCT',
+            name='Material with structure',
+            home_workspace=self.legacy_workspace,
+            struct_type=self.structure_type,
+            struct_props_id=insert['id'],
+        )
+        self.other_material = Material.objects.create(
+            code='MAT-SMP-STRUCT-2',
+            name='Other structured material',
+            home_workspace=self.legacy_workspace,
+        )
+        other_insert = SQLExecutor.insert(
+            self.structure_type,
+            {'title': 'Other panel', 'thickness': '20.00'},
+        )
+        self.assertTrue(other_insert['success'], other_insert.get('error'))
+        self.other_material.struct_type = self.structure_type
+        self.other_material.struct_props_id = other_insert['id']
+        self.other_material.save(update_fields=['struct_type', 'struct_props_id'])
+
+    def tearDown(self):
+        SQLExecutor.drop_table(self.structure_type)
+
+    def _structure_field_data(self, **overrides):
+        data = {'title': 'Sample panel', 'thickness': '12.50'}
+        data.update(overrides)
+        payload = {}
+        for field in self.structure_type.fields.exclude(field_type='ForeignKey'):
+            base = f'structure_field_{field.pk}'
+            if field.field_type == 'DecimalField':
+                payload[base] = data[field.name]
+                payload[f'{base}__b'] = ''
+                payload[f'{base}__kind'] = 'scalar'
+            else:
+                payload[base] = data[field.name]
+        return payload
+
+    def _property_mgmt(self):
+        return {
+            'properties-TOTAL_FORMS': '0',
+            'properties-INITIAL_FORMS': '0',
+            'properties-MIN_NUM_FORMS': '0',
+            'properties-MAX_NUM_FORMS': '1000',
+        }
+
+    def test_create_copies_structure_params_to_sample_row(self):
+        response = self.client.post(
+            reverse('samples:create'),
+            {
+                'code': 'SMP-STRUCT-1',
+                'name': 'Structured sample',
+                'material': self.material.pk,
+                'object_type': 'test',
+                **self._property_mgmt(),
+                **self._structure_field_data(title='Copied panel', thickness='11.00'),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        sample = Sample.objects.get(code='SMP-STRUCT-1')
+        self.assertEqual(sample.struct_type_id, self.structure_type.pk)
+        self.assertIsNotNone(sample.struct_props_id)
+        self.assertNotEqual(str(sample.struct_props_id), str(self.material.struct_props_id))
+
+        sample_params = sample.get_structure_params()
+        self.assertEqual(sample_params['title'], 'Copied panel')
+        self.assertEqual(str(sample_params['thickness']), '11.00')
+
+        material_params = self.material.get_structure_params()
+        self.assertEqual(material_params['title'], 'Material panel')
+        self.assertEqual(str(material_params['thickness']), '10.00')
+
+    def test_edit_updates_sample_row_not_material(self):
+        create = self.client.post(
+            reverse('samples:create'),
+            {
+                'code': 'SMP-STRUCT-2',
+                'name': 'Edit me',
+                'material': self.material.pk,
+                'object_type': 'test',
+                **self._property_mgmt(),
+                **self._structure_field_data(title='Before', thickness='9.00'),
+            },
+        )
+        self.assertEqual(create.status_code, 302)
+        sample = Sample.objects.get(code='SMP-STRUCT-2')
+        sample_row_id = sample.struct_props_id
+
+        edit = self.client.post(
+            reverse('samples:edit', kwargs={'pk': sample.pk}),
+            {
+                'code': sample.code,
+                'name': sample.name,
+                'material': self.material.pk,
+                'object_type': 'test',
+                **self._property_mgmt(),
+                **self._structure_field_data(title='After', thickness='9.50'),
+            },
+        )
+        self.assertEqual(edit.status_code, 302)
+        sample.refresh_from_db()
+        self.assertEqual(sample.struct_props_id, sample_row_id)
+        self.assertEqual(sample.get_structure_params()['title'], 'After')
+        self.assertEqual(self.material.get_structure_params()['title'], 'Material panel')
+
+    def test_material_change_resets_structure_from_new_material(self):
+        create = self.client.post(
+            reverse('samples:create'),
+            {
+                'code': 'SMP-STRUCT-3',
+                'name': 'Switch material',
+                'material': self.material.pk,
+                'object_type': 'test',
+                **self._property_mgmt(),
+                **self._structure_field_data(title='Old copy', thickness='8.00'),
+            },
+        )
+        self.assertEqual(create.status_code, 302)
+        sample = Sample.objects.get(code='SMP-STRUCT-3')
+        old_row = sample.struct_props_id
+
+        edit = self.client.post(
+            reverse('samples:edit', kwargs={'pk': sample.pk}),
+            {
+                'code': sample.code,
+                'name': sample.name,
+                'material': self.other_material.pk,
+                'object_type': 'test',
+                **self._property_mgmt(),
+                **self._structure_field_data(title='From other', thickness='21.00'),
+            },
+        )
+        self.assertEqual(edit.status_code, 302)
+        sample.refresh_from_db()
+        self.assertNotEqual(sample.struct_props_id, old_row)
+        self.assertEqual(sample.material_id, self.other_material.pk)
+        self.assertEqual(sample.get_structure_params()['title'], 'From other')
+        self.assertIsNone(
+            SQLExecutor.get_structure_instance(self.structure_type, old_row),
+        )
+
+    def test_detail_shows_sample_structure_overrides(self):
+        create = self.client.post(
+            reverse('samples:create'),
+            {
+                'code': 'SMP-STRUCT-4',
+                'name': 'Detail sample',
+                'material': self.material.pk,
+                'object_type': 'test',
+                **self._property_mgmt(),
+                **self._structure_field_data(title='Sample-only title', thickness='13.00'),
+            },
+        )
+        self.assertEqual(create.status_code, 302)
+        sample = Sample.objects.get(code='SMP-STRUCT-4')
+        response = self.client.get(reverse('samples:detail', kwargs={'pk': sample.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Sample-only title')
+        self.assertContains(response, 'Из параметров структуры')
+        self.assertNotContains(response, 'Material panel')
+
+    def test_create_form_renders_editable_structure_fields(self):
+        response = self.client.get(
+            reverse('samples:create'),
+            {'material': str(self.material.pk)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Параметры структуры')
+        title_field = self.structure_type.fields.get(name='title')
+        self.assertContains(response, f'structure_field_{title_field.pk}')

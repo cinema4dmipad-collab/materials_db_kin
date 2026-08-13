@@ -1,7 +1,11 @@
 {% extends 'base.html' %}
-{% load ui_tags %}
+{% load static ui_tags %}
 
 {% block title %}Дашборд — База композитов{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
+{% endblock %}
 
 {% block content %}
 <div class="dashboard-header mb-4">
@@ -13,7 +17,7 @@
         <p class="dashboard-header__date mb-0">{{ dashboard_date }}</p>
     </div>
     <div class="dashboard-header__actions d-flex flex-wrap gap-2">
-        <a href="{% url 'materials:create' %}" class="btn btn-primary btn-sm">Создать материал</a>
+        {% include 'materials/includes/create_material_split_button.html' with label='Создать материал' %}
         <a href="{% url 'materials:import' %}" class="btn btn-outline-primary btn-sm">Импорт</a>
         <a href="{% url 'samples:create' %}" class="btn btn-outline-secondary btn-sm">Создать образец</a>
     </div>
@@ -203,4 +207,10 @@
         </p>
     </div>
 </div>
+{% include 'includes/reference_materials_modal.html' %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/reference_materials_picker.js' %}?v={{ app_version }}-based1"></script>
+<script src="{% static 'js/material_create_based_on.js' %}?v={{ app_version }}-based1"></script>
 {% endblock %}

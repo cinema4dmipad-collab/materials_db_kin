@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 
 from apps.materials.models import Material
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES
+from apps.structures.constants import resolve_structure_field_decimal_places
 from apps.structures.decimal_range import format_decimal_field_display, read_decimal_field_state
 from apps.structures.choice_options import choice_label_for_value, resolved_choice_options
 from apps.structures.models import CHOICE_FIELD_TYPE, MATERIAL_LINK_FIELD_TYPE, StructureField, StructureType
@@ -28,7 +28,7 @@ class DisplayValue:
                 value_kind=state['value_kind'],
                 value=state['value'],
                 value_b=state['value_b'],
-                decimal_places=self.field.decimal_places or DEFAULT_DECIMAL_PLACES,
+                decimal_places=resolve_structure_field_decimal_places(self.field),
             )
         return self._value
 
@@ -137,7 +137,7 @@ def _structure_field_label_fragment(field: StructureField, record: dict) -> str 
             value_kind=state['value_kind'],
             value=state['value'],
             value_b=state['value_b'],
-            decimal_places=field.decimal_places or DEFAULT_DECIMAL_PLACES,
+            decimal_places=resolve_structure_field_decimal_places(field),
         )
         return text if text != '—' else None
 

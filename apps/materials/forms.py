@@ -42,6 +42,7 @@ _BOOTSTRAP_INPUT = {'class': 'form-control'}
 _VISIBILITY_FIELD_NAMES = frozenset({'visibility_mode', 'published_workspaces'})
 _DICTIONARY_FIELD_NAMES = ('manufacturer', 'availability', 'technology')
 _DICTIONARY_FIELD_NAMES_SET = frozenset(_DICTIONARY_FIELD_NAMES)
+_LAYERS_UI_FIELD_NAMES = frozenset({'layers_symmetric'})
 _BOOTSTRAP_SELECT = {'class': 'form-select'}
 STRUCTURE_SERVICE_FIELDS = {'id', 'created_at', 'updated_at', 'created_by'}
 
@@ -254,7 +255,7 @@ def build_composite_layer_formset(*, workspace, instance=None, initial=None, dat
         form=CompositeLayerForm,
         formset=CompositeLayerFormSet,
         fk_name='parent_material',
-        fields=['layer_number', 'material', 'angle', 'thickness'],
+        fields=['layer_number', 'material', 'angle', 'thickness', 'thickness_locked'],
         extra=len(initial),
         can_delete=True,
         widgets=_COMPOSITE_LAYER_FORMSET_WIDGETS,
@@ -325,15 +326,9 @@ class CompositeLayerFormSet(forms.BaseInlineFormSet):
             and not str(angle).strip()
             and not str(thickness).strip()
         )
-        if is_empty and not form.instance.pk:
+        if is_empty and form.instance._state.adding:
             return False
         return not is_empty
-        super().clean()
-        if self._layers_not_allowed():
-            raise ValidationError(
-                'Слои недоступны для выбранного типа структуры.',
-            )
-        self._assign_layer_numbers()
 
     def _layers_not_allowed(self):
         if not self.instance or not self.instance.pk:
@@ -377,14 +372,26 @@ class CompositeLayerFormSet(forms.BaseInlineFormSet):
 class CompositeLayerForm(forms.ModelForm):
     angle = LocalizedFloatField(label='Угол армирования, °', required=False)
     thickness = LocalizedFloatField(label='Толщина, мм', required=False)
+    thickness_locked = forms.BooleanField(
+        required=False,
+        label='Зафиксировать толщину',
+        widget=forms.CheckboxInput(
+            attrs={
+                'class': 'layer-thickness-locked-input',
+                'tabindex': '-1',
+                'aria-hidden': 'true',
+            },
+        ),
+    )
 
     class Meta:
         model = CompositeLayer
-        fields = ['layer_number', 'material', 'angle', 'thickness']
+        fields = ['layer_number', 'material', 'angle', 'thickness', 'thickness_locked']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['layer_number'].required = False
+        self.fields['thickness_locked'].required = False
 
     def clean(self):
         cleaned_data = super().clean()
@@ -423,6 +430,10 @@ class CompositeLayerForm(forms.ModelForm):
         return cleaned_data
 
     def validate_unique(self):
+        """Check unique (parent, layer_number); never raise — attach form errors."""
+        if self.cleaned_data.get('DELETE'):
+            return
+
         layer_formset = getattr(self, 'layer_formset', None)
         parent = getattr(layer_formset, 'instance', None) if layer_formset else None
         parent_id = getattr(self.instance, 'parent_material_id', None) or getattr(parent, 'pk', None)
@@ -431,14 +442,18 @@ class CompositeLayerForm(forms.ModelForm):
         if not parent_id or layer_number is None:
             return
 
+        # UUIDField default assigns pk before INSERT; only exclude rows already in DB.
         exclude_pks = []
         if layer_formset is not None:
             exclude_pks = [
                 layer_form.instance.pk
                 for layer_form in layer_formset.forms
-                if layer_form.instance.pk
+                if (
+                    layer_form.instance.pk
+                    and not layer_form.instance._state.adding
+                )
             ]
-        if self.instance.pk:
+        if self.instance.pk and not self.instance._state.adding:
             exclude_pks.append(self.instance.pk)
         exclude_pks = list({pk for pk in exclude_pks if pk})
 
@@ -449,9 +464,13 @@ class CompositeLayerForm(forms.ModelForm):
         if exclude_pks:
             conflicting = conflicting.exclude(pk__in=exclude_pks)
         if conflicting.exists():
-            raise ValidationError({
-                'layer_number': 'Номер слоя уже занят другим слоём этого материала.',
-            })
+            self._update_errors(
+                ValidationError({
+                    'layer_number': (
+                        'Номер слоя уже занят другим слоём этого материала.'
+                    ),
+                }),
+            )
 
 
 def get_composite_layer_formset():
@@ -461,7 +480,7 @@ def get_composite_layer_formset():
         form=CompositeLayerForm,
         formset=CompositeLayerFormSet,
         fk_name='parent_material',
-        fields=['layer_number', 'material', 'angle', 'thickness'],
+        fields=['layer_number', 'material', 'angle', 'thickness', 'thickness_locked'],
         extra=0,
         can_delete=True,
         widgets=_COMPOSITE_LAYER_FORMSET_WIDGETS,
@@ -487,6 +506,7 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
             'availability',
             'technology',
             'struct_type',
+            'layers_symmetric',
         ]
         widgets = {
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
@@ -502,6 +522,12 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
                 attrs={**_BOOTSTRAP_SELECT, 'data-choice-picker': 'true'},
             ),
             'struct_type': forms.Select(attrs=structure_type_select_widget_attrs()),
+            'layers_symmetric': forms.CheckboxInput(
+                attrs={
+                    'class': 'form-check-input',
+                    'id': 'id_layers_symmetric',
+                },
+            ),
         }
 
     def __init__(
@@ -534,6 +560,8 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         self.fields['availability'].empty_label = '— не указана —'
         self.fields['technology'].queryset = Technology.objects.order_by('name')
         self.fields['technology'].empty_label = '— не указана —'
+        self.fields['layers_symmetric'].label = 'Симметричный'
+        self.fields['layers_symmetric'].required = False
         self.structure_type = self._selected_structure_type()
         self.structure_fields = []
         self.structure_decimal_fields = []
@@ -608,6 +636,10 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
         if not self.structure_fields:
             self.structure_empty_message = 'Для выбранного типа структуры нет поддерживаемых полей.'
             return
+
+        from apps.structures.decimal_places_sync import sync_structure_decimal_places_from_catalog
+
+        sync_structure_decimal_places_from_catalog(self.structure_fields)
 
         existing_values = self._existing_structure_values()
         for structure_field in self.structure_fields:
@@ -705,7 +737,10 @@ class MaterialForm(TagNamesFormMixin, forms.ModelForm):
                 structure_decimal_field_names(structure_field.pk).values()
             )
         excluded_names = (
-            structure_field_names | _VISIBILITY_FIELD_NAMES | _DICTIONARY_FIELD_NAMES_SET
+            structure_field_names
+            | _VISIBILITY_FIELD_NAMES
+            | _DICTIONARY_FIELD_NAMES_SET
+            | _LAYERS_UI_FIELD_NAMES
         )
         return [
             bound_field

@@ -45,6 +45,21 @@ class PropertyFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['decimal_places'], 2)
 
+    def test_number_type_keeps_zero_decimal_places(self):
+        form = PropertyForm(
+            data={
+                'display_name': 'Скорость',
+                'name': 'speed',
+                'unit': 'м/с',
+                'data_type': 'number',
+                'decimal_places': '0',
+                'group': '',
+                'description': '',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['decimal_places'], 0)
+
     def test_non_number_type_clears_decimal_places(self):
         form = PropertyForm(
             data={
@@ -98,6 +113,15 @@ class PropertyFormTests(TestCase):
             decimal_places=2,
         )
         self.assertEqual(prop.effective_decimal_places(), 2)
+
+    def test_effective_decimal_places_zero(self):
+        prop = Property(
+            display_name='Wave speed',
+            name='wave_speed',
+            data_type='number',
+            decimal_places=0,
+        )
+        self.assertEqual(prop.effective_decimal_places(), 0)
 
     def test_effective_decimal_places_defaults_for_number(self):
         prop = Property(

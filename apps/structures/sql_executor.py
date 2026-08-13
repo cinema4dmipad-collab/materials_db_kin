@@ -25,7 +25,10 @@ from apps.structures.decimal_range import (
 )
 from apps.structures.default_values import validate_structure_field_model
 from apps.structures.display_format import normalize_structure_field_value
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
+from apps.structures.constants import (
+    DEFAULT_MAX_DIGITS,
+    resolve_structure_field_decimal_places,
+)
 from apps.structures.models import (
     CHOICE_FIELD_TYPE,
     MATERIAL_LINK_FIELD_TYPE,
@@ -554,7 +557,10 @@ class SQLExecutor:
         if field.field_type == 'FloatField':
             return 'DOUBLE PRECISION' if connection.vendor == 'postgresql' else 'REAL'
         if field.field_type == 'DecimalField':
-            return f'DECIMAL({field.max_digits or DEFAULT_MAX_DIGITS}, {field.decimal_places or DEFAULT_DECIMAL_PLACES})'
+            return (
+                f'DECIMAL({field.max_digits or DEFAULT_MAX_DIGITS}, '
+                f'{resolve_structure_field_decimal_places(field)})'
+            )
         if field.field_type == 'BooleanField':
             return 'BOOLEAN' if connection.vendor == 'postgresql' else 'INTEGER'
         if field.field_type == 'DateField':
@@ -661,26 +667,136 @@ class SQLExecutor:
         return cls._coerce_for_db(field, value)
 
     @classmethod
-    def column_exists(cls, structure_type: StructureType, column_name: str) -> bool:
-        cls.validate_identifier(column_name)
+    def list_column_names(cls, structure_type: StructureType) -> list[str]:
+        """Physical column names of the structure SQL table (unordered)."""
         table_name = structure_type.table_name
         with connection.cursor() as cursor:
             if connection.vendor == 'postgresql':
                 cursor.execute(
                     """
-                    SELECT 1
+                    SELECT column_name
                     FROM information_schema.columns
                     WHERE table_schema = current_schema()
                       AND table_name = %s
-                      AND column_name = %s
                     """,
-                    [table_name, column_name],
+                    [table_name],
                 )
-            else:
-                cursor.execute(f'PRAGMA table_info({cls.quote_identifier(table_name)})')
-                columns = {row[1] for row in cursor.fetchall()}
-                return column_name in columns
-            return cursor.fetchone() is not None
+                return [row[0] for row in cursor.fetchall()]
+            cursor.execute(f'PRAGMA table_info({cls.quote_identifier(table_name)})')
+            return [row[1] for row in cursor.fetchall()]
+
+    @classmethod
+    def column_exists(cls, structure_type: StructureType, column_name: str) -> bool:
+        cls.validate_identifier(column_name)
+        return column_name in cls.list_column_names(structure_type)
+
+    @classmethod
+    def widen_decimal_scale(cls, structure_type: StructureType, field: StructureField) -> dict:
+        """Raise DECIMAL scale for base/__b columns to match field metadata (PostgreSQL)."""
+        if field.field_type != 'DecimalField':
+            return {'success': True, 'altered': [], 'error': None}
+        if not structure_type.is_created or not cls.table_exists(structure_type):
+            return {'success': True, 'altered': [], 'error': None}
+        if connection.vendor != 'postgresql':
+            return {'success': True, 'altered': [], 'error': None}
+
+        sql_type = cls._field_sql_type(field)
+        table_name = cls.quote_identifier(structure_type.table_name)
+        altered = []
+        try:
+            with connection.cursor() as cursor:
+                for column_name in (field.name, decimal_b_column(field.name)):
+                    if not cls.column_exists(structure_type, column_name):
+                        continue
+                    quoted = cls.quote_identifier(column_name)
+                    cursor.execute(
+                        f'ALTER TABLE {table_name} '
+                        f'ALTER COLUMN {quoted} TYPE {sql_type} '
+                        f'USING {quoted}::{sql_type}'
+                    )
+                    altered.append(column_name)
+            return {'success': True, 'altered': altered, 'error': None}
+        except Exception as exc:
+            return {'success': False, 'altered': altered, 'error': str(exc)}
+
+    @classmethod
+    def rename_column(
+        cls,
+        structure_type: StructureType,
+        old_name: str,
+        new_name: str,
+    ) -> dict:
+        """Rename a physical column (and DecimalField companions when present)."""
+        try:
+            cls.validate_identifier(old_name)
+            cls.validate_identifier(new_name)
+            if old_name == new_name:
+                return {'success': True, 'renamed': [], 'error': None}
+            if not structure_type.is_created or not cls.table_exists(structure_type):
+                return {
+                    'success': False,
+                    'renamed': [],
+                    'error': 'Таблица структуры не создана.',
+                }
+            if not cls.column_exists(structure_type, old_name):
+                return {
+                    'success': False,
+                    'renamed': [],
+                    'error': f'Колонки «{old_name}» нет в таблице.',
+                }
+            if cls.column_exists(structure_type, new_name):
+                return {
+                    'success': False,
+                    'renamed': [],
+                    'error': f'Колонка «{new_name}» уже существует.',
+                }
+
+            table_name = cls.quote_identifier(structure_type.table_name)
+            pairs = [(old_name, new_name)]
+            for old_comp, new_comp in zip(
+                decimal_companion_columns(old_name),
+                decimal_companion_columns(new_name),
+                strict=True,
+            ):
+                if cls.column_exists(structure_type, old_comp):
+                    if cls.column_exists(structure_type, new_comp):
+                        return {
+                            'success': False,
+                            'renamed': [],
+                            'error': (
+                                f'Нельзя переименовать «{old_comp}»: '
+                                f'«{new_comp}» уже есть.'
+                            ),
+                        }
+                    pairs.append((old_comp, new_comp))
+            for old_legacy, new_legacy in zip(
+                legacy_decimal_column_names(old_name),
+                legacy_decimal_column_names(new_name),
+                strict=True,
+            ):
+                if cls.column_exists(structure_type, old_legacy):
+                    if cls.column_exists(structure_type, new_legacy):
+                        return {
+                            'success': False,
+                            'renamed': [],
+                            'error': (
+                                f'Нельзя переименовать «{old_legacy}»: '
+                                f'«{new_legacy}» уже есть.'
+                            ),
+                        }
+                    pairs.append((old_legacy, new_legacy))
+
+            renamed: list[str] = []
+            with connection.cursor() as cursor:
+                for src, dst in pairs:
+                    cursor.execute(
+                        f'ALTER TABLE {table_name} RENAME COLUMN '
+                        f'{cls.quote_identifier(src)} TO {cls.quote_identifier(dst)}'
+                    )
+                    renamed.append(f'{src}→{dst}')
+            return {'success': True, 'renamed': renamed, 'error': None}
+        except Exception as exc:
+            return {'success': False, 'renamed': [], 'error': str(exc)}
 
     @classmethod
     def add_companion_columns_for_decimal_fields(cls, structure_type: StructureType) -> dict:

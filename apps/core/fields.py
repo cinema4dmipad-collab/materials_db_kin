@@ -95,9 +95,16 @@ class LocalizedPropertyValueField(forms.CharField):
 
 def apply_property_decimal_places_to_value_field(field, prop):
     if prop and getattr(prop, 'data_type', None) == 'number':
-        field.decimal_places = prop.effective_decimal_places()
+        places = prop.effective_decimal_places()
+        field.decimal_places = places
+        widget = getattr(field, 'widget', None)
+        if widget is not None and places is not None:
+            widget.attrs['data-decimal-places'] = str(places)
     else:
         field.decimal_places = None
+        widget = getattr(field, 'widget', None)
+        if widget is not None:
+            widget.attrs.pop('data-decimal-places', None)
 
 
 def clean_localized_number_value(form, *, property_field_name='property', value_field_name='value'):

@@ -31,6 +31,19 @@ class Sample(models.Model):
         on_delete=models.CASCADE,
         related_name='samples',
     )
+    struct_type = models.ForeignKey(
+        'structures.StructureType',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='samples',
+        verbose_name='Тип структуры',
+    )
+    struct_props_id = models.UUIDField(
+        null=True,
+        blank=True,
+        verbose_name='ID параметров структуры',
+    )
     workspace = models.ForeignKey(
         'workspaces.Workspace',
         on_delete=models.PROTECT,
@@ -75,7 +88,17 @@ class Sample(models.Model):
     def __str__(self):
         return f'{self.code} - {self.name}'
 
+    def get_structure_params(self):
+        if not self.struct_type_id or not self.struct_props_id:
+            return None
+
+        from apps.structures.sql_executor import SQLExecutor
+
+        return SQLExecutor.get_structure_instance(self.struct_type, self.struct_props_id)
+
     def delete(self, *args, **kwargs):
+        struct_type_id = self.struct_type_id
+        struct_props_id = self.struct_props_id
         for scan in self.scans.all():
             if scan.file:
                 scan.file.delete(save=False)
@@ -83,6 +106,33 @@ class Sample(models.Model):
             if attachment.file:
                 attachment.file.delete(save=False)
         super().delete(*args, **kwargs)
+        _cleanup_sample_structure_row(struct_type_id, struct_props_id)
+
+
+def _cleanup_sample_structure_row(struct_type_id, struct_props_id) -> None:
+    if not struct_type_id or not struct_props_id:
+        return
+    from apps.materials.models import Material
+    from apps.structures.models import StructureType
+    from apps.structures.table_storage import delete_table_row
+
+    if Material.objects.filter(
+        struct_type_id=struct_type_id,
+        struct_props_id=struct_props_id,
+    ).exists():
+        return
+    if Sample.objects.filter(
+        struct_type_id=struct_type_id,
+        struct_props_id=struct_props_id,
+    ).exists():
+        return
+    structure_type = StructureType.objects.filter(pk=struct_type_id).first()
+    if structure_type is None:
+        return
+    try:
+        delete_table_row(structure_type, uuid.UUID(str(struct_props_id)))
+    except Exception:
+        pass
 
 
 class SampleProperty(models.Model):

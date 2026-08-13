@@ -12,7 +12,10 @@ from apps.core.property_number_value import (
     clean_number_property_fields,
     form_state_from_value_slots,
 )
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES, STRUCTURE_FIELD_PREFIX
+from apps.structures.constants import (
+    STRUCTURE_FIELD_PREFIX,
+    resolve_structure_field_decimal_places,
+)
 from apps.structures.decimal_range import (
     decimal_storage_columns,
     pack_decimal_field_data,
@@ -45,7 +48,7 @@ def is_structure_decimal_subfield(name: str) -> bool:
 
 def add_structure_decimal_fields(form, structure_field) -> dict[str, str]:
     names = structure_decimal_field_names(structure_field.pk)
-    places = structure_field.decimal_places or DEFAULT_DECIMAL_PLACES
+    places = resolve_structure_field_decimal_places(structure_field)
     form.fields[names['value']] = LocalizedPropertyValueField(
         label=structure_field.label,
         required=False,
@@ -118,7 +121,7 @@ def clean_structure_decimal_fields(form, structure_field, cleaned_data: dict) ->
         is_tolerance=is_tolerance,
         hidden_kind=kind,
     )
-    places = structure_field.decimal_places or DEFAULT_DECIMAL_PLACES
+    places = resolve_structure_field_decimal_places(structure_field)
     try:
         normalized = clean_number_property_fields(
             value_kind=resolved_kind,
@@ -188,6 +191,6 @@ def _decimal_property(structure_field):
         data_type = 'number'
 
         def effective_decimal_places(self):
-            return structure_field.decimal_places or DEFAULT_DECIMAL_PLACES
+            return resolve_structure_field_decimal_places(structure_field)
 
     return _Prop()

@@ -70,6 +70,7 @@ def composite_layer_formset_initial(template: Material) -> list[dict]:
             'material': layer.material_id,
             'angle': layer.angle,
             'thickness': layer.thickness,
+            'thickness_locked': layer.thickness_locked,
             'layer_number': layer.layer_number,
         }
         for layer in template.composite_layers.select_related('material').order_by('layer_number')

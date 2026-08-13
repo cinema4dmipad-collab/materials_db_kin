@@ -2,6 +2,8 @@
     --smg-line: rgba(15, 23, 42, 0.1);
     --smg-header-bg: #f1f5f5;
     --smg-header-text: #334155;
+    --smg-name-width: 12rem;
+    --smg-code-width: 8rem;
     border: 1px solid var(--kx-border-strong, #c9d2d2);
     border-radius: 0.5rem;
     background: var(--kx-surface, #fff);
@@ -83,33 +85,39 @@
     white-space: normal;
 }
 
-.structure-materials-grid__name,
-.structure-materials-grid__code {
+/* Sticky name/code: selectors must beat `.structure-materials-grid th/td`
+   so width and left stay in sync (otherwise left:12rem + width:10rem → gap). */
+.structure-materials-grid th.structure-materials-grid__name,
+.structure-materials-grid td.structure-materials-grid__name,
+.structure-materials-grid th.structure-materials-grid__code,
+.structure-materials-grid td.structure-materials-grid__code {
     position: sticky;
     background: var(--kx-surface, #fff);
     z-index: 3;
 }
 
-.structure-materials-grid thead .structure-materials-grid__name,
-.structure-materials-grid thead .structure-materials-grid__code {
+.structure-materials-grid thead th.structure-materials-grid__name,
+.structure-materials-grid thead th.structure-materials-grid__code {
     background: var(--smg-header-bg);
     z-index: 6;
 }
 
-.structure-materials-grid__name {
+.structure-materials-grid th.structure-materials-grid__name,
+.structure-materials-grid td.structure-materials-grid__name {
     left: 0;
     font-weight: 600;
-    min-width: 12rem;
-    max-width: 16rem;
-    width: 12rem;
+    min-width: var(--smg-name-width);
+    max-width: var(--smg-name-width);
+    width: var(--smg-name-width);
     box-shadow: 2px 0 0 var(--smg-line);
 }
 
-.structure-materials-grid__code {
-    left: 12rem;
-    min-width: 8rem;
-    max-width: 10rem;
-    width: 8rem;
+.structure-materials-grid th.structure-materials-grid__code,
+.structure-materials-grid td.structure-materials-grid__code {
+    left: var(--smg-name-width);
+    min-width: var(--smg-code-width);
+    max-width: var(--smg-code-width);
+    width: var(--smg-code-width);
     box-shadow: 2px 0 0 var(--smg-line);
 }
 

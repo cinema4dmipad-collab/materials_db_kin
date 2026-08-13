@@ -209,6 +209,9 @@ class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMi
                 context_slug=self.structure_type.code,
             )
         )
+        from apps.materials.picker_data import materials_for_picker
+
+        context['reference_materials'] = materials_for_picker(self.request.active_workspace)
         return context
 
 

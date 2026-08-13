@@ -269,3 +269,65 @@ class StructureMigrateViewsTests(TransactionTestCase):
         issues = run_structure_normalization_diagnostics()
         codes = {i.code for i in issues if i.severity == SEVERITY_ERROR}
         self.assertIn('orphan_struct_props_id', codes)
+
+    def test_diagnostics_detects_rename_drift_and_repairs(self):
+        from django.db import connection
+
+        from apps.structures.models import MATERIAL_LINK_FIELD_TYPE
+
+        matrix = StructureField.objects.create(
+            structure_type=self.source,
+            name='matrix',
+            label='Matrix',
+            field_type=MATERIAL_LINK_FIELD_TYPE,
+            foreign_key_model='materials.Material',
+            is_required=False,
+            sort_order=2,
+        )
+        # Simulate metadata rename without ALTER TABLE (manager blocks ORM update).
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'UPDATE {StructureField._meta.db_table} SET name = %s WHERE id = %s',
+                ['matrix_mat', str(matrix.pk)],
+            )
+
+        StructureField.objects.create(
+            structure_type=self.source,
+            name='reinf_mat',
+            label='Reinforcement',
+            field_type=MATERIAL_LINK_FIELD_TYPE,
+            foreign_key_model='materials.Material',
+            is_required=False,
+            sort_order=3,
+        )
+
+        issues = run_structure_normalization_diagnostics()
+        codes = {i.code for i in issues if i.structure_code == self.source.code}
+        self.assertIn('rename_column_suggested', codes)
+        self.assertIn('field_without_catalog_property', codes)
+        suggestion = next(
+            i for i in issues if i.code == 'rename_column_suggested' and i.structure_code == self.source.code
+        )
+        self.assertEqual(suggestion.repair['old_name'], 'matrix')
+        self.assertEqual(suggestion.repair['new_name'], 'matrix_mat')
+
+        repair = self.client.post(
+            reverse('structures:diagnostics'),
+            {
+                'action': 'rename_column',
+                'structure_code': self.source.code,
+                'old_name': 'matrix',
+                'new_name': 'matrix_mat',
+            },
+        )
+        self.assertRedirects(repair, reverse('structures:diagnostics'))
+        self.assertTrue(SQLExecutor.column_exists(self.source, 'matrix_mat'))
+        self.assertFalse(SQLExecutor.column_exists(self.source, 'matrix'))
+
+        issues_after = run_structure_normalization_diagnostics()
+        codes_after = {
+            i.code
+            for i in issues_after
+            if i.structure_code == self.source.code and i.code == 'rename_column_suggested'
+        }
+        self.assertFalse(codes_after)

@@ -13,7 +13,7 @@ from apps.structures.identifiers import (
     validate_table_name,
 )
 from apps.structures.choice_options import normalize_choice_options
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES, DEFAULT_MAX_DIGITS
+from apps.structures.constants import DEFAULT_MAX_DIGITS, resolve_decimal_places
 from apps.structures.colors import (
     DEFAULT_STRUCTURE_DISPLAY_COLOR,
     TONE_TO_HEX,
@@ -132,7 +132,28 @@ class StructureTypeForm(StructureDisplayColorFormMixin, forms.ModelForm):
             raise ValidationError('Укажите название типа структуры.')
         if len(name) > 100:
             raise ValidationError('Название не длиннее 100 символов.')
+        existing = StructureType.objects.filter(name=name)
+        if self.instance.pk:
+            existing = existing.exclude(pk=self.instance.pk)
+        conflict = existing.first()
+        if conflict is not None:
+            if not conflict.is_created:
+                raise ValidationError(
+                    f'Тип «{name}» уже есть как черновик (код {conflict.code}). '
+                    'Откройте его и нажмите «Создать» таблицу или удалите черновик — '
+                    'не создавайте тип заново с теми же полями.'
+                )
+            raise ValidationError(f'Тип структуры «{name}» уже существует.')
         return name
+
+    def validate_unique(self):
+        """Уникальность name уже проверена в clean_name (с подсказкой про черновик)."""
+        exclude = self._get_validation_exclusions()
+        exclude.add('name')
+        try:
+            self.instance.validate_unique(exclude=exclude)
+        except ValidationError as exc:
+            self._update_errors(exc)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -296,6 +317,9 @@ class StructureFieldForm(forms.ModelForm):
             for field in self.fields.values():
                 field.disabled = True
 
+    def validate_unique(self):
+        """Уникальность (structure_type, name) проверяет StructureFieldFormSet.clean."""
+
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data.get('DELETE'):
@@ -343,7 +367,9 @@ class StructureFieldForm(forms.ModelForm):
                 self.add_error('max_length', 'Длина строки — от 1 до 4000.')
         elif field_type == 'DecimalField':
             max_digits = cleaned_data.get('max_digits') or DEFAULT_MAX_DIGITS
-            decimal_places = cleaned_data.get('decimal_places') or DEFAULT_DECIMAL_PLACES
+            decimal_places = resolve_decimal_places(cleaned_data.get('decimal_places'))
+            cleaned_data['max_digits'] = max_digits
+            cleaned_data['decimal_places'] = decimal_places
             if max_digits < 1 or max_digits > 18:
                 self.add_error('max_digits', 'Всего цифр — от 1 до 18.')
             if decimal_places < 0 or decimal_places > 10:
@@ -428,12 +454,35 @@ def _apply_field_type_constraints(cleaned_data: dict) -> dict:
 
 
 class StructureFieldFormSet(forms.BaseInlineFormSet):
+    DUPLICATE_FIELD_NAME_ERROR = (
+        'Поле с таким именем уже есть в этом типе. '
+        'После удаления SQL-таблицы тип остаётся черновиком с теми же полями — '
+        'не добавляйте свойства повторно: нажмите «Создать» таблицу '
+        'или удалите черновик целиком.'
+    )
+
     def validate_unique(self):
         """Дубликаты имён проверяются в clean() с понятным сообщением."""
 
     def clean(self):
         super().clean()
         table_created = bool(self.instance and self.instance.is_created)
+        deleting_pks: set[int] = set()
+        for form in self.forms:
+            if not form.cleaned_data:
+                continue
+            if form.cleaned_data.get('DELETE') and form.instance.pk:
+                deleting_pks.add(form.instance.pk)
+
+        db_names: dict[str, int] = {}
+        if self.instance and self.instance.pk:
+            for fname, fpk in (
+                StructureField.objects.filter(structure_type=self.instance)
+                .exclude(pk__in=deleting_pks)
+                .values_list('name', 'pk')
+            ):
+                db_names[(fname or '').strip().lower()] = fpk
+
         seen_names: set[str] = set()
         for form in self.forms:
             if not form.cleaned_data:
@@ -447,6 +496,11 @@ class StructureFieldFormSet(forms.BaseInlineFormSet):
                 continue
             if name in seen_names:
                 form.add_error('name', 'Имена колонок в одном типе должны быть разными.')
+            elif (
+                name in db_names
+                and db_names[name] != form.instance.pk
+            ):
+                form.add_error('name', self.DUPLICATE_FIELD_NAME_ERROR)
             seen_names.add(name)
 
 

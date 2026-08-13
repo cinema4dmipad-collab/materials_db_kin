@@ -133,7 +133,11 @@
         </form>
         {% if can_delete_draft %}
         <div class="mt-3 pt-3 border-top">
-            <p class="text-muted small mb-2">Черновик ещё не создан в БД — его можно удалить целиком.</p>
+            <p class="text-muted small mb-2">
+                SQL-таблица ещё не создана (или была удалена). Тип остаётся черновиком с полями —
+                можно создать таблицу снова или удалить черновик целиком. Не создавайте новый тип
+                с теми же именами полей.
+            </p>
             <a href="{% url 'structures:type_delete' structure_type.code %}" class="btn btn-outline-danger">Удалить черновик</a>
         </div>
         {% endif %}
@@ -157,11 +161,7 @@
             </div>
             <div class="modal-body">
                 <p class="mb-2">
-                    {% if request.GET.prompt_create_table == '1' %}
                     Тип структуры <strong>{{ structure_type.name }}</strong> сохранён.
-                    {% else %}
-                    Для типа структуры <strong>{{ structure_type.name }}</strong> SQL-таблица ещё не создана.
-                    {% endif %}
                     Создать таблицу в базе данных сейчас?
                 </p>
                 <p class="text-muted small mb-3">

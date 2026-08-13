@@ -2,16 +2,13 @@ from decimal import Decimal, InvalidOperation
 import uuid
 
 from apps.core.number_utils import format_decimal_display, parse_decimal
-from apps.structures.constants import DEFAULT_DECIMAL_PLACES
+from apps.structures.constants import resolve_structure_field_decimal_places
 from apps.structures.choice_options import choice_label_for_value, resolved_choice_options
 from apps.structures.models import CHOICE_FIELD_TYPE, MATERIAL_LINK_FIELD_TYPE
 
 
 def _decimal_places(field) -> int:
-    places = getattr(field, 'decimal_places', None)
-    if places is None:
-        return DEFAULT_DECIMAL_PLACES
-    return max(int(places), 0)
+    return max(resolve_structure_field_decimal_places(field), 0)
 
 
 def _decimal_quantize(value, decimal_places: int) -> Decimal:

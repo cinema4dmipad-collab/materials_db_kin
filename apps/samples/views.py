@@ -25,10 +25,17 @@ from apps.core.list_filters import (
     build_choice_label_filter,
 )
 from apps.materials.models import Material
-from apps.materials.structure_display import get_material_structure_context
+from apps.materials.structure_display import get_sample_structure_context
 from apps.core.property_form_display import enrich_property_form_display
-from apps.samples.forms import SampleAttachmentForm, SampleForm, SamplePropertyFormSet, SampleTagsForm
-from apps.samples.models import Sample, SampleAttachment
+from apps.samples.forms import (
+    SampleAttachmentForm,
+    SampleForm,
+    SamplePropertyForm,
+    SamplePropertyFormSet,
+    SamplePropertyInlineFormSet,
+    SampleTagsForm,
+)
+from apps.samples.models import Sample, SampleAttachment, SampleProperty
 from apps.materials.picker_data import materials_for_picker
 from apps.structures.property_mapping import reference_properties_for_picker
 from apps.workspaces.mixins import AppViewMixin
@@ -104,6 +111,44 @@ def _split_sample_property_formset(formset, material_property_ids):
     return material_forms, extra_forms
 
 
+def _material_property_formset_initial(material):
+    if material is None:
+        return []
+    return [
+        {
+            'property': item.property,
+            'value_kind': item.value_kind,
+            'value': item.value,
+            'value_b': item.value_b,
+        }
+        for item in material.properties.select_related('property').order_by(
+            'property__group__sort_order',
+            'property__name',
+        )
+    ]
+
+
+def _build_sample_property_formset_from_material(*, material, instance=None):
+    from django.forms import inlineformset_factory
+
+    initial = _material_property_formset_initial(material)
+    formset_class = inlineformset_factory(
+        Sample,
+        SampleProperty,
+        form=SamplePropertyForm,
+        fields=['property', 'value_kind', 'value', 'value_b'],
+        extra=len(initial),
+        can_delete=True,
+        formset=SamplePropertyInlineFormSet,
+    )
+    return formset_class(
+        prefix='properties',
+        initial=initial,
+        queryset=SampleProperty.objects.none(),
+        instance=instance or Sample(),
+    )
+
+
 class SampleFormsetMixin:
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -116,11 +161,37 @@ class SampleFormsetMixin:
 
     def get_formset(self):
         kwargs = {'prefix': 'properties'}
-        if self.request.method == 'POST':
+        if self.request.method == 'POST' and not self.request.POST.get('_apply_material'):
             kwargs['data'] = self.request.POST
         if getattr(self, 'object', None):
             kwargs['instance'] = self.object
         return SamplePropertyFormSet(**kwargs)
+
+    def post(self, request, *args, **kwargs):
+        if request.POST.get('_apply_material'):
+            if isinstance(self, UpdateView):
+                self.object = self.get_object()
+            else:
+                self.object = None
+            return self.render_apply_material()
+        return super().post(request, *args, **kwargs)
+
+    def render_apply_material(self):
+        instance = getattr(self, 'object', None)
+        form = SampleForm(
+            self.request.POST,
+            instance=instance,
+            skip_validation=True,
+            workspace=self.get_form_kwargs()['workspace'],
+        )
+        material = _resolve_sample_material(form=form, sample=instance, request=self.request)
+        formset = _build_sample_property_formset_from_material(
+            material=material,
+            instance=instance,
+        )
+        return self.render_to_response(
+            self.get_context_data(form=form, formset=formset),
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -145,14 +216,6 @@ class SampleFormsetMixin:
         context['material_property_ids'] = [str(item) for item in material_property_ids]
         context['reference_materials'] = materials_for_picker(self.request.active_workspace)
         context['reference_properties'] = reference_properties_for_picker()
-        if material:
-            context.update(get_material_structure_context(material))
-        else:
-            context.update({
-                'structure_type': None,
-                'structure_properties': [],
-                'structure_message': '',
-            })
         return context
 
     def form_valid(self, form):
@@ -253,7 +316,12 @@ class SampleDetailView(AppViewMixin, DetailView):
     def get_queryset(self):
         return (
             samples_visible_in(self.request.active_workspace)
-            .select_related('material', 'material__struct_type', 'created_by_user')
+            .select_related(
+                'material',
+                'material__struct_type',
+                'struct_type',
+                'created_by_user',
+            )
             .prefetch_related('tags')
         )
 
@@ -286,7 +354,7 @@ class SampleDetailView(AppViewMixin, DetailView):
         context['extra_properties'] = [
             item for item in sample_properties if item.property_id not in material_property_ids
         ]
-        context.update(get_material_structure_context(self.object.material))
+        context.update(get_sample_structure_context(self.object))
         from apps.core.bookmarks import bookmark_context
         from apps.core.models import BookmarkEntityType
 

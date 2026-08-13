@@ -178,6 +178,8 @@ def dashboard(request):
         materials_shared_count = materials_visible.exclude(home_workspace=active_workspace).count()
 
     today = timezone.localdate()
+    from apps.materials.picker_data import materials_for_picker
+
     context = {
         'dashboard_date': format_dashboard_date(today),
         'materials_owned_count': materials_owned.count(),
@@ -192,6 +194,7 @@ def dashboard(request):
         'recent_samples': samples_qs.select_related('material', 'material__struct_type').order_by(
             '-created_at'
         )[:8],
+        'reference_materials': materials_for_picker(active_workspace),
     }
     return render(request, 'core/dashboard.html', context)
 

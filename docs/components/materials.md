@@ -54,6 +54,16 @@ Data: `apps/materials/picker_data.py` — each item includes `scopes: ['workspac
 
 Used in: sample form, composite layers, structure dynamic fields.
 
+## Create based on
+
+Quick fill from an existing material (`?based_on=<uuid>` on `/materials/create/`):
+
+* Split button on the materials list (workspace tab), dashboard, and structure-type materials list: primary **Создать** + dropdown **Создать на основе…**
+* Same action remains as a secondary button on the empty create form
+* Picker modal → redirect with `based_on`; copies fields/properties/layers, not samples or attachments
+
+Templates: `materials/includes/create_material_split_button.html`, `static/js/material_create_based_on.js`.
+
 ## Material Form
 
 Key blocks:

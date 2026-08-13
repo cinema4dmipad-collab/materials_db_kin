@@ -22,6 +22,11 @@ class CompositeLayer(models.Model):
     layer_number = models.PositiveIntegerField(verbose_name='Номер слоя')
     angle = models.FloatField(verbose_name='Угол армирования, °')
     thickness = models.FloatField(verbose_name='Толщина, мм')
+    thickness_locked = models.BooleanField(
+        default=False,
+        verbose_name='Толщина зафиксирована',
+        help_text='Зафиксированные слои не меняются при расчёте равных толщин.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

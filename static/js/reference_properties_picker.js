@@ -75,6 +75,7 @@
         var filterText = options.filterText || '';
         var getUsedPropertyIds = options.getUsedPropertyIds || function () { return new Set(); };
         var getUsedColumnNames = options.getUsedColumnNames || function () { return new Set(); };
+        var getUsedLabels = options.getUsedLabels || function () { return new Set(); };
         var metaLine = options.metaLine || defaultMetaLine;
 
         var listNode = document.getElementById('reference-properties-list');
@@ -87,6 +88,7 @@
         var query = filterText.trim().toLowerCase();
         var usedPropertyIds = getUsedPropertyIds();
         var usedColumnNames = getUsedColumnNames();
+        var usedLabels = getUsedLabels();
         var allProperties = getReferenceProperties();
         var properties = allProperties.filter(function (item) {
             if (!query) {
@@ -132,7 +134,8 @@
 
             items.forEach(function (item) {
                 var isUsed = usedPropertyIds.has(item.property_id)
-                    || usedColumnNames.has((item.name || '').toLowerCase());
+                    || usedColumnNames.has((item.name || '').toLowerCase())
+                    || usedLabels.has((item.label || '').toLowerCase());
                 var itemEl = document.createElement('label');
                 itemEl.className = 'reference-property-item' + (isUsed ? ' is-used' : '');
                 itemEl.innerHTML = ''
@@ -152,6 +155,7 @@
         });
 
         addBtn.disabled = true;
+        delete addBtn.dataset.adding;
         listNode.querySelectorAll('.reference-property-checkbox').forEach(function (checkbox) {
             checkbox.addEventListener('change', function () {
                 var selected = listNode.querySelectorAll('.reference-property-checkbox:checked:not(:disabled)');
@@ -176,6 +180,7 @@
         var modalEl = document.getElementById('reference-properties-modal');
         var searchInput = document.getElementById('reference-properties-search');
         var addBtn = document.getElementById('reference-properties-add-btn');
+        var getUsedLabels = options.getUsedLabels;
         if (!openBtn || !modalEl || !searchInput || !addBtn || openBtn.dataset.referencePickerBound === 'true') {
             return null;
         }
@@ -193,6 +198,7 @@
                 filterText: filterText,
                 getUsedPropertyIds: getUsedPropertyIds,
                 getUsedColumnNames: getUsedColumnNames,
+                getUsedLabels: getUsedLabels,
                 metaLine: metaLine,
             });
         }
@@ -211,6 +217,9 @@
         });
 
         addBtn.addEventListener('click', function () {
+            if (addBtn.disabled || addBtn.dataset.adding === 'true') {
+                return;
+            }
             var selected = modalEl.querySelectorAll('.reference-property-checkbox:checked:not(:disabled)');
             var allProperties = getReferenceProperties();
             var byId = {};
@@ -220,19 +229,28 @@
                 }
             });
             var payloads = [];
+            var seenIds = new Set();
             selected.forEach(function (checkbox) {
                 var item = byId[checkbox.value];
-                if (item) {
+                if (item && !seenIds.has(item.property_id)) {
+                    seenIds.add(item.property_id);
                     payloads.push(item);
                 }
             });
             if (payloads.length) {
+                addBtn.dataset.adding = 'true';
+                addBtn.disabled = true;
                 onConfirm(payloads);
             }
             var modal = getModal();
             if (modal) {
                 modal.hide();
             }
+        });
+
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            delete addBtn.dataset.adding;
+            addBtn.disabled = true;
         });
 
         return getModal();

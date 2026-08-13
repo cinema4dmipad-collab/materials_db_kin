@@ -8,16 +8,17 @@
 {% block content %}
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 <link href="{% static 'css/choice_picker.css' %}?v={{ app_version }}-dict1" rel="stylesheet">
-{% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}" rel="stylesheet">{% endif %}
+{% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}?v={{ app_version }}-cl4" rel="stylesheet">{% endif %}
 <div class="card mb-4 sticky-form-page">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h1 class="h4 mb-0">{% if material %}Редактирование материала{% else %}Новый материал{% endif %}</h1>
-        {% if show_create_based_on %}
+        {% if show_create_based_on and not template_material %}
         <button type="button"
                 id="create-based-on-btn"
                 class="btn btn-outline-primary btn-sm"
+                data-create-based-on
                 data-create-url="{% url 'materials:create' %}">
-            Создать на основе
+            Создать на основе…
         </button>
         {% endif %}
     </div>
@@ -264,6 +265,28 @@
                                     <button type="button" id="move-layers-up-btn" class="btn btn-outline-secondary" disabled title="Вверх (↑)">↑</button>
                                     <button type="button" id="move-layers-down-btn" class="btn btn-outline-secondary" disabled title="Вниз (↓)">↓</button>
                                 </div>
+                                <div class="composite-layers-thickness-calc ms-auto" aria-label="Расчёт толщин слоёв">
+                                    <div class="form-check mb-0 composite-layers-symmetric-check">
+                                        {{ form.layers_symmetric }}
+                                        <label class="form-check-label" for="{{ form.layers_symmetric.id_for_label }}">
+                                            {{ form.layers_symmetric.label }}
+                                        </label>
+                                    </div>
+                                    <label class="composite-layers-thickness-calc__label" for="composite-target-thickness">Σt, мм</label>
+                                    <input type="text"
+                                           id="composite-target-thickness"
+                                           class="form-control form-control-sm localized-number-input"
+                                           inputmode="decimal"
+                                           autocomplete="off"
+                                           placeholder="цель"
+                                           title="Целевая общая толщина композита (для симметричной укладки — полная толщина пакета)">
+                                    <button type="button"
+                                            id="calculate-layer-thickness-btn"
+                                            class="btn btn-outline-primary btn-sm"
+                                            title="Разделить целевую толщину поровну между незафиксированными слоями">
+                                        Расчёт
+                                    </button>
+                                </div>
                             </div>
                             <div class="table-responsive">
                                 <table class="table align-middle mb-0 composite-layers-edit-table">
@@ -296,7 +319,17 @@
                                                 {% if layer_form.angle.errors %}<div class="text-danger small">{{ layer_form.angle.errors }}</div>{% endif %}
                                             </td>
                                             <td class="composite-layers-edit-table__thickness">
-                                                {{ layer_form.thickness }}
+                                                <div class="layer-thickness-cell">
+                                                    {{ layer_form.thickness }}
+                                                    <button type="button"
+                                                            class="layer-thickness-lock-btn"
+                                                            title="Зафиксировать толщину"
+                                                            aria-label="Зафиксировать толщину"
+                                                            aria-pressed="false">
+                                                        <i class="bi bi-unlock" aria-hidden="true"></i>
+                                                    </button>
+                                                    {{ layer_form.thickness_locked }}
+                                                </div>
                                                 {% if layer_form.thickness.errors %}<div class="text-danger small">{{ layer_form.thickness.errors }}</div>{% endif %}
                                             </td>
                                             <td class="visually-hidden">
@@ -314,6 +347,8 @@
                             </div>
                             <p class="composite-layers-hint text-muted small px-3 py-2 mb-0 border-top">
                                 Клик по строке — выбор, Shift+клик — диапазон, Ctrl+клик — несколько. Del — удалить выбранные, Ins — добавить слой.
+                                «Расчёт» делит целевую Σt поровну; замочек рядом с толщиной фиксирует слой.
+                                «Симметричный» — в таблице только первая половина (при нечёте последний слой центральный), зеркало в превью.
                             </p>
                         </div>
                         <div class="col-lg-5 col-xl-4">
@@ -332,7 +367,19 @@
                             </td>
                             <td class="composite-layers-edit-table__material">{{ layer_form.material }}</td>
                             <td class="composite-layers-edit-table__angle">{{ layer_form.angle }}</td>
-                            <td class="composite-layers-edit-table__thickness">{{ layer_form.thickness }}</td>
+                            <td class="composite-layers-edit-table__thickness">
+                                <div class="layer-thickness-cell">
+                                    {{ layer_form.thickness }}
+                                    <button type="button"
+                                            class="layer-thickness-lock-btn"
+                                            title="Зафиксировать толщину"
+                                            aria-label="Зафиксировать толщину"
+                                            aria-pressed="false">
+                                        <i class="bi bi-unlock" aria-hidden="true"></i>
+                                    </button>
+                                    {{ layer_form.thickness_locked }}
+                                </div>
+                            </td>
                             <td class="visually-hidden">
                                 {% for hidden in layer_form.hidden_fields %}{{ hidden }}{% endfor %}
                                 {% if layer_formset.can_delete %}{{ layer_form.DELETE }}{% endif %}
@@ -362,7 +409,7 @@
 {% if show_create_based_on %}
 <script src="{% static 'js/material_create_based_on.js' %}"></script>
 {% endif %}
-<script src="{% static 'js/reference_properties_picker.js' %}"></script>
+<script src="{% static 'js/reference_properties_picker.js' %}?v={{ app_version }}-rpp2"></script>
 <script src="{% static 'js/reference_materials_picker.js' %}"></script>
 <script src="{% static 'js/reference_structure_types_picker.js' %}"></script>
 <script src="{% static 'js/structure_type_picker_field.js' %}"></script>
@@ -370,6 +417,6 @@
 <script src="{% static 'js/choice_picker_fields.js' %}"></script>
 <script src="{% static 'js/material_dictionary_fields.js' %}?v={{ app_version }}-dict1"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
-<script src="{% static 'js/composite_layer_diagram_live.js' %}"></script>
-<script src="{% static 'js/composite_layers_formset.js' %}"></script>
+<script src="{% static 'js/composite_layer_diagram_live.js' %}?v={{ app_version }}-cl4"></script>
+<script src="{% static 'js/composite_layers_formset.js' %}?v={{ app_version }}-cl4"></script>
 {% endblock %}
