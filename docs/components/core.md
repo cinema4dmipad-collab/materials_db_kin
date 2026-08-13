@@ -14,6 +14,8 @@ Cross-cutting features: landing page, in-app help, tag management, list filterin
 | `/tags/` | Tag list — tabs **Пространство** / **Общие**, filter **Активные** / **Архив** |
 | `/accounts/profile/` | Current user profile (via `apps/workspaces`) |
 
+HTTP error pages (400 / 403 / 404 / 500): branded template `templates/errors/status.html`, handlers in `config/urls.py` (`apps.core.error_views`). Standalone HTML so 500 still renders if context processors fail.
+
 App URL config: `apps/core/urls.py`, accounts in `apps/workspaces/urls/accounts.py`.
 
 ## List Filters

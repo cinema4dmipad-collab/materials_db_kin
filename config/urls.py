@@ -4,6 +4,11 @@ from django.urls import include, path
 
 from apps.scans.views import AllScansListView
 
+handler400 = 'apps.core.error_views.bad_request'
+handler403 = 'apps.core.error_views.permission_denied'
+handler404 = 'apps.core.error_views.page_not_found'
+handler500 = 'apps.core.error_views.server_error'
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('apps.workspaces.urls.accounts')),

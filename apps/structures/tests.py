@@ -124,6 +124,8 @@ class PropertyMappingTests(TestCase):
             sort_order=1,
         )
         self.assertEqual(resolve_structure_field_decimal_places(field), 4)
+        structure_type.is_created = True
+        structure_type.save(update_fields=['is_created'])
         sync_structure_decimal_places_from_catalog([field])
         field.refresh_from_db()
         self.assertEqual(field.decimal_places, 4)

@@ -905,6 +905,39 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'обновить скан')
 
 
+class HttpStatusPageTests(AuthenticatedWorkspaceTestCase):
+    def test_branded_404_page(self):
+        from apps.core.error_views import page_not_found
+
+        request = RequestFactory().get('/missing-page')
+        request.user = self.user
+        response = page_not_found(request, exception=Exception())
+        self.assertContains(response, 'Страница не найдена', status_code=404)
+        self.assertContains(response, 'На главную', status_code=404)
+        self.assertContains(response, 'http-error__code', status_code=404)
+
+    def test_branded_403_page(self):
+        from apps.core.error_views import permission_denied
+
+        request = RequestFactory().get('/forbidden')
+        request.user = self.user
+        response = permission_denied(request, exception=Exception())
+        self.assertContains(response, 'Доступ запрещён', status_code=403)
+
+    def test_branded_500_page_without_user(self):
+        from apps.core.error_views import server_error
+
+        request = RequestFactory().get('/broken')
+        response = server_error(request)
+        self.assertContains(response, 'Ошибка сервера', status_code=500)
+        self.assertContains(response, 'Войти', status_code=500)
+
+    @override_settings(DEBUG=False)
+    def test_unknown_url_uses_branded_404(self):
+        response = self.client.get('/this-page-does-not-exist/')
+        self.assertContains(response, 'Страница не найдена', status_code=404)
+
+
 class DashboardTests(AuthenticatedWorkspaceTestCase):
     def test_dashboard_renders_workspace_desktop(self):
         response = self.client.get(reverse('core:dashboard'))

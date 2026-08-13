@@ -43,7 +43,7 @@ def sync_structure_decimal_places_from_catalog(structure_fields) -> list[Structu
         places = int(prop.decimal_places)
         if field.decimal_places == places:
             continue
-        StructureField.objects.filter(pk=field.pk).update(decimal_places=places)
+        StructureField.objects.filter(pk=field.pk).update_unlocked(decimal_places=places)
         field.decimal_places = places
         updated.append(field)
 

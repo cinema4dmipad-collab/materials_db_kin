@@ -2133,3 +2133,24 @@ a.file-tile__title:hover {
     color: #b91c1c;
     border-color: #fecaca;
 }
+
+.http-error {
+    min-height: calc(100vh - 8rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 0;
+}
+
+.http-error__card {
+    width: 100%;
+    max-width: 32rem;
+}
+
+.http-error__code {
+    font-size: 4.25rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--kx-brand, #007679);
+}

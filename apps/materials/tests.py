@@ -1700,6 +1700,28 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(params['title'], 'Updated panel')
         self.assertEqual(str(params['thickness']), '9.75')
 
+    def test_edit_form_loads_when_catalog_decimal_places_differ_from_locked_field(self):
+        Property.objects.update_or_create(
+            name='thickness',
+            defaults={
+                'display_name': 'Thickness',
+                'data_type': 'number',
+                'decimal_places': 4,
+            },
+        )
+        row_id = self.insert_structure_row(title='Panel', thickness='8.25')
+        material = self.create_material(
+            code='MAT-DECIMAL-SYNC-EDIT',
+            name='Decimal sync edit',
+            struct_type=self.structure_type,
+            struct_props_id=row_id,
+        )
+        response = self.client.get(reverse('materials:edit', kwargs={'pk': material.pk}))
+        self.assertEqual(response.status_code, 200)
+        thickness_field = self.structure_type.fields.get(name='thickness')
+        thickness_field.refresh_from_db()
+        self.assertEqual(thickness_field.decimal_places, 4)
+
     def test_public_material_update_view_saves_layer_formset(self):
         row_id = self.insert_structure_row(title='Original panel', thickness='8.25')
         original_layer_material = self.create_material(

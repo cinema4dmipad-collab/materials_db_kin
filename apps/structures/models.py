@@ -109,6 +109,10 @@ class StructureFieldQuerySet(models.QuerySet):
             raise ValidationError(STRUCTURE_FIELD_CHANGE_LOCK_ERROR)
         return object_list
 
+    def update_unlocked(self, **kwargs):
+        """Bypass post-create field lock for metadata-only repairs (e.g. decimal_places)."""
+        return super().update(**kwargs)
+
     def update(self, **kwargs):
         self._raise_if_locked_queryset(for_delete=False)
         if 'structure_type' in kwargs:
