@@ -899,8 +899,10 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'HTTP API v1')
         self.assertContains(response, 'Открыть в KeenetiX')
         self.assertContains(response, 'превью C-скана')
+        self.assertContains(response, 'B-скана-XZ')
+        self.assertContains(response, 'синем блоке Σt')
         self.assertContains(response, 'плитками')
-        self.assertContains(response, 'Word через LibreOffice')
+        self.assertContains(response, 'PDF/Word/PPTX через LibreOffice')
         self.assertContains(response, 'иконка Excel')
         self.assertContains(response, 'обновить скан')
 
