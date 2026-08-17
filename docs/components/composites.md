@@ -14,7 +14,7 @@ Ordering is significant; UI allows reorder via drag-and-drop and toolbar buttons
 
 `apps/composites/layer_diagram.py` builds the stack visualization for the material detail page.
 
-Legend modes: material (one color per material), thickness (blue→white→red from min to max), angle (fixed −90°…+90°, 0° is white). Layer labels sit to the right of the color column; separators are black. Strip height is proportional to ply thickness; the stack is capped to the layers table / viewport so it does not overflow the page. Symmetric layups show a dashed mid-plane and “+ N симметричных слоёв”. After layers are set, the stacking-sequence formula is shown (`(0/90)4/(90/0)4`).
+Legend modes: material (one color per material), thickness (blue→white→red from min to max), angle (fixed −90°…+90°, 0° is white). Layer labels sit to the right of the color column; separators are black. Strip height is proportional to ply thickness, with a minimum row height so labels stay readable. Symmetric layups show a dashed mid-plane and “+ N симметричных слоёв”. The stacking-sequence formula (`(0/90)4/(90/0)4`) is shown in the blue Σt summary, not inside the stack panel.
 
 Template include: `templates/materials/includes/composite_layer_diagram.html`  
 Styles: `static/css/composite_layer_diagram.css`

@@ -576,7 +576,6 @@
             + '<h3 class="composite-layer-diagram__title mb-0">Схема укладки</h3>'
             + (showModeSelect ? renderModeSelect(diagram.legend_mode) : '')
             + '</div>'
-            + renderFormula(diagram.reinforcement_formula)
             + legendHtml
             + '<div class="layer-stack-panel">'
             + '<div class="layer-stack-title">Сверху ↓ вниз</div>'

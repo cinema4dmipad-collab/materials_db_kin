@@ -17,13 +17,6 @@
             </div>
         </div>
 
-        {% if layer_diagram.reinforcement_formula %}
-        <div class="reinforcement-formula mb-3">
-            <span class="reinforcement-formula__label">Схема армирования</span>
-            <span class="reinforcement-formula__value">{{ layer_diagram.reinforcement_formula }}</span>
-        </div>
-        {% endif %}
-
         {% if layer_diagram.legend_mode == 'material' and layer_diagram.material_legend %}
         <div class="layer-material-legend mb-3">
             {% for entry in layer_diagram.material_legend %}
