@@ -62,15 +62,9 @@
                 <dt class="col-sm-3">Файл</dt>
                 <dd class="col-sm-9">{{ scan.filename }}</dd>
             </dl>
-            <aside class="scan-detail-layout__preview" aria-label="Превью C-скана">
-                <div class="scan-preview-frame{% if not scan.preview %} scan-preview-frame--empty{% endif %}">
-                    <div class="scan-preview-frame__label">Превью C-скана</div>
-                    <div class="scan-preview-frame__media">
-                        {% include 'includes/scan_preview_thumb.html' with scan=scan size='detail' %}
-                    </div>
-                    {% if not scan.preview %}
-                    <p class="scan-preview-frame__hint mb-0">Не загружено</p>
-                    {% endif %}
+            <aside class="scan-detail-layout__preview" aria-label="Превью сканов">
+                <div class="scan-preview-frame">
+                    {% include 'includes/scan_preview_carousel.html' with scan=scan size='detail' %}
                 </div>
             </aside>
         </div>

@@ -82,6 +82,7 @@ def stock_navigation_urls(workspace=None) -> frozenset[str]:
         reverse('core:tag_list'),
         reverse('structures:select_type'),
         reverse('samples:list'),
+        reverse('samples:import'),
         reverse('scans_all'),
         reverse('core:help'),
         reverse('administration:backups'),

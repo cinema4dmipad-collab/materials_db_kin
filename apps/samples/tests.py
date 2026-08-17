@@ -107,6 +107,39 @@ class SampleViewsTests(TestCase):
 
         self.assertTrue(Sample.objects.filter(code='SMP-UI-002').exists())
 
+    def test_sample_description_on_form_detail_and_search(self):
+        form_page = self.client.get(reverse('samples:create'))
+        self.assertContains(form_page, 'Описание')
+
+        create_response = self.client.post(
+            reverse('samples:create'),
+            {
+                'code': 'SMP-UI-DESC',
+                'name': 'Described sample',
+                'description': 'Заготовка для УЗК',
+                'material': self.material.pk,
+                'object_type': 'test',
+                **self._property_formset_management_data(),
+            },
+        )
+        self.assertEqual(create_response.status_code, 302)
+        sample = Sample.objects.get(code='SMP-UI-DESC')
+        self.assertEqual(sample.description, 'Заготовка для УЗК')
+
+        detail = self.client.get(reverse('samples:detail', kwargs={'pk': sample.pk}))
+        self.assertContains(detail, 'Заготовка для УЗК')
+
+        listed = self.client.get(
+            reverse('samples:list'),
+            {'q': 'УЗК', 'q_in': 'description'},
+        )
+        self.assertContains(listed, 'SMP-UI-DESC')
+        missed = self.client.get(
+            reverse('samples:list'),
+            {'q': 'нет-такого-описания', 'q_in': 'description'},
+        )
+        self.assertNotContains(missed, 'SMP-UI-DESC')
+
     def test_sample_bulk_delete(self):
         other = Sample.objects.create(
             code='SMP-UI-BULK',
@@ -157,6 +190,29 @@ class SampleViewsTests(TestCase):
         self.assertNotContains(response, 'SMP-UI-CTRL')
         self.assertContains(response, 'type-pill-link')
         self.assertContains(response, 'Испытательный')
+
+    def test_sample_list_sorts_by_name(self):
+        Sample.objects.create(
+            code='SMP-SORT-Z',
+            name='Zulu sample',
+            material=self.material,
+            object_type='test',
+            workspace=self.legacy_workspace,
+        )
+        Sample.objects.create(
+            code='SMP-SORT-A',
+            name='Alpha sample',
+            material=self.material,
+            object_type='test',
+            workspace=self.legacy_workspace,
+        )
+
+        list_url = reverse('samples:list')
+        by_name = self.client.get(list_url, {'sort': 'name', 'dir': 'asc'})
+        html = by_name.content.decode()
+        self.assertLess(html.find('Alpha sample'), html.find('UI sample'))
+        self.assertLess(html.find('UI sample'), html.find('Zulu sample'))
+        self.assertContains(by_name, 'table-sort')
 
     def test_sample_detail_has_inline_tags_form(self):
         response = self.client.get(reverse('samples:detail', kwargs={'pk': self.sample.pk}))
@@ -346,29 +402,32 @@ class SampleViewsTests(TestCase):
 
     def test_attach_scan_on_sample_scans_tab(self):
 
-        scans_url = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
+        create_url = reverse('scans:create', kwargs={'sample_pk': self.sample.pk})
 
         post_response = self.client.post(
 
-            scans_url,
+            create_url,
 
             {
 
-                'scan-title': 'Inline scan',
+                'title': 'Inline scan',
 
-                'scan-description': 'Attached from scans tab',
+                'description': 'Attached from scans tab',
 
-                'scan-method': 'immersion',
+                'method': 'immersion',
 
-                'scan-file': make_hdf5_upload('inline.h5'),
+                'file': make_hdf5_upload('inline.h5'),
 
             },
 
         )
 
-        self.assertRedirects(post_response, scans_url)
-
         scan = ScanRecord.objects.get(title='Inline scan')
+
+        self.assertRedirects(
+            post_response,
+            reverse('scans:detail', kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk}),
+        )
 
         self.assertEqual(scan.sample, self.sample)
 

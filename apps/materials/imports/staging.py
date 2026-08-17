@@ -11,6 +11,7 @@ from apps.materials.imports.mapping import (
     TARGET_DESCRIPTION,
     TARGET_MANUFACTURER,
     TARGET_NAME,
+    TARGET_OBJECT_TYPE,
     TARGET_PROPERTY_PREFIX,
     TARGET_SKIP,
     TARGET_STRUCTURE_PREFIX,
@@ -106,6 +107,7 @@ class DraftMaterial:
     manufacturer: str = ''
     availability: str = ''
     technology: str = ''
+    object_type: str = ''
     warnings: list[str] = field(default_factory=list)
     structure_values: list[DraftStructureValue] = field(default_factory=list)
     properties: list[DraftProperty] = field(default_factory=list)
@@ -144,6 +146,7 @@ def build_staging_draft(
     match_policy: str = MATCH_BY_NAME,
     structure_type_id: str | None = None,
     tag_columns: list[str] | None = None,
+    occupied_codes: set[str] | None = None,
 ) -> list[DraftMaterial]:
     structure_field_cache = {
         field.name: field
@@ -167,7 +170,7 @@ def build_staging_draft(
     )
 
     drafts: list[DraftMaterial] = []
-    used_codes: set[str] = set()
+    used_codes: set[str] = set(occupied_codes or ())
 
     for row_offset, wide_row in enumerate(table.rows):
         excel_row = table.header_row + 1 + row_offset
@@ -179,6 +182,7 @@ def build_staging_draft(
             'manufacturer': '',
             'availability': '',
             'technology': '',
+            'object_type': '',
         }
         name_column_label = ''
         struct_vals: list[DraftStructureValue] = []
@@ -213,6 +217,8 @@ def build_staging_draft(
                     fields['availability'] = _as_text(raw)
                 elif target == TARGET_TECHNOLOGY:
                     fields['technology'] = _as_text(raw)
+                elif target == TARGET_OBJECT_TYPE:
+                    fields['object_type'] = _as_text(raw)
                 elif target.startswith(TARGET_STRUCTURE_PREFIX):
                     field_name = target.split(':', 1)[1]
                     structure_field = structure_field_cache.get(field_name)
@@ -371,6 +377,7 @@ def build_staging_draft(
                     manufacturer=fields['manufacturer'],
                     availability=fields['availability'],
                     technology=fields['technology'],
+                    object_type=fields['object_type'],
                     warnings=warnings,
                     structure_values=struct_vals,
                     properties=props,
@@ -404,6 +411,7 @@ def build_staging_draft(
                 manufacturer=fields['manufacturer'],
                 availability=fields['availability'],
                 technology=fields['technology'],
+                object_type=fields['object_type'],
                 warnings=warnings,
                 structure_values=struct_vals,
                 properties=props,
@@ -508,6 +516,7 @@ def drafts_from_session(raw: list[dict] | None) -> list[DraftMaterial]:
                 manufacturer=item.get('manufacturer') or '',
                 availability=item.get('availability') or '',
                 technology=item.get('technology') or '',
+                object_type=item.get('object_type') or '',
                 warnings=list(item.get('warnings') or []),
                 structure_values=struct_vals,
                 properties=props,
@@ -551,7 +560,7 @@ DUPLICATE_NAME_PREFIX = 'prefix'
 DUPLICATE_NAME_POSTFIX = 'postfix'
 
 
-def name_collisions_for_drafts(workspace, drafts: list[DraftMaterial]) -> list[dict]:
+def name_collisions_for_drafts(workspace, drafts: list[DraftMaterial], *, queryset=None) -> list[dict]:
     """
     Строки черновика, чьё название уже есть у материала пространства (без учёта регистра).
     Пропущенные строки не учитываются.
@@ -568,16 +577,18 @@ def name_collisions_for_drafts(workspace, drafts: list[DraftMaterial]) -> list[d
         return []
 
     keys = {name.casefold() for _i, _d, name in candidates}
-    existing_by_key: dict[str, Material] = {}
-    qs = (
-        Material.objects.filter(home_workspace=workspace)
-        .only('pk', 'name', 'code')
-        .order_by('created_at')
-    )
-    for material in qs:
-        key = (material.name or '').casefold()
+    existing_by_key: dict[str, object] = {}
+    qs = queryset
+    if qs is None:
+        qs = (
+            Material.objects.filter(home_workspace=workspace)
+            .only('pk', 'name', 'code')
+            .order_by('created_at')
+        )
+    for existing in qs:
+        key = (existing.name or '').casefold()
         if key in keys and key not in existing_by_key:
-            existing_by_key[key] = material
+            existing_by_key[key] = existing
 
     collisions: list[dict] = []
     for index, draft, name in candidates:

@@ -33,7 +33,19 @@ class ScanRecord(models.Model):
         upload_to='scans/previews/%Y/%m/%d/',
         blank=True,
         verbose_name='Превью C-скана',
-        help_text='Необязательное изображение (PNG/JPEG/WebP) для списка сканов.',
+        help_text='Необязательное изображение (PNG/JPEG/WebP) C-скана для списка и карточки.',
+    )
+    preview_b_xz = models.FileField(
+        upload_to='scans/previews/%Y/%m/%d/',
+        blank=True,
+        verbose_name='Превью B-скана-XZ',
+        help_text='Необязательное изображение (PNG/JPEG/WebP) B-скана в плоскости XZ.',
+    )
+    preview_b_yz = models.FileField(
+        upload_to='scans/previews/%Y/%m/%d/',
+        blank=True,
+        verbose_name='Превью B-скана-YZ',
+        help_text='Необязательное изображение (PNG/JPEG/WebP) B-скана в плоскости YZ.',
     )
     title = models.CharField(max_length=200, verbose_name='Название')
     description = models.TextField(blank=True, verbose_name='Описание')
@@ -89,8 +101,9 @@ class ScanRecord(models.Model):
                 attachment.preview_image.delete(save=False)
         if self.file:
             self.file.delete(save=False)
-        if self.preview:
-            self.preview.delete(save=False)
+        from apps.scans.previews import delete_preview_files
+
+        delete_preview_files(self)
         super().delete(*args, **kwargs)
 
 

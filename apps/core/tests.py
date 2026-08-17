@@ -1252,6 +1252,35 @@ class DebugPageTests(TestCase):
         self.assertNotContains(response, 'supersecret')
 
 
+class TableSortTests(TestCase):
+    def test_parse_table_sort_falls_back_for_unknown_column(self):
+        request = RequestFactory().get('/list/', {'sort': 'hack', 'dir': 'desc'})
+        from apps.core.table_sort import parse_table_sort
+
+        self.assertEqual(
+            parse_table_sort(request, ('code', 'name'), 'code'),
+            ('code', 'asc'),
+        )
+
+    def test_parse_table_sort_accepts_allowed_column(self):
+        request = RequestFactory().get('/list/', {'sort': 'name', 'dir': 'desc'})
+        from apps.core.table_sort import parse_table_sort
+
+        self.assertEqual(
+            parse_table_sort(request, ('code', 'name'), 'code'),
+            ('name', 'desc'),
+        )
+
+    def test_sort_preserve_params_keeps_sort_query(self):
+        from apps.core.table_sort import sort_preserve_params
+
+        request = RequestFactory().get('/list/', {'sort': 'name', 'dir': 'asc', 'q': 'x'})
+        self.assertEqual(
+            sort_preserve_params(request.GET),
+            [('sort', 'name'), ('dir', 'asc')],
+        )
+
+
 class UiToneTests(TestCase):
     def test_semantic_tone_uses_known_mapping(self):
         self.assertEqual(ui_tone('test'), 'tone-amber')

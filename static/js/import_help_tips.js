@@ -4,6 +4,7 @@
     var PAD = 8;
     var GAP = 8;
     var active = null;
+    var pinned = false;
 
     function tipFromTrigger(trigger) {
         if (trigger._importHelpTip && document.body.contains(trigger._importHelpTip)) {
@@ -51,8 +52,12 @@
 
     function hideActive() {
         if (!active) return;
+        if (active.tip) {
+            active.tip.classList.remove('is-pinned');
+        }
         restoreTip(active);
         active = null;
+        pinned = false;
     }
 
     function placeTip(trigger, tip) {
@@ -97,6 +102,7 @@
             hideActive();
         }
         active = placeTip(trigger, tip);
+        tip.classList.toggle('is-pinned', pinned);
     }
 
     document.addEventListener('pointerover', function (event) {
@@ -106,7 +112,7 @@
     });
 
     document.addEventListener('pointerout', function (event) {
-        if (!active) return;
+        if (!active || pinned) return;
         var fromTrigger = event.target.closest && event.target.closest('.import-help__trigger');
         if (fromTrigger !== active.trigger) return;
         var related = event.relatedTarget;
@@ -122,11 +128,36 @@
 
     document.addEventListener('focusout', function () {
         window.setTimeout(function () {
-            if (!active) return;
+            if (!active || pinned) return;
             var focused = document.activeElement;
             if (focused && (focused === active.trigger || active.trigger.contains(focused))) return;
             hideActive();
         }, 0);
+    });
+
+    document.addEventListener('click', function (event) {
+        var trigger = event.target.closest && event.target.closest('.import-help__trigger');
+        if (trigger) {
+            if (pinned && active && active.trigger === trigger) {
+                hideActive();
+                return;
+            }
+            pinned = true;
+            showFor(trigger);
+            return;
+        }
+        if (pinned && active && active.tip && active.tip.contains(event.target)) {
+            return;
+        }
+        if (pinned) {
+            hideActive();
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            hideActive();
+        }
     });
 
     window.addEventListener('scroll', hideActive, true);

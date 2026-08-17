@@ -21,7 +21,7 @@ class SampleAttachmentInline(admin.TabularInline):
 @admin.register(Sample)
 class SampleAdmin(admin.ModelAdmin):
     list_display = ['code', 'name', 'material', 'object_type', 'created_by', 'created_at']
-    search_fields = ['code', 'name', 'material__code']
+    search_fields = ['code', 'name', 'description', 'material__code']
     list_filter = ['object_type', 'material']
     inlines = [ScanInline, SampleAttachmentInline]
 

@@ -18,6 +18,7 @@ from apps.api.schemas import (
 from apps.materials.models import Material, MaterialProperty
 from apps.samples.models import Sample, SampleProperty
 from apps.scans.models import ScanRecord
+from apps.scans.previews import PREVIEW_KINDS, api_preview_url
 from apps.structures.sql_executor import SQLExecutor
 from apps.workspaces.models import Workspace
 
@@ -124,6 +125,7 @@ def serialize_sample(sample: Sample) -> SampleOut:
         id=sample.pk,
         code=sample.code,
         name=sample.name,
+        description=sample.description or '',
         material_id=sample.material_id,
         workspace_id=sample.workspace_id,
         object_type=sample.object_type,
@@ -178,10 +180,7 @@ def serialize_scan(scan: ScanRecord) -> ScanOut:
         tag_names = [tag.name for tag in scan.tags.all()]
     except Exception:
         tag_names = []
-    preview_url = None
-    if getattr(scan, 'preview', None) and scan.preview:
-        # Proxy through the app — direct S3/SeaweedFS URLs are often unreachable from the browser.
-        preview_url = reverse('api:scan_preview', kwargs={'scan_id': scan.pk})
+    preview_urls = {kind.key: api_preview_url(scan, kind) for kind in PREVIEW_KINDS}
     return ScanOut(
         id=scan.pk,
         sample_id=scan.sample_id,
@@ -189,10 +188,13 @@ def serialize_scan(scan: ScanRecord) -> ScanOut:
         title=scan.title,
         description=scan.description or '',
         method=scan.method,
+        method_label=scan.get_method_display(),
         filename=scan.filename,
         size_bytes=_scan_size(scan),
         uploaded_at=scan.uploaded_at,
         download_url=reverse('api:scan_download', kwargs={'scan_id': scan.pk}),
-        preview_url=preview_url,
+        preview_url=preview_urls.get('c'),
+        preview_b_xz_url=preview_urls.get('b_xz'),
+        preview_b_yz_url=preview_urls.get('b_yz'),
         tags=tag_names,
     )

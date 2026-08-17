@@ -388,6 +388,9 @@
                 {"key": "title", "type": "text", "value": "From Postman"},
                 {"key": "method", "type": "text", "value": "echo"},
                 {"key": "description", "type": "text", "value": "Загружено из KeenetiX"},
+                {"key": "preview", "type": "file", "src": [], "disabled": true},
+                {"key": "preview_b_xz", "type": "file", "src": [], "disabled": true},
+                {"key": "preview_b_yz", "type": "file", "src": [], "disabled": true},
                 {"key": "tag_names", "type": "text", "value": "источник::KeenetiX"}
               ]
             },

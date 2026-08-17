@@ -648,6 +648,67 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         self.assertNotContains(response, 'structure-material-expand')
         self.assertNotContains(response, 'structure_material_expand.js')
 
+    def test_list_sorts_materials_by_structure_field(self):
+        specs = (
+            ('MAT-THICK-A', 'Mid thickness', '2.00'),
+            ('MAT-THICK-B', 'High thickness', '10.00'),
+            ('MAT-THICK-C', 'Low thickness', '1.00'),
+            ('MAT-THICK-D', 'Empty thickness', None),
+        )
+        for code, name, thickness in specs:
+            payload = {'title': name}
+            if thickness is not None:
+                payload['thickness'] = thickness
+            row_id = SQLExecutor.insert(self.structure_type, payload)['id']
+            Material.objects.create(
+                code=code,
+                name=name,
+                home_workspace=self.workspace,
+                struct_type=self.structure_type,
+                struct_props_id=row_id,
+            )
+
+        list_url = reverse('structures:list', args=[self.structure_type.code])
+
+        default_page = self.client.get(list_url)
+        self.assertEqual(default_page.status_code, 200)
+        self.assertLess(
+            default_page.content.decode().find('Mid thickness'),
+            default_page.content.decode().find('High thickness'),
+        )
+        self.assertContains(default_page, 'table-sort')
+        self.assertContains(default_page, 'sort=thickness')
+
+        asc_page = self.client.get(list_url, {'sort': 'thickness', 'dir': 'asc'})
+        asc_html = asc_page.content.decode()
+        self.assertLess(asc_html.find('Low thickness'), asc_html.find('Mid thickness'))
+        self.assertLess(asc_html.find('Mid thickness'), asc_html.find('High thickness'))
+        self.assertLess(asc_html.find('High thickness'), asc_html.find('Empty thickness'))
+
+        desc_page = self.client.get(list_url, {'sort': 'thickness', 'dir': 'desc'})
+        desc_html = desc_page.content.decode()
+        self.assertLess(desc_html.find('High thickness'), desc_html.find('Mid thickness'))
+        self.assertLess(desc_html.find('Mid thickness'), desc_html.find('Low thickness'))
+        self.assertLess(desc_html.find('Low thickness'), desc_html.find('Empty thickness'))
+
+        name_page = self.client.get(list_url, {'sort': 'name', 'dir': 'asc'})
+        name_html = name_page.content.decode()
+        self.assertLess(name_html.find('Empty thickness'), name_html.find('High thickness'))
+        self.assertLess(name_html.find('High thickness'), name_html.find('Low thickness'))
+
+        invalid_page = self.client.get(list_url, {'sort': 'drop_table', 'dir': 'desc'})
+        invalid_html = invalid_page.content.decode()
+        self.assertLess(invalid_html.find('MAT-THICK-A'), invalid_html.find('MAT-THICK-B'))
+        self.assertContains(invalid_page, 'sort=thickness')
+
+        filtered = self.client.get(
+            list_url,
+            {'q': 'thickness', 'sort': 'thickness', 'dir': 'asc'},
+        )
+        self.assertContains(filtered, 'q=thickness')
+        self.assertContains(filtered, 'name="sort"')
+        self.assertContains(filtered, 'value="thickness"')
+
     def test_list_search_filters_by_tag_without_showing_tags(self):
         from apps.core.models import Tag
 
@@ -686,10 +747,10 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        grid_names = [row['material'].name for row in response.context['materials_grid']['rows']]
+        self.assertEqual(grid_names, ['Tagged material'])
         self.assertContains(response, 'Tagged material')
         self.assertContains(response, 'MAT-TAGGED')
-        self.assertNotContains(response, 'Other material')
-        self.assertNotContains(response, 'MAT-OTHER')
         self.assertNotContains(response, 'кевлар-тест')
 
     def test_list_shows_only_home_workspace_materials(self):
@@ -726,10 +787,10 @@ class PublicStructureRecordViewsTests(TransactionTestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        grid_names = [row['material'].name for row in response.context['materials_grid']['rows']]
+        self.assertEqual(grid_names, ['Local workspace material'])
         self.assertContains(response, 'Local workspace material')
         self.assertContains(response, 'MAT-LOCAL-WS')
-        self.assertNotContains(response, 'Shared workspace material')
-        self.assertNotContains(response, 'MAT-SHARED-WS')
 
     def test_list_allows_type_without_created_table(self):
         draft_type = StructureType.objects.create(

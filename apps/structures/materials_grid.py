@@ -40,7 +40,7 @@ def structure_field_headers(fields) -> list[dict]:
     return columns
 
 
-def _rows_by_id(structure_type: StructureType) -> dict[str, dict]:
+def structure_sql_rows_by_id(structure_type: StructureType) -> dict[str, dict]:
     result = SQLExecutor.get_all(structure_type, limit=None, offset=0)
     if not result.get('success'):
         return {}
@@ -49,6 +49,10 @@ def _rows_by_id(structure_type: StructureType) -> dict[str, dict]:
         for record in (result.get('records') or [])
         if record.get('id') is not None
     }
+
+
+def _rows_by_id(structure_type: StructureType) -> dict[str, dict]:
+    return structure_sql_rows_by_id(structure_type)
 
 
 def _cell_display(field, structure_params: dict | None) -> str:
@@ -65,14 +69,19 @@ def _cell_display(field, structure_params: dict | None) -> str:
         return '—' if raw is None or raw == '' else str(raw)
 
 
-def build_structure_materials_grid(structure_type: StructureType, materials) -> dict:
+def build_structure_materials_grid(
+    structure_type: StructureType,
+    materials,
+    rows_by_id: dict | None = None,
+) -> dict:
     """
     Build a read-only grid: rows = materials of this structure type,
     columns = structure fields only (no reference properties).
     """
     fields = structure_data_fields(structure_type)
     columns = structure_field_headers(fields)
-    rows_by_id = _rows_by_id(structure_type) if fields or materials else {}
+    if rows_by_id is None:
+        rows_by_id = _rows_by_id(structure_type) if fields or materials else {}
 
     rows = []
     for material in materials:

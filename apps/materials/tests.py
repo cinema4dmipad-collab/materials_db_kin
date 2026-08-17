@@ -534,6 +534,21 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertContains(response, 'MAT-LIST-001')
         self.assertContains(response, 'MAT-LIST-002')
 
+    def test_material_list_sorts_by_name(self):
+        self.create_material(code='MAT-SORT-B', name='Zulu listed material')
+        self.create_material(code='MAT-SORT-A', name='Alpha listed material')
+
+        list_url = reverse('materials:list')
+        default_page = self.client.get(list_url)
+        default_html = default_page.content.decode()
+        self.assertLess(default_html.find('MAT-SORT-A'), default_html.find('MAT-SORT-B'))
+        self.assertContains(default_page, 'table-sort')
+
+        by_name = self.client.get(list_url, {'sort': 'name', 'dir': 'desc'})
+        html = by_name.content.decode()
+        self.assertLess(html.find('Zulu listed material'), html.find('Alpha listed material'))
+        self.assertContains(by_name, 'sort=code')
+
     def test_material_list_filters_by_structure_type_search(self):
         self.create_material(code='MAT-LIST-001', name='Plain material')
         self.create_material(
@@ -1453,6 +1468,8 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(detail_response, 'composite-thickness-summary')
         self.assertContains(detail_response, 'Σt =')
         self.assertContains(detail_response, 'layer-stack-column')
+        self.assertContains(detail_response, 'layer-stack-row')
+        self.assertContains(detail_response, 'layer-stack-swatch')
         self.assertContains(detail_response, 'layer-material-legend')
         self.assertContains(detail_response, 'flex:')
         self.assertContains(detail_response, 'background-color:')

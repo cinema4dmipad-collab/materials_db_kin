@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from apps.composites.layer_symmetry import (
+    format_layer_count_label,
+    format_mirror_note,
+    mirrored_layer_count,
+)
+from apps.composites.reinforcement_formula import build_reinforcement_formula
+
 LEGEND_MODE_MATERIAL = 'material'
 LEGEND_MODE_THICKNESS = 'thickness'
 LEGEND_MODE_ANGLE = 'angle'
@@ -26,6 +33,9 @@ GRADIENT_BLUE = (0, 102, 255)
 GRADIENT_WHITE = (255, 255, 255)
 GRADIENT_RED = (230, 0, 38)
 
+ANGLE_SCALE_MIN = -90.0
+ANGLE_SCALE_MAX = 90.0
+
 LEGEND_MODE_LABELS = {
     LEGEND_MODE_MATERIAL: 'Материал',
     LEGEND_MODE_THICKNESS: 'Толщина',
@@ -35,7 +45,7 @@ LEGEND_MODE_LABELS = {
 LEGEND_CAPTIONS = {
     LEGEND_MODE_MATERIAL: 'Один материал — один цвет',
     LEGEND_MODE_THICKNESS: 'Цвет по толщине: синий → белый → красный',
-    LEGEND_MODE_ANGLE: 'Цвет по углу: синий → белый → красный',
+    LEGEND_MODE_ANGLE: 'Цвет по углу: −90° синий → 0° белый → +90° красный',
 }
 
 
@@ -70,15 +80,37 @@ def diverging_blue_white_red(t: float) -> str:
     return _hex_color(rgb)
 
 
+def signed_fiber_angle(angle) -> float:
+    """Wrap reinforcement angle to [-90, 90]."""
+    value = ((float(angle) + 180.0) % 360.0) - 180.0
+    if value > ANGLE_SCALE_MAX:
+        value -= 180.0
+    elif value < ANGLE_SCALE_MIN:
+        value += 180.0
+    return value
+
+
+def _format_signed_angle_label(value: float) -> str:
+    number = float(value)
+    if number > 0:
+        abs_text = str(int(number) if number == int(number) else number)
+        return f'+{abs_text} °'
+    if number < 0:
+        abs_number = abs(number)
+        abs_text = str(int(abs_number) if abs_number == int(abs_number) else abs_number)
+        return f'−{abs_text} °'
+    return '0 °'
+
+
 def _normalize_angle(angle) -> str:
-    value = round(float(angle) % 180, 2)
+    value = round(signed_fiber_angle(angle), 2)
     if value == int(value):
         return str(int(value))
     return str(value).replace(',', '.')
 
 
 def _angle_value(angle) -> float:
-    return float(angle) % 180
+    return signed_fiber_angle(angle)
 
 
 def _material_color_map(layer_list) -> dict:
@@ -105,7 +137,13 @@ def resolve_legend_mode(color_by: str | None) -> str:
     return mode
 
 
-def build_layer_diagram(layers, *, color_by: str | None = None):
+def build_layer_diagram(
+    layers,
+    *,
+    color_by: str | None = None,
+    symmetric: bool = False,
+    defining_count: int | None = None,
+):
     layer_list = list(layers)
     if not layer_list:
         return None
@@ -117,11 +155,8 @@ def build_layer_diagram(layers, *, color_by: str | None = None):
 
     material_colors = _material_color_map(layer_list)
     thickness_values = [float(layer.thickness) for layer in layer_list]
-    angle_values = [_angle_value(layer.angle) for layer in layer_list]
     thickness_min = min(thickness_values) if thickness_values else 0.0
     thickness_max = max(thickness_values) if thickness_values else 0.0
-    angle_min = min(angle_values) if angle_values else 0.0
-    angle_max = max(angle_values) if angle_values else 0.0
 
     diagram_layers = []
     material_legend = []
@@ -142,7 +177,7 @@ def build_layer_diagram(layers, *, color_by: str | None = None):
         if legend_mode == LEGEND_MODE_THICKNESS:
             color = _scale_color(thickness, thickness_min, thickness_max)
         elif legend_mode == LEGEND_MODE_ANGLE:
-            color = _scale_color(angle_raw, angle_min, angle_max)
+            color = _scale_color(angle_raw, ANGLE_SCALE_MIN, ANGLE_SCALE_MAX)
         else:
             color = material_color
 
@@ -169,20 +204,28 @@ def build_layer_diagram(layers, *, color_by: str | None = None):
             'min': thickness_min,
             'max': thickness_max,
             'unit': 'мм',
+            'mid_label': 'среднее',
             'min_color': diverging_blue_white_red(0.0),
             'mid_color': diverging_blue_white_red(0.5),
             'max_color': diverging_blue_white_red(1.0),
         }
     elif legend_mode == LEGEND_MODE_ANGLE:
         scale = {
-            'min': angle_min,
-            'max': angle_max,
+            'min': ANGLE_SCALE_MIN,
+            'max': ANGLE_SCALE_MAX,
             'unit': '°',
+            'min_label': _format_signed_angle_label(ANGLE_SCALE_MIN),
+            'mid_label': _format_signed_angle_label(0),
+            'max_label': _format_signed_angle_label(ANGLE_SCALE_MAX),
             'min_color': diverging_blue_white_red(0.0),
             'mid_color': diverging_blue_white_red(0.5),
             'max_color': diverging_blue_white_red(1.0),
         }
 
+    layer_count = len(diagram_layers)
+    stored_count = defining_count if defining_count is not None else layer_count
+    is_symmetric = bool(symmetric)
+    mirror_count = mirrored_layer_count(stored_count) if is_symmetric else 0
     return {
         'layers': diagram_layers,
         'material_legend': material_legend,
@@ -194,5 +237,16 @@ def build_layer_diagram(layers, *, color_by: str | None = None):
         'legend_caption': LEGEND_CAPTIONS[legend_mode],
         'scale': scale,
         'total_thickness': round(total_thickness, 4),
-        'layer_count': len(diagram_layers),
+        'layer_count': layer_count,
+        'defining_count': stored_count,
+        'mirror_count': mirror_count,
+        'symmetric': is_symmetric,
+        'layer_count_label': format_layer_count_label(
+            stored_count,
+            symmetric=is_symmetric,
+        ),
+        'mirror_note': format_mirror_note(stored_count) if is_symmetric else '',
+        'reinforcement_formula': build_reinforcement_formula(
+            item['angle_value'] for item in diagram_layers
+        ),
     }

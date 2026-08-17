@@ -22,6 +22,8 @@
     var GRADIENT_BLUE = [0, 102, 255];
     var GRADIENT_WHITE = [255, 255, 255];
     var GRADIENT_RED = [230, 0, 38];
+    var ANGLE_SCALE_MIN = -90;
+    var ANGLE_SCALE_MAX = 90;
 
     var LEGEND_MODE_LABELS = {
         material: 'Материал',
@@ -32,7 +34,7 @@
     var LEGEND_CAPTIONS = {
         material: 'Один материал — один цвет',
         thickness: 'Цвет по толщине: синий → белый → красный',
-        angle: 'Цвет по углу: синий → белый → красный',
+        angle: 'Цвет по углу: −90° синий → 0° белый → +90° красный',
     };
 
     function escapeHtml(text) {
@@ -124,6 +126,153 @@
         }
     }
 
+    function mirroredLayerCount(definingCount) {
+        if (!(definingCount > 0)) {
+            return 0;
+        }
+        return definingCount % 2 === 0 ? definingCount : definingCount - 1;
+    }
+
+    function formatLayerCountLabel(definingCount, symmetric) {
+        if (!(definingCount > 0)) {
+            return '';
+        }
+        if (!symmetric) {
+            return definingCount + ' сл.';
+        }
+        var mirrorCount = mirroredLayerCount(definingCount);
+        if (mirrorCount <= 0) {
+            return definingCount + ' сл.';
+        }
+        return definingCount + ' сл. (+ ' + mirrorCount + ' сим. слоёв)';
+    }
+
+    function formatMirrorNote(definingCount) {
+        var mirrorCount = mirroredLayerCount(definingCount);
+        if (mirrorCount <= 0) {
+            return '';
+        }
+        return '+ ' + mirrorCount + ' симметричных слоёв';
+    }
+
+    function formatPlyAngle(angle) {
+        var value = parseAngleValue(angle);
+        var rounded = Math.round(value * 100) / 100;
+        if (Math.abs(rounded - Math.round(rounded)) < 1e-9) {
+            var ival = Math.round(rounded);
+            if (ival === 0) {
+                return '0';
+            }
+            if (ival === 90) {
+                return '90';
+            }
+            if (ival === -90) {
+                return '-90';
+            }
+            if (ival > 0) {
+                return '+' + ival;
+            }
+            return String(ival);
+        }
+        if (rounded > 0) {
+            return '+' + String(rounded);
+        }
+        return String(rounded);
+    }
+
+    function pairTokens(angles) {
+        var tokens = [];
+        var index = 0;
+        while (index + 1 < angles.length) {
+            tokens.push('(' + formatPlyAngle(angles[index]) + '/' + formatPlyAngle(angles[index + 1]) + ')');
+            index += 2;
+        }
+        if (index < angles.length) {
+            tokens.push('(' + formatPlyAngle(angles[index]) + ')');
+        }
+        return tokens;
+    }
+
+    function tokenArraysEqual(left, right) {
+        if (left.length !== right.length) {
+            return false;
+        }
+        var i;
+        for (i = 0; i < left.length; i += 1) {
+            if (left[i] !== right[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function encodeTokens(tokens) {
+        if (!tokens.length) {
+            return '';
+        }
+        var parts = [];
+        var index = 0;
+        while (index < tokens.length) {
+            var found = longestRepeatingPrefix(tokens.slice(index));
+            parts.push(found.encoded);
+            index += found.length;
+        }
+        return parts.join('/');
+    }
+
+    function formatRepeat(block, repeats) {
+        if (block.length === 1) {
+            return block[0] + String(repeats);
+        }
+        return '(' + encodeTokens(block) + ')' + String(repeats);
+    }
+
+    function longestRepeatingPrefix(tokens) {
+        var length = tokens.length;
+        var prefixLen;
+        for (prefixLen = length; prefixLen > 1; prefixLen -= 1) {
+            var prefix = tokens.slice(0, prefixLen);
+            var period;
+            for (period = 1; period <= Math.floor(prefixLen / 2); period += 1) {
+                if (prefixLen % period !== 0) {
+                    continue;
+                }
+                var repeats = prefixLen / period;
+                if (repeats < 2) {
+                    continue;
+                }
+                var block = prefix.slice(0, period);
+                var expected = [];
+                var repeatIndex;
+                for (repeatIndex = 0; repeatIndex < repeats; repeatIndex += 1) {
+                    expected = expected.concat(block);
+                }
+                if (tokenArraysEqual(expected, prefix)) {
+                    return { length: prefixLen, encoded: formatRepeat(block, repeats) };
+                }
+            }
+        }
+        return { length: 1, encoded: tokens[0] };
+    }
+
+    function buildReinforcementFormula(angles) {
+        if (!angles || !angles.length) {
+            return '';
+        }
+        return encodeTokens(pairTokens(angles));
+    }
+
+    function renderFormula(formula) {
+        if (!formula) {
+            return '';
+        }
+        return ''
+            + '<div class="reinforcement-formula">'
+            + '<span class="reinforcement-formula__label">Схема армирования</span>'
+            + '<span class="reinforcement-formula__value">' + escapeHtml(formula) + '</span>'
+            + '</div>';
+    }
+
     function isSymmetricEnabled() {
         var checkbox = document.getElementById('id_layers_symmetric');
         return Boolean(checkbox && checkbox.checked);
@@ -151,11 +300,27 @@
         if (Number.isNaN(value)) {
             return 0;
         }
-        value = value % 180;
-        if (value < 0) {
+        value = ((value + 180) % 360 + 360) % 360 - 180;
+        if (value > ANGLE_SCALE_MAX) {
+            value -= 180;
+        } else if (value < ANGLE_SCALE_MIN) {
             value += 180;
         }
         return value;
+    }
+
+    function formatSignedAngleLabel(value) {
+        var number = Number(value);
+        if (Number.isNaN(number)) {
+            return String(value);
+        }
+        if (number > 0) {
+            return '+' + formatDecimalDisplay(number, 2) + ' °';
+        }
+        if (number < 0) {
+            return '−' + formatDecimalDisplay(Math.abs(number), 2) + ' °';
+        }
+        return '0 °';
     }
 
     function parseLayerRows(layerContainer) {
@@ -199,16 +364,17 @@
                 thickness_locked: Boolean(lockedInput && lockedInput.checked),
             });
         });
-        if (isSymmetricEnabled()) {
-            return expandSymmetricLayers(layers);
-        }
         return layers;
     }
 
-    function buildLayerDiagram(layers, colorBy) {
+    function buildLayerDiagram(layers, colorBy, meta) {
         if (!layers.length) {
             return null;
         }
+
+        var options = meta || {};
+        var symmetric = Boolean(options.symmetric);
+        var definingCount = options.definingCount != null ? options.definingCount : layers.length;
 
         var legendMode = resolveLegendMode(colorBy);
         var totalThickness = layers.reduce(function (sum, layer) {
@@ -230,13 +396,8 @@
         var thicknessValues = layers.map(function (layer) {
             return layer.thickness > 0 ? layer.thickness : 0;
         });
-        var angleValues = layers.map(function (layer) {
-            return layer.angle_value != null ? layer.angle_value : parseAngleValue(layer.angle);
-        });
         var thicknessMin = Math.min.apply(null, thicknessValues);
         var thicknessMax = Math.max.apply(null, thicknessValues);
-        var angleMin = Math.min.apply(null, angleValues);
-        var angleMax = Math.max.apply(null, angleValues);
 
         var materialLegend = [];
         var diagramLayers = layers.map(function (layer, index) {
@@ -252,12 +413,14 @@
             }
 
             var thickness = layer.thickness > 0 ? layer.thickness : 0;
-            var angleValue = layer.angle_value != null ? layer.angle_value : parseAngleValue(layer.angle);
+            var angleValue = parseAngleValue(
+                layer.angle_value != null ? layer.angle_value : layer.angle
+            );
             var color = materialColor;
             if (legendMode === LEGEND_MODE_THICKNESS) {
                 color = scaleColor(thickness, thicknessMin, thicknessMax);
             } else if (legendMode === LEGEND_MODE_ANGLE) {
-                color = scaleColor(angleValue, angleMin, angleMax);
+                color = scaleColor(angleValue, ANGLE_SCALE_MIN, ANGLE_SCALE_MAX);
             }
 
             var effectiveThickness = thickness > 0 ? thickness : 1;
@@ -284,12 +447,16 @@
                 min: thicknessMin,
                 max: thicknessMax,
                 unit: 'мм',
+                mid_label: 'среднее',
             };
         } else if (legendMode === LEGEND_MODE_ANGLE) {
             scale = {
-                min: angleMin,
-                max: angleMax,
+                min: ANGLE_SCALE_MIN,
+                max: ANGLE_SCALE_MAX,
                 unit: '°',
+                min_label: formatSignedAngleLabel(ANGLE_SCALE_MIN),
+                mid_label: formatSignedAngleLabel(0),
+                max_label: formatSignedAngleLabel(ANGLE_SCALE_MAX),
             };
         }
 
@@ -301,6 +468,14 @@
             legend_caption: LEGEND_CAPTIONS[legendMode],
             total_thickness: Math.round(totalThickness * 10000) / 10000,
             layer_count: diagramLayers.length,
+            defining_count: definingCount,
+            mirror_count: symmetric ? mirroredLayerCount(definingCount) : 0,
+            symmetric: symmetric,
+            layer_count_label: formatLayerCountLabel(definingCount, symmetric),
+            mirror_note: symmetric ? formatMirrorNote(definingCount) : '',
+            reinforcement_formula: buildReinforcementFormula(layers.map(function (layer) {
+                return layer.angle_value != null ? layer.angle_value : layer.angle;
+            })),
         };
     }
 
@@ -323,15 +498,16 @@
             return '';
         }
         var decimals = mode === LEGEND_MODE_THICKNESS ? 4 : 2;
+        var minLabel = scale.min_label || (formatDecimalDisplay(scale.min, decimals) + ' ' + scale.unit);
+        var midLabel = scale.mid_label || 'среднее';
+        var maxLabel = scale.max_label || (formatDecimalDisplay(scale.max, decimals) + ' ' + scale.unit);
         return ''
             + '<div class="layer-scale-legend mb-3" aria-label="Цветовая шкала">'
             + '<div class="layer-scale-legend__bar"></div>'
             + '<div class="layer-scale-legend__labels">'
-            + '<span>' + escapeHtml(formatDecimalDisplay(scale.min, decimals))
-            + ' ' + escapeHtml(scale.unit) + '</span>'
-            + '<span>среднее</span>'
-            + '<span>' + escapeHtml(formatDecimalDisplay(scale.max, decimals))
-            + ' ' + escapeHtml(scale.unit) + '</span>'
+            + '<span>' + escapeHtml(minLabel) + '</span>'
+            + '<span>' + escapeHtml(midLabel) + '</span>'
+            + '<span>' + escapeHtml(maxLabel) + '</span>'
             + '</div>'
             + '</div>';
     }
@@ -378,16 +554,19 @@
 
         var stackHtml = diagram.layers.map(function (item) {
             return ''
-                + '<div class="layer-stack-segment"'
-                + ' style="flex: ' + item.flex_grow + ' 1 0%; background-color: ' + escapeHtml(item.color) + ';"'
+                + '<div class="layer-stack-row"'
+                + ' style="flex: ' + item.flex_grow + ' 0 auto;"'
                 + ' data-material-id="' + escapeHtml(String(item.material_id)) + '"'
                 + ' data-thickness="' + escapeHtml(String(item.thickness)) + '"'
                 + ' data-angle="' + escapeHtml(String(item.angle_value != null ? item.angle_value : item.angle)) + '"'
                 + ' title="Слой ' + item.layer_number + ': ' + escapeHtml(item.material_label)
                 + ' · ' + escapeHtml(formatDecimalDisplay(item.thickness)) + ' мм'
                 + ' · ' + escapeHtml(String(item.angle)) + '°">'
+                + '<div class="layer-stack-swatch" style="background-color: ' + escapeHtml(item.color) + ';"></div>'
+                + '<div class="layer-stack-meta">'
                 + '<span class="layer-stack-segment-index">#' + item.layer_number + '</span>'
                 + '<span class="layer-stack-material-code">' + escapeHtml(item.material_code) + '</span>'
+                + '</div>'
                 + '</div>';
         }).join('');
 
@@ -397,12 +576,20 @@
             + '<h3 class="composite-layer-diagram__title mb-0">Схема укладки</h3>'
             + (showModeSelect ? renderModeSelect(diagram.legend_mode) : '')
             + '</div>'
+            + renderFormula(diagram.reinforcement_formula)
             + legendHtml
             + '<div class="layer-stack-panel">'
             + '<div class="layer-stack-title">Сверху ↓ вниз</div>'
-            + '<div class="layer-stack-column" style="--layer-stack-count: ' + diagram.layer_count + ';">'
+            + '<div class="layer-stack-column">'
+            + '<div class="layer-stack-rows' + (diagram.symmetric ? ' layer-stack-rows--symmetric' : '')
+            + '" style="--layer-stack-count: ' + diagram.layer_count + ';">'
             + stackHtml
+            + (diagram.symmetric ? '<hr class="layer-stack-symmetry-line" aria-hidden="true">' : '')
             + '</div>'
+            + '</div>'
+            + (diagram.mirror_note
+                ? '<div class="layer-stack-mirror-note">' + escapeHtml(diagram.mirror_note) + '</div>'
+                : '')
             + '<div class="layer-stack-caption">' + escapeHtml(diagram.legend_caption) + '</div>'
             + '</div>'
             + '</div>';
@@ -423,7 +610,10 @@
             + '<span class="composite-thickness-summary__label">Общая толщина</span>'
             + '<span class="composite-thickness-summary__value">Σt = '
             + escapeHtml(formatDecimalDisplay(diagram.total_thickness)) + ' мм</span>'
-            + '<span class="composite-thickness-summary__meta">' + diagram.layer_count + ' сл.</span>';
+            + '<span class="composite-thickness-summary__meta">'
+            + escapeHtml(diagram.layer_count_label || (diagram.layer_count + ' сл.'))
+            + '</span>'
+            + renderFormula(diagram.reinforcement_formula);
     }
 
     function bindModeSelect(diagramTarget, onChange) {
@@ -446,7 +636,13 @@
 
     function update(layerContainer, diagramTarget, summaryTarget) {
         var mode = getStoredLegendMode();
-        var diagram = buildLayerDiagram(parseLayerRows(layerContainer), mode);
+        var defining = parseLayerRows(layerContainer);
+        var symmetric = isSymmetricEnabled();
+        var layers = symmetric ? expandSymmetricLayers(defining) : defining;
+        var diagram = buildLayerDiagram(layers, mode, {
+            symmetric: symmetric,
+            definingCount: defining.length,
+        });
         renderDiagram(diagramTarget, diagram);
         renderSummary(summaryTarget, diagram);
         bindModeSelect(diagramTarget, function () {
@@ -460,16 +656,19 @@
         setStoredLegendMode(mode);
         var normalized = (layers || []).map(function (layer) {
             return Object.assign({}, layer, {
-                angle_value: layer.angle_value != null
-                    ? Number(layer.angle_value)
-                    : parseAngleValue(layer.angle),
+                angle_value: parseAngleValue(
+                    layer.angle_value != null ? layer.angle_value : layer.angle
+                ),
                 thickness: Number(layer.thickness_value != null ? layer.thickness_value : layer.thickness) || 0,
             });
         });
-        var diagram = buildLayerDiagram(normalized, mode);
+        var diagram = buildLayerDiagram(normalized, mode, {
+            symmetric: Boolean(opts.symmetric),
+            definingCount: opts.definingCount != null ? opts.definingCount : normalized.length,
+        });
         renderDiagram(diagramTarget, diagram, { showModeSelect: true });
         bindModeSelect(diagramTarget, function (nextMode) {
-            renderStatic(diagramTarget, layers, { colorBy: nextMode });
+            renderStatic(diagramTarget, layers, Object.assign({}, opts, { colorBy: nextMode }));
         });
         return diagram;
     }
@@ -480,6 +679,8 @@
         buildLayerDiagram: buildLayerDiagram,
         expandSymmetricLayers: expandSymmetricLayers,
         isSymmetricEnabled: isSymmetricEnabled,
+        formatLayerCountLabel: formatLayerCountLabel,
+        formatMirrorNote: formatMirrorNote,
         divergingBlueWhiteRed: divergingBlueWhiteRed,
         getStoredLegendMode: getStoredLegendMode,
     };

@@ -84,28 +84,30 @@ class HybridImportItem:
     manufacturer_create: tuple[str, str] | None = None
     availability_create: tuple[str, str] | None = None
     technology_create: tuple[str, str] | None = None
+    object_type: str = ''
 
 
 def validate_drafts(
     drafts: list[DraftMaterial],
     *,
-    structure_type: StructureType,
+    structure_type: StructureType | None,
     workspace: Workspace,
     report: ImportReport,
     create_missing_dictionaries: bool = False,
     dry_run: bool = False,
 ) -> list[HybridImportItem]:
-    if not structure_type.is_created:
-        report.add_error('Выбранный тип структуры ещё не создан (нет SQL-таблицы).')
-        return []
-    if not structure_type.is_active:
-        report.add_error('Выбранный тип структуры неактивен.')
-        return []
+    if structure_type is not None:
+        if not structure_type.is_created:
+            report.add_error('Выбранный тип структуры ещё не создан (нет SQL-таблицы).')
+            return []
+        if not structure_type.is_active:
+            report.add_error('Выбранный тип структуры неактивен.')
+            return []
 
     structure_fields = {
         field.name: field
         for field in StructureField.objects.filter(structure_type=structure_type).order_by('sort_order')
-    }
+    } if structure_type is not None else {}
     property_cache: dict[str, Property | None] = {}
     draft_index = MaterialLinkIndex.from_drafts(drafts)
     dictionary_pending: dict = {}
@@ -445,6 +447,7 @@ def validate_drafts(
                 manufacturer_create=manufacturer_create,
                 availability_create=availability_create,
                 technology_create=technology_create,
+                object_type=(draft.object_type or '').strip(),
             )
         )
     return items

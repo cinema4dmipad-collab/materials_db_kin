@@ -129,6 +129,18 @@ class ApiV1Tests(TestCase):
         self.assertEqual(samples.status_code, 200)
         self.assertEqual(samples.json()['meta']['count'], 1)
         self.assertEqual(samples.json()['results'][0]['scans_count'], 1)
+        self.assertEqual(samples.json()['results'][0]['description'], '')
+
+        self.sample.description = 'API sample note'
+        self.sample.save(update_fields=['description'])
+        by_description = self.client.get(
+            reverse('api:samples'),
+            {'search': 'sample note'},
+            **self._headers(),
+        )
+        self.assertEqual(by_description.status_code, 200)
+        self.assertEqual(by_description.json()['meta']['count'], 1)
+        self.assertEqual(by_description.json()['results'][0]['description'], 'API sample note')
 
         by_code = self.client.get(
             reverse('api:samples'),
@@ -210,6 +222,50 @@ class ApiV1Tests(TestCase):
         scan = ScanRecord.objects.get(pk=body['id'])
         self.assertTrue(scan.preview)
         self.assertTrue(scan.preview.storage.exists(scan.preview.name))
+
+    def test_scan_options_lists_methods_and_preview_fields(self):
+        response = self.client.get(reverse('api:scan_options'), **self._headers())
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(
+            {item['value'] for item in body['methods']},
+            {'echo', 'shadow', 'immersion'},
+        )
+        self.assertEqual(
+            {item['field'] for item in body['preview_fields']},
+            {'preview', 'preview_b_xz', 'preview_b_yz'},
+        )
+        self.assertGreater(body['max_preview_bytes'], 0)
+
+    def test_create_scan_with_b_and_c_previews(self):
+        response = self.client.post(
+            reverse('api:sample_scans_create', kwargs={'sample_id': self.sample.pk}),
+            data={
+                'file': make_hdf5_upload('three-previews.h5'),
+                'preview': make_preview_upload('c-scan.png'),
+                'preview_b_xz': make_preview_upload('b-xz.png'),
+                'preview_b_yz': make_preview_upload('b-yz.png'),
+                'title': 'KeenetiX save dialog',
+                'method': 'immersion',
+            },
+            **self._headers(),
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()
+        self.assertEqual(body['title'], 'KeenetiX save dialog')
+        self.assertEqual(body['method'], 'immersion')
+        self.assertEqual(body['method_label'], 'Иммерсивный')
+        self.assertTrue(body.get('preview_url'))
+        self.assertTrue(body.get('preview_b_xz_url'))
+        self.assertTrue(body.get('preview_b_yz_url'))
+        kind_url = reverse(
+            'api:scan_preview_kind',
+            kwargs={'scan_id': body['id'], 'kind': 'b-xz'},
+        )
+        self.assertIn(kind_url, body['preview_b_xz_url'])
+        preview_response = self.client.get(kind_url, **self._headers())
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertTrue(b''.join(preview_response.streaming_content).startswith(b'\x89PNG'))
 
     def test_update_scan_replaces_file_and_preview(self):
         from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart

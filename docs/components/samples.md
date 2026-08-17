@@ -16,7 +16,9 @@ Physical **specimens** derived from materials.
 
 | URL | Action |
 |-----|--------|
-| `/samples/` | List |
+| `/samples/` | List — button **Импорт** next to **Создать** |
+| `/samples/import/` | UI import CSV/XLSX (same wizard as materials); pick a **material** instead of structure type; requires `sample.create` |
+| `/samples/import/example.csv` | Download sample CSV |
 | `/samples/create/` | Create (optional `?material=<uuid>` preselect) |
 | `/samples/<pk>/` | Detail — properties, scans tab, files tab; inline tags when `sample.workspace` is active |
 | `/samples/<pk>/tags/` | POST — save tags from detail card |
@@ -46,10 +48,23 @@ Adding a property not present on the material shows a warning (allowed — sampl
 
 Form / JS: `apps/samples/forms.py` (`SampleForm` structure fields), `static/js/sample_properties_formset.js` (material change → `_apply_material` re-render).
 
+## Import
+
+`/samples/import/` — the same four-step wizard as material import (`apps/samples/import_views.py` subclasses `MaterialImportView`). Session keys are `sample_import_*` (isolated from material import).
+
+Configure step: pick a **material** (picker modal). Mapping constructor loads:
+
+* sample identity (name required; code generated if omitted)
+* structure fields of that material’s `struct_type`
+* catalog properties already on the material (operator can add more)
+* description, object type, tags
+
+Apply creates `Sample` rows in the active workspace, copies the material’s SQL structure row and `MaterialProperty` values, then overlays mapped columns. Tags from the file are assigned; import-review status tags (`статус::на проверке`) are **not** added.
+
 ## Relation to Scans
 
 Samples are the anchor for HDF5 scans and file attachments. Create sample first, then attach scans from detail tabs or global scan list.
 
 ## Tests
 
-`apps/samples/tests.py`.
+`apps/samples/tests.py`, `apps/samples/tests_import.py`.

@@ -1801,6 +1801,10 @@ button.import-map-catalog-item:disabled {
     visibility: visible;
 }
 
+.import-help__tip.is-open.is-pinned {
+    pointer-events: auto;
+}
+
 .import-help__tip::after {
     content: '';
     position: absolute;

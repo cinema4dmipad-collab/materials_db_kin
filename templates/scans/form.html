@@ -1,62 +1,40 @@
 {% extends 'base.html' %}
 
 {% block title %}
-{% if is_edit %}Редактирование скана{% else %}Загрузка скана{% endif %} — {{ sample.code }}
+{% if is_edit %}Редактирование скана{% else %}Добавить скан{% endif %} — {{ sample.code }}
 {% endblock %}
 
 {% block content %}
 {% include 'samples/includes/sample_tabs.html' %}
 
-<div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="card">
-            <div class="card-header">
-                <h1 class="h5 mb-0">
-                    {% if is_edit %}Редактирование скана «{{ scan.title }}»{% else %}Загрузка скана HDF5 для {{ sample.code }}{% endif %}
-                </h1>
-            </div>
-            <div class="card-body">
-                <p class="text-muted small">HDF5 (.h5 / .hdf5) обязателен; превью C-скана (PNG/JPEG/WebP) — по желанию.</p>
-                {% if is_edit and scan.file %}
-                <p class="mb-2"><strong>Текущий файл:</strong> {{ scan.filename }}</p>
-                {% endif %}
-                {% if is_edit and scan.preview %}
-                <div class="mb-3 d-flex align-items-center gap-2">
-                    <strong>Текущее превью:</strong>
-                    {% include 'includes/scan_preview_thumb.html' with scan=scan %}
-                </div>
-                {% endif %}
-
-                <form method="post" enctype="multipart/form-data" novalidate>
-                    {% csrf_token %}
-                    {% if form.non_field_errors %}
-                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-                    {% endif %}
-
-                    {% for field in form %}
-                    <div class="mb-3">
-                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.help_text %}
-                        <div class="form-text">{{ field.help_text }}</div>
-                        {% endif %}
-                        {% for error in field.errors %}
-                        <div class="invalid-feedback d-block">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-                    {% endfor %}
-
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">{% if is_edit %}Сохранить{% else %}Создать{% endif %}</button>
-                        {% if is_edit %}
-                        <a href="{% url 'scans:detail' sample.pk scan.pk %}" class="btn btn-outline-secondary">Отмена</a>
-                        {% else %}
-                        <a href="{% url 'scans:list' sample.pk %}" class="btn btn-outline-secondary">Отмена</a>
-                        {% endif %}
-                    </div>
-                </form>
-            </div>
+<div class="card">
+    <div class="card-header">
+        <h1 class="h5 mb-0">
+            {% if is_edit %}Редактирование скана «{{ scan.title }}»{% else %}Добавить скан — {{ sample.code }}{% endif %}
+        </h1>
+        <p class="text-muted small mb-0 mt-1">
+            Сначала название и метод (эхо / теневой / иммерсивный), затем файл HDF5.
+            Превью B-скана-XZ, B-скана-YZ и C-скана — по желанию.
+        </p>
+    </div>
+    <div class="card-body">
+        {% if is_edit and scan.file %}
+        <p class="mb-2"><strong>Текущий файл:</strong> {{ scan.filename }}</p>
+        {% endif %}
+        {% if is_edit %}
+        <div class="mb-3 scan-preview-frame">
+            {% include 'includes/scan_preview_carousel.html' with scan=scan size='detail' %}
         </div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            {% include 'samples/includes/scan_attach_fields.html' with scan_form=form %}
+            <div class="mt-3 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary">{% if is_edit %}Сохранить{% else %}Добавить{% endif %}</button>
+                <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Отмена</a>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}

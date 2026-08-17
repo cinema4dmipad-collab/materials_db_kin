@@ -49,11 +49,8 @@
             </ul>
         </div>
     </div>
-    <a class="file-tile__preview file-tile__preview--link"
-       href="{% url 'scans:detail' sample_obj.pk scan.pk %}"
-       aria-label="Открыть скан {{ scan.title }}">
-        {% include 'includes/scan_preview_thumb.html' with scan=scan size='tile' %}
-    </a>
+    {% url 'scans:detail' sample_obj.pk scan.pk as scan_detail_url %}
+    {% include 'includes/scan_preview_carousel.html' with scan=scan size='tile' detail_href=scan_detail_url %}
     <div class="file-tile__footer">
         <span class="file-tile__avatar" aria-hidden="true">{% if creator != "—" %}{{ creator|slice:":1"|upper }}{% else %}?{% endif %}</span>
         <div class="file-tile__meta">

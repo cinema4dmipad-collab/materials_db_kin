@@ -101,6 +101,7 @@ class SampleOut(BaseModel):
     id: UUID
     code: str
     name: str
+    description: str = ''
     material_id: UUID
     workspace_id: UUID | None = None
     object_type: str
@@ -124,11 +125,14 @@ class ScanOut(BaseModel):
     title: str
     description: str = ''
     method: str
+    method_label: str = ''
     filename: str = ''
     size_bytes: int | None = None
     uploaded_at: datetime
     download_url: str
     preview_url: str | None = None
+    preview_b_xz_url: str | None = None
+    preview_b_yz_url: str | None = None
     tags: list[str] = Field(default_factory=list)
 
 
@@ -156,6 +160,8 @@ class ScanFileMeta(BaseModel):
 
 
 class ScanFilesPayload(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+
     file: ScanFileMeta
 
 
@@ -169,6 +175,29 @@ class MaterialPath(BaseModel):
 
 class ScanPath(BaseModel):
     scan_id: UUID
+
+
+class ScanPreviewKindPath(BaseModel):
+    scan_id: UUID
+    kind: str
+
+
+class ScanMethodOption(BaseModel):
+    value: str
+    label: str
+
+
+class ScanPreviewFieldOption(BaseModel):
+    field: str
+    kind: str
+    label: str
+    slug: str
+
+
+class ScanOptionsOut(BaseModel):
+    methods: list[ScanMethodOption]
+    preview_fields: list[ScanPreviewFieldOption]
+    max_preview_bytes: int
 
 
 class PaginationQuery(BaseModel):
@@ -187,7 +216,7 @@ class SampleListQuery(PaginationQuery):
     search: str | None = Field(
         default=None,
         max_length=200,
-        description='Case-insensitive substring match on sample code or name.',
+        description='Case-insensitive substring match on sample code, name or description.',
     )
 
 

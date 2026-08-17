@@ -417,6 +417,8 @@ class ScanViewsTests(TestCase):
                 'file': make_hdf5_upload('surface.h5'),
 
                 'preview': make_preview_upload('surface.png'),
+                'preview_b_xz': make_preview_upload('b-xz.png'),
+                'preview_b_yz': make_preview_upload('b-yz.png'),
 
             },
 
@@ -429,20 +431,47 @@ class ScanViewsTests(TestCase):
         self.assertTrue(scan.file.storage.exists(scan.file.name))
         self.assertTrue(scan.preview)
         self.assertTrue(scan.preview.storage.exists(scan.preview.name))
+        self.assertTrue(scan.preview_b_xz)
+        self.assertTrue(scan.preview_b_yz)
 
         list_response = self.client.get(reverse('scans:list', kwargs={'sample_pk': self.sample.pk}))
 
         self.assertContains(list_response, 'Surface scan')
         self.assertContains(list_response, 'file-tile')
         self.assertContains(list_response, 'file-tile__preview-img')
+        self.assertContains(list_response, 'data-scan-preview-carousel')
+        self.assertContains(list_response, 'B-скан-XZ')
+        self.assertContains(list_response, 'B-скан-YZ')
+        self.assertContains(list_response, 'C-скан')
         preview_url = reverse('scans:preview', kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk})
+        b_xz_url = reverse(
+            'scans:preview_kind',
+            kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk, 'kind': 'b-xz'},
+        )
+        b_yz_url = reverse(
+            'scans:preview_kind',
+            kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk, 'kind': 'b-yz'},
+        )
         self.assertContains(list_response, preview_url)
+        self.assertContains(list_response, b_xz_url)
+        self.assertContains(list_response, b_yz_url)
         preview_response = self.client.get(preview_url)
         self.assertEqual(preview_response.status_code, 200)
         self.assertTrue(b''.join(preview_response.streaming_content).startswith(b'\x89PNG'))
+        b_xz_response = self.client.get(b_xz_url)
+        self.assertEqual(b_xz_response.status_code, 200)
+        self.assertTrue(b''.join(b_xz_response.streaming_content).startswith(b'\x89PNG'))
+
+        detail_response = self.client.get(
+            reverse('scans:detail', kwargs={'sample_pk': self.sample.pk, 'pk': scan.pk}),
+        )
+        self.assertContains(detail_response, 'data-scan-preview-carousel')
+        self.assertContains(detail_response, 'scan-preview-carousel__btn')
 
         file_name = scan.file.name
         preview_name = scan.preview.name
+        preview_b_xz_name = scan.preview_b_xz.name
+        preview_b_yz_name = scan.preview_b_yz.name
 
         delete_response = self.client.post(
 
@@ -456,6 +485,8 @@ class ScanViewsTests(TestCase):
 
         self.assertFalse(scan.file.storage.exists(file_name))
         self.assertFalse(scan.file.storage.exists(preview_name))
+        self.assertFalse(scan.file.storage.exists(preview_b_xz_name))
+        self.assertFalse(scan.file.storage.exists(preview_b_yz_name))
 
     def test_download_view_streams_file_through_app(self):
         scan = ScanRecord.objects.create(
@@ -584,17 +615,17 @@ class ScanViewsTests(TestCase):
             html=False,
         )
 
-    def test_scans_tab_attach_form_prefills_title_with_sample_name_and_sequence(self):
+    def test_scans_tab_add_opens_separate_form(self):
         scans_url = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
+        create_url = reverse('scans:create', kwargs={'sample_pk': self.sample.pk})
 
         response = self.client.get(scans_url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            f'<input type="text" name="scan-title" value="{self.sample.name} #0001"',
-            html=False,
-        )
+        self.assertContains(response, create_url)
+        self.assertContains(response, 'Добавить')
+        self.assertNotContains(response, 'name="scan-title"')
+        self.assertNotContains(response, 'Прикрепить скан HDF5')
 
     def test_default_scan_title_increments_sequence(self):
         ScanRecord.objects.create(
@@ -610,3 +641,13 @@ class ScanViewsTests(TestCase):
             f'value="{self.sample.name} #0002"',
             html=False,
         )
+
+
+class ScanPreviewKindTests(TestCase):
+    def test_resolve_preview_kind_defaults_to_c_scan(self):
+        from apps.scans.previews import resolve_preview_kind
+
+        self.assertEqual(resolve_preview_kind(None).key, 'c')
+        self.assertEqual(resolve_preview_kind('b-xz').field, 'preview_b_xz')
+        self.assertEqual(resolve_preview_kind('preview_b_yz').slug, 'b-yz')
+        self.assertIsNone(resolve_preview_kind('unknown'))

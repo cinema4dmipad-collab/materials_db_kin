@@ -21,6 +21,7 @@ from apps.core.list_filters import (
 from apps.samples.models import Sample
 from apps.scans.forms import ScanRecordForm, ScanTagsForm
 from apps.scans.models import ScanRecord
+from apps.scans.previews import preview_file, resolve_preview_kind
 from apps.workspaces.mixins import AppViewMixin
 from apps.workspaces.services import samples_in_workspace, samples_visible_in, scans_in_workspace, scans_visible_in
 
@@ -140,53 +141,6 @@ class ScanListView(AppViewMixin, ScanMethodFilterMixin, QuerySetFilterMixin, Sam
     def get_choice_filter_options(self):
         return {'method': ScanRecord.METHODS}
 
-    def get_scan_form(self):
-        if hasattr(self, '_scan_form'):
-            return self._scan_form
-        kwargs = {
-            'prefix': 'scan',
-            'sample': self.sample,
-            'workspace': scan_tag_workspace(
-                sample=self.sample,
-                fallback=self.request.active_workspace,
-            ),
-        }
-        if self.request.method == 'POST':
-            kwargs['data'] = self.request.POST
-            kwargs['files'] = self.request.FILES
-        return ScanRecordForm(**kwargs)
-
-    def post(self, request, *args, **kwargs):
-        self.object_list = self.get_queryset()
-        form = ScanRecordForm(
-            request.POST,
-            request.FILES,
-            prefix='scan',
-            sample=self.sample,
-            workspace=scan_tag_workspace(
-                sample=self.sample,
-                fallback=request.active_workspace,
-            ),
-        )
-        if form.is_valid():
-            scan = form.save(commit=False)
-            scan.sample = self.sample
-            scan.workspace = self.sample.workspace
-            assign_creator(scan, request.user)
-            scan.save()
-            form.save_tags(scan)
-            messages.success(request, 'Скан прикреплён к образцу.')
-            return redirect('scans:list', sample_pk=self.sample.pk)
-
-        self._scan_form = form
-        context = self.get_context_data(scans=self.object_list, scan_form=form)
-        return self.render_to_response(context)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.setdefault('scan_form', self.get_scan_form())
-        return context
-
     def get_queryset(self):
         return self.filter_queryset(self.sample.scans.prefetch_related('tags'))
 
@@ -287,6 +241,7 @@ class ScanCreateView(AppViewMixin, SampleScanMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_edit'] = False
+        context['cancel_url'] = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
         return context
 
     def form_valid(self, form):
@@ -322,6 +277,10 @@ class ScanUpdateView(AppViewMixin, SampleScanMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_edit'] = True
+        context['cancel_url'] = reverse(
+            'scans:detail',
+            kwargs={'sample_pk': self.sample.pk, 'pk': self.object.pk},
+        )
         return context
 
     def form_valid(self, form):
@@ -363,11 +322,15 @@ class ScanPreviewView(AppViewMixin, SampleScanMixin, View):
 
     def get(self, request, *args, **kwargs):
         scan = get_object_or_404(self.sample.scans.all(), pk=kwargs['pk'])
-        if not scan.preview:
+        kind = resolve_preview_kind(kwargs.get('kind'))
+        if kind is None:
             raise Http404('Превью не найдено')
-        filename = scan.preview.name.rsplit('/', 1)[-1]
+        field = preview_file(scan, kind)
+        if not field:
+            raise Http404('Превью не найдено')
+        filename = field.name.rsplit('/', 1)[-1]
         return build_file_download_response(
-            scan.preview,
+            field,
             filename=filename,
             as_attachment=False,
         )

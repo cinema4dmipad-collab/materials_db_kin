@@ -24,6 +24,7 @@ SESSION_ACTIVE_TEMPLATE_ID = 'material_import_active_template_id'
 SESSION_DEFAULT_TAGS = 'material_import_default_tags'
 SESSION_DEFAULT_TAG_COLORS = 'material_import_default_tag_colors'
 SESSION_TAG_COLUMNS = 'material_import_tag_columns'
+SESSION_MATERIAL_ID = 'material_import_material_id'
 
 
 def save_uploaded_import_file(uploaded: UploadedFile) -> Path:
@@ -80,6 +81,7 @@ def get_import_config(session) -> dict:
         'default_tags': session.get(SESSION_DEFAULT_TAGS) or '',
         'default_tag_colors': dict(session.get(SESSION_DEFAULT_TAG_COLORS) or {}),
         'tag_columns': list(session.get(SESSION_TAG_COLUMNS) or []),
+        'material_id': session.get(SESSION_MATERIAL_ID) or '',
     }
 
 
@@ -98,6 +100,7 @@ def set_import_config(
     default_tags: str | None = None,
     default_tag_colors: dict | None = None,
     tag_columns: list[str] | None = None,
+    material_id: str | None = None,
     clear_draft: bool = False,
 ) -> None:
     if sheet is not None:
@@ -137,6 +140,11 @@ def set_import_config(
             for item in tag_columns
             if str(item or '').strip()
         ]
+    if material_id is not None:
+        if material_id:
+            session[SESSION_MATERIAL_ID] = str(material_id).strip()
+        else:
+            session.pop(SESSION_MATERIAL_ID, None)
     if clear_draft:
         session.pop(SESSION_DRAFT, None)
     session.modified = True
@@ -159,6 +167,7 @@ def clear_import_session(session, *, delete_file: bool = True) -> None:
     session.pop(SESSION_ACTIVE_TEMPLATE_ID, None)
     session.pop(SESSION_DEFAULT_TAGS, None)
     session.pop(SESSION_DEFAULT_TAG_COLORS, None)
+    session.pop(SESSION_MATERIAL_ID, None)
     clear_iterate_session(session)
     session.modified = True
     if delete_file and raw:

@@ -1,5 +1,6 @@
 from django.urls import path
 
+from apps.samples.import_views import SampleImportExampleView, SampleImportView
 from apps.samples.views import (
     SampleBulkDeleteView,
     SampleCreateView,
@@ -14,6 +15,8 @@ app_name = 'samples'
 
 urlpatterns = [
     path('', SampleListView.as_view(), name='list'),
+    path('import/', SampleImportView.as_view(), name='import'),
+    path('import/example.csv', SampleImportExampleView.as_view(), name='import_example'),
     path('create/', SampleCreateView.as_view(), name='create'),
     path('bulk-delete/', SampleBulkDeleteView.as_view(), name='bulk_delete'),
     path('<uuid:pk>/edit/', SampleUpdateView.as_view(), name='edit'),

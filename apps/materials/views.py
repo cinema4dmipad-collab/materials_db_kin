@@ -24,6 +24,7 @@ from apps.core.list_filters import (
     TAG_SEARCH_SCOPE,
     QuerySetFilterMixin,
 )
+from apps.core.table_sort import TableSortMixin
 from apps.core.creator import assign_creator
 from apps.materials.bulk import bulk_delete_materials
 from apps.materials.export import (
@@ -508,12 +509,18 @@ class MaterialFormsetMixin:
         )
 
 
-class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
+class MaterialListView(AppViewMixin, QuerySetFilterMixin, TableSortMixin, ListView):
     model = Material
     template_name = 'materials/material_list.html'
     context_object_name = 'materials'
     paginate_by = 10
     enable_tag_filter = True
+    sort_columns = (
+        ('code', 'code'),
+        ('name', 'name'),
+        ('struct_type', 'struct_type__name'),
+        ('created_at', 'created_at'),
+    )
     search_fields = ('code', 'name', 'description', 'struct_type__name')
     search_scopes = (
         (ALL_SEARCH_SCOPE, 'Везде', ('code', 'name', 'description', 'struct_type__name')),
@@ -583,15 +590,17 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
             base_qs = materials_shared_in(workspace)
         else:
             base_qs = materials_in_workspace_tab(workspace)
-        return self.filter_queryset(
-            base_qs.select_related(
-                'struct_type',
-                'home_workspace',
-                'created_by_user',
-                'manufacturer',
-                'availability',
-                'technology',
-            ).prefetch_related('tags')
+        return self.apply_table_sort(
+            self.filter_queryset(
+                base_qs.select_related(
+                    'struct_type',
+                    'home_workspace',
+                    'created_by_user',
+                    'manufacturer',
+                    'availability',
+                    'technology',
+                ).prefetch_related('tags')
+            )
         )
 
     def get_context_data(self, **kwargs):
@@ -610,10 +619,12 @@ class MaterialListView(AppViewMixin, QuerySetFilterMixin, ListView):
                 'url': self.get_scope_url(MATERIAL_SCOPE_SHARED),
             },
         ]
+        preserve = list(context.get('list_filter_preserve_params') or [])
         if scope != MATERIAL_SCOPE_WORKSPACE:
-            context['list_filter_preserve_params'] = [('scope', scope)]
-        else:
-            context['list_filter_preserve_params'] = []
+            preserve = [item for item in preserve if item[0] != 'scope']
+            preserve.append(('scope', scope))
+        context['list_filter_preserve_params'] = preserve
+        context.update(self.get_table_sort_context())
         params = self.request.GET.copy()
         params.pop('page', None)
         if scope == MATERIAL_SCOPE_WORKSPACE:
@@ -901,9 +912,15 @@ class MaterialDetailView(AppViewMixin, DetailView):
         from apps.composites.layer_symmetry import expand_symmetric_layer_objects
 
         layers = list(composite_layers)
-        if self.object.layers_symmetric:
+        defining_count = len(layers)
+        symmetric = bool(self.object.layers_symmetric)
+        if symmetric:
             layers = expand_symmetric_layer_objects(layers)
-        return build_layer_diagram(layers)
+        return build_layer_diagram(
+            layers,
+            symmetric=symmetric,
+            defining_count=defining_count,
+        )
 
     def get_composite_layers(self):
         return self.object.composite_layers.select_related('material').order_by('layer_number')
@@ -1318,6 +1335,78 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
     permission_codename = WorkspacePerm.MATERIAL_CREATE
     template_name = 'materials/material_import.html'
     form_class = MaterialImportForm
+    import_kind = 'material'
+    import_url_name = 'materials:import'
+    list_url_name = 'materials:list'
+    import_page_title = 'Импорт материалов'
+    wizard_configure_label = 'Лист и структура'
+    show_dictionaries = True
+    show_templates = True
+    show_examples = True
+    addon_field_label = 'Поле материала'
+    mapping_identity_section_title = 'Справочники'
+    created_noun = 'материалов'
+
+    @property
+    def import_url(self):
+        return reverse(self.import_url_name)
+
+    def _import_redirect(self, query: str = ''):
+        url = self.import_url
+        if not query:
+            return redirect(url)
+        if query.startswith('?'):
+            return redirect(url + query)
+        return redirect(f'{url}?{query}')
+
+    def _list_redirect(self):
+        return redirect(self.list_url_name)
+
+    def _requires_structure_type(self) -> bool:
+        return True
+
+    def _optional_addon_targets(self):
+        return None
+
+    def _mapping_identity_targets(self):
+        return None
+
+    def _mapping_extra_properties(self, config):
+        return []
+
+    def _occupied_codes(self, request) -> set[str]:
+        return set()
+
+    def _name_collisions(self, request, drafts):
+        return name_collisions_for_drafts(request.active_workspace, drafts)
+
+    def _prepare_entity_context(self, request, config):
+        return
+
+    def _ensure_configure_entity_for_mapping(self, request, config, path):
+        if self._requires_structure_type() and self._resolve_structure_type(config) is None:
+            messages.error(request, 'Выберите тип структуры.')
+            self.show_structure_type_error = True
+            return self._render_configure(request, path)
+        return None
+
+    def _missing_configure_entity_message(self, config) -> str | None:
+        if self._requires_structure_type() and self._resolve_structure_type(config) is None:
+            return 'Выберите тип структуры перед сборкой черновика.'
+        return None
+
+    def _configure_entity_error(self, request) -> str | None:
+        structure_type_id = (request.POST.get('structure_type_id') or '').strip()
+        if not structure_type_id:
+            return 'Выберите тип структуры для импорта.'
+        if not self._importable_structure_types().filter(pk=structure_type_id).exists():
+            return 'Выбранный тип структуры недоступен.'
+        return None
+
+    def _configure_entity_session_kwargs(self, request) -> dict:
+        return {
+            'structure_type_id': (request.POST.get('structure_type_id') or '').strip(),
+        }
 
     def _material_importer(self, request, *, dry_run: bool, source_filename: str | None = None):
         config = get_import_config(request.session)
@@ -1340,7 +1429,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['step'] = getattr(self, 'wizard_step', 'upload')
         wizard_step_defs = (
             ('upload', 'Загрузка'),
-            ('configure', 'Лист и структура'),
+            ('configure', self.wizard_configure_label),
             ('mapping', 'Сопоставление колонок'),
             ('review', 'Запись'),
         )
@@ -1357,7 +1446,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['wizard_step_total'] = len(wizard_step_defs)
         context['wizard_step_label'] = step_label
         context['wizard_step_percent'] = int(round(100 * step_num / len(wizard_step_defs)))
-        import_url = reverse('materials:import')
+        import_url = self.import_url
         wizard_back = {
             'configure': f'{import_url}?step=upload',
             'mapping': f'{import_url}?step=configure',
@@ -1421,8 +1510,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['draft_create_count'] = sum(1 for d in draft_rows if d.action == 'create')
         context['draft_update_count'] = sum(1 for d in draft_rows if d.action == 'update')
         context['draft_skip_count'] = sum(1 for d in draft_rows if d.action == 'skip')
-        name_collisions = name_collisions_for_drafts(
-            self.request.active_workspace,
+        name_collisions = self._name_collisions(
+            self.request,
             draft_rows,
         )
         context['name_collisions'] = name_collisions
@@ -1477,6 +1566,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         context['iterate_report'] = getattr(self, 'iterate_report', None)
         context['show_structure_type_error'] = getattr(self, 'show_structure_type_error', False)
         context['show_mapping_errors'] = getattr(self, 'show_mapping_errors', False)
+        context['show_material_error'] = getattr(self, 'show_material_error', False)
+        self._prepare_entity_context(self.request, config)
         step_status = self._wizard_step_status(context)
         context['wizard_step_status'] = step_status
         context['wizard_steps'] = [
@@ -1488,6 +1579,20 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             for key, label in context['wizard_step_defs']
         ]
         context.update(_import_debug_context(self.request))
+        context['import_kind'] = self.import_kind
+        context['import_page_title'] = self.import_page_title
+        context['import_url'] = self.import_url
+        context['list_url'] = reverse(self.list_url_name)
+        context['show_dictionaries'] = self.show_dictionaries
+        context['show_templates'] = self.show_templates
+        context['show_examples'] = self.show_examples
+        context['addon_field_label'] = self.addon_field_label
+        context['mapping_identity_section_title'] = self.mapping_identity_section_title
+        context['selected_material'] = getattr(self, 'selected_material', None)
+        context['import_materials'] = getattr(self, 'import_materials', [])
+        context['reference_materials'] = getattr(self, 'reference_materials', [])
+        if self.import_kind != 'material':
+            context['show_import_debug_undo'] = False
         return context
 
     def _wizard_step_status(self, context) -> dict[str, str]:
@@ -1498,7 +1603,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             'mapping': '',
             'review': '',
         }
-        if context.get('show_structure_type_error'):
+        if context.get('show_structure_type_error') or context.get('show_material_error'):
             status['configure'] = 'error'
         if (
             context.get('show_mapping_errors')
@@ -1534,7 +1639,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         if request.GET.get('cancel') == '1':
             clear_import_session(request.session, delete_file=True)
             messages.info(request, 'Импорт сброшен.')
-            return redirect('materials:import')
+            return self._import_redirect()
         path = get_import_session_path(request.session)
         if path is None:
             self.wizard_step = 'upload'
@@ -1598,7 +1703,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         handler = handlers.get(action)
         if handler is None:
             messages.error(request, 'Неизвестное действие.')
-            return redirect('materials:import')
+            return self._import_redirect()
         return handler(request)
 
     def _handle_upload(self, request):
@@ -1641,7 +1746,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 'Файл загружен. Заголовки в первой строке — номера строк парсера скрыты. '
                 'В сопоставлении должна быть колонка «Наименование» → поле «Название».',
             )
-        return redirect('materials:import')
+        return self._import_redirect()
 
     def _resolve_configure_layout(self, path, *, sheet: str, post) -> tuple[int, int]:
         """Номера строк шапки: при простой раскладке (1 / без групп) не даём сбить вручную."""
@@ -1665,7 +1770,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         path = get_import_session_path(request.session)
         if path is None:
             messages.error(request, 'Сначала загрузите файл.')
-            return redirect('materials:import')
+            return self._import_redirect()
         sheet = (request.POST.get('sheet') or '').strip()
         if request.POST.get('refresh_layout') == '1':
             prev = get_import_config(request.session)
@@ -1702,24 +1807,22 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             messages.error(request, str(exc))
             return self._render_configure(request, path)
         create_missing_dictionaries = request.POST.get('create_missing_dictionaries') == '1'
-        structure_type_id = (request.POST.get('structure_type_id') or '').strip()
-        if not structure_type_id:
-            messages.error(request, 'Выберите тип структуры для импорта.')
+        entity_error = self._configure_entity_error(request)
+        if entity_error:
+            messages.error(request, entity_error)
             self.show_structure_type_error = True
+            self.show_material_error = True
             return self._render_configure(request, path)
-        if not self._importable_structure_types().filter(pk=structure_type_id).exists():
-            messages.error(request, 'Выбранный тип структуры недоступен.')
-            self.show_structure_type_error = True
-            return self._render_configure(request, path)
+        entity_kwargs = self._configure_entity_session_kwargs(request)
         set_import_config(
             request.session,
             sheet=sheet,
             header_row=header_row,
             group_row=group_row,
             create_missing_dictionaries=create_missing_dictionaries,
-            structure_type_id=structure_type_id,
             mapping={},
             clear_draft=True,
+            **entity_kwargs,
         )
         return self._render_mapping(request, path)
 
@@ -1849,7 +1952,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         path = get_import_session_path(request.session)
         if path is None:
             messages.error(request, 'Сначала загрузите файл.')
-            return redirect('materials:import')
+            return self._import_redirect()
         error_response = self._save_mapping_from_post(request, path)
         if error_response is not None:
             return error_response
@@ -1859,7 +1962,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         path = get_import_session_path(request.session)
         if path is None:
             messages.error(request, 'Сначала загрузите файл.')
-            return redirect('materials:import')
+            return self._import_redirect()
         error_response = self._save_mapping_from_post(request, path)
         if error_response is not None:
             return error_response
@@ -1879,25 +1982,25 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             'Построчный режим: проверяйте и записывайте по одной строке. '
             'Уже записанные строки сохраняются даже при ошибке на следующей.',
         )
-        return redirect(f"{reverse('materials:import')}?step=iterate")
+        return self._import_redirect('step=iterate')
 
     def _load_review_drafts(self, request):
         path = get_import_session_path(request.session)
         if path is None:
             messages.error(request, 'Сначала загрузите файл.')
-            return None, None, None, redirect('materials:import')
+            return None, None, None, self._import_redirect()
         config = get_import_config(request.session)
         drafts = drafts_from_session(config.get('draft'))
         if not drafts:
             messages.error(request, 'Нет черновика — сначала выполните проверку маппинга.')
-            return path, None, None, redirect('materials:import')
+            return path, None, None, self._import_redirect()
         if request.POST.get('review_marker'):
             drafts = apply_review_post(drafts, request.POST)
             set_import_config(request.session, draft=drafts_to_session(drafts))
         structure_type = self._resolve_structure_type(config)
-        if structure_type is None:
+        if self._requires_structure_type() and structure_type is None:
             messages.error(request, 'Не выбран тип структуры.')
-            return path, None, None, redirect('materials:import')
+            return path, None, None, self._import_redirect()
         return path, drafts, structure_type, None
 
     def _handle_review_recheck(self, request):
@@ -1964,7 +2067,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
 
     def _apply_duplicate_name_choice(self, request, drafts):
         """Применяет выбор оператора по совпадениям названий. Возвращает (drafts, error_message)."""
-        collisions = name_collisions_for_drafts(request.active_workspace, drafts)
+        collisions = self._name_collisions(request, drafts)
         if not collisions:
             return drafts, None
         mode = (request.POST.get('duplicate_name_policy') or DUPLICATE_NAME_SKIP).strip()
@@ -2015,7 +2118,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 'Исправьте сопоставление колонок и соберите черновик заново.',
             )
             return self._render_review(request, path)
-        if report.affected_material_ids:
+        if self.import_kind == 'material' and report.affected_material_ids:
             store_last_import_debug_batch(
                 request.session,
                 workspace=request.active_workspace,
@@ -2036,7 +2139,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         messages.success(
             request,
             'Импорт выполнен: '
-            f'материалов создано {report.materials_created}'
+            f'{self.created_noun} создано {report.materials_created}'
             + (
                 f', обновлено {report.materials_updated}'
                 if report.materials_updated
@@ -2052,22 +2155,22 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             + ignored_note
             + (
                 f' Отладка: можно удалить {len(report.affected_material_ids)} материал(ов) одной кнопкой.'
-                if settings.IMPORT_BATCH_UNDO and report.affected_material_ids
+                if self.import_kind == 'material' and settings.IMPORT_BATCH_UNDO and report.affected_material_ids
                 else ''
             ),
         )
-        return redirect('materials:list')
+        return self._list_redirect()
 
     def _handle_review_iterate_start(self, request):
         path = get_import_session_path(request.session)
         if path is None:
             messages.error(request, 'Сначала загрузите файл.')
-            return redirect('materials:import')
+            return self._import_redirect()
         config = get_import_config(request.session)
         drafts = drafts_from_session(config.get('draft'))
         if not drafts:
             messages.error(request, 'Нет черновика — сначала выполните проверку маппинга.')
-            return redirect('materials:import')
+            return self._import_redirect()
         drafts, errors = apply_unrecognized_manual_fixes(drafts, request.POST)
         set_import_config(request.session, draft=drafts_to_session(drafts))
         if errors:
@@ -2097,7 +2200,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         structure_type = self._resolve_structure_type(config)
         if structure_type is None:
             messages.error(request, 'Не выбран тип структуры.')
-            return redirect('materials:import')
+            return self._import_redirect()
         if has_unresolved_unrecognized(drafts):
             messages.warning(
                 request,
@@ -2125,12 +2228,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             'Построчный режим: проверяйте и записывайте по одной строке. '
             'Уже записанные строки сохраняются даже при ошибке на следующей.',
         )
-        return redirect(f"{reverse('materials:import')}?step=iterate")
+        return self._import_redirect('step=iterate')
 
     def _handle_iterate_apply(self, request):
         path = get_import_session_path(request.session)
         if path is None or not is_iterate_active(request.session):
-            return redirect('materials:import')
+            return self._import_redirect()
         config = get_import_config(request.session)
         drafts = drafts_from_session(config.get('draft'))
         index = get_iterate_index(request.session)
@@ -2141,7 +2244,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         structure_type = self._resolve_structure_type(config)
         if structure_type is None:
             messages.error(request, 'Не выбран тип структуры.')
-            return redirect('materials:import')
+            return self._import_redirect()
 
         draft = apply_iterate_row_post(drafts[index], request.POST)
         # Перезапись запрещена: всегда создаём. Совпадения по названию уже
@@ -2191,12 +2294,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         if nxt is None:
             return self._finish_iterate(request, done_message='Построчный импорт завершён.')
         messages.success(request, f'Строка {draft.source_row} записана.')
-        return redirect(f"{reverse('materials:import')}?step=iterate")
+        return self._import_redirect('step=iterate')
 
     def _handle_iterate_skip(self, request):
         path = get_import_session_path(request.session)
         if path is None or not is_iterate_active(request.session):
-            return redirect('materials:import')
+            return self._import_redirect()
         config = get_import_config(request.session)
         drafts = drafts_from_session(config.get('draft'))
         index = get_iterate_index(request.session)
@@ -2220,14 +2323,14 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         set_iterate_index(request.session, nxt)
         if nxt is None:
             return self._finish_iterate(request, done_message='Построчный импорт завершён.')
-        return redirect(f"{reverse('materials:import')}?step=iterate")
+        return self._import_redirect('step=iterate')
 
     def _handle_iterate_finish(self, request):
         return self._finish_iterate(request, done_message='Построчный импорт остановлен.')
 
     def _handle_iterate_back_review(self, request):
         material_ids = get_iterate_material_ids(request.session)
-        if material_ids:
+        if self.import_kind == 'material' and material_ids:
             store_last_import_debug_batch(
                 request.session,
                 workspace=request.active_workspace,
@@ -2236,7 +2339,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         clear_iterate_session(request.session)
         path = get_import_session_path(request.session)
         if path is None:
-            return redirect('materials:import')
+            return self._import_redirect()
         messages.info(
             request,
             'Построчный режим закрыт. Можно применить пакетно или вернуться к сопоставлению.',
@@ -2249,7 +2352,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         applied = sum(1 for item in log if item.get('status') == 'applied')
         skipped = sum(1 for item in log if item.get('status') == 'skipped')
         errors = sum(1 for item in log if item.get('status') == 'error')
-        if material_ids:
+        if self.import_kind == 'material' and material_ids:
             store_last_import_debug_batch(
                 request.session,
                 workspace=request.active_workspace,
@@ -2267,11 +2370,11 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             f'{done_message} Записано: {applied}, пропущено: {skipped}, ошибок: {errors}.'
             + (
                 f' Отладка: можно удалить {len(material_ids)} материал(ов) одной кнопкой.'
-                if settings.IMPORT_BATCH_UNDO and material_ids
+                if self.import_kind == 'material' and settings.IMPORT_BATCH_UNDO and material_ids
                 else ''
             ),
         )
-        return redirect('materials:list')
+        return self._list_redirect()
 
     def _handle_undo_last_import(self, request):
         if not settings.IMPORT_BATCH_UNDO:
@@ -2279,7 +2382,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 request,
                 'Откат импорта выключен. Включите IMPORT_BATCH_UNDO=true или DEBUG=True.',
             )
-            return redirect('materials:list')
+            return self._list_redirect()
         result = undo_last_import_debug_batch(
             request.session,
             workspace=request.active_workspace,
@@ -2289,12 +2392,12 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         else:
             messages.error(request, result.message)
         # Always land on list page 1 — POST next often keeps ?page=N which 404s after delete.
-        return redirect('materials:list')
+        return self._list_redirect()
 
     def _handle_save_template(self, request):
         path = get_import_session_path(request.session)
         if path is None:
-            return redirect('materials:import')
+            return self._import_redirect()
         # Сначала сохраняем маппинг и теги из формы: иначе при ошибке
         # валидации (пустое имя, нет структуры) виджет тегов сбрасывается.
         self._persist_mapping_form_state(request)
@@ -2377,7 +2480,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
     def _handle_load_template(self, request):
         path = get_import_session_path(request.session)
         if path is None:
-            return redirect('materials:import')
+            return self._import_redirect()
         template_id = (
             request.POST.get('template_id') or request.POST.get('profile_id') or ''
         ).strip()
@@ -2434,11 +2537,13 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         error_response не None — нужно вернуть его клиенту.
         """
         config = get_import_config(request.session)
-        structure_type = self._resolve_structure_type(config)
-        if structure_type is None:
-            messages.error(request, 'Выберите тип структуры перед сборкой черновика.')
+        missing = self._missing_configure_entity_message(config)
+        if missing:
+            messages.error(request, missing)
             self.show_structure_type_error = True
+            self.show_material_error = True
             return None, None, self._render_configure(request, path)
+        structure_type = self._resolve_structure_type(config)
         table = self._load_table(path, config)
         structure_fields, _ = self._structure_fields_for_config(config)
         mapping_rows = []
@@ -2472,8 +2577,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             mapping,
             workspace=request.active_workspace,
             match_policy=MATCH_ALWAYS_CREATE,
-            structure_type_id=str(structure_type.pk),
+            structure_type_id=str(structure_type.pk) if structure_type is not None else None,
             tag_columns=config.get('tag_columns') or [],
+            occupied_codes=self._occupied_codes(request),
         )
         drafts = merge_default_tags_into_drafts(
             drafts,
@@ -2508,7 +2614,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         except ValueError as exc:
             messages.error(request, str(exc))
             clear_import_session(request.session, delete_file=True)
-            return redirect('materials:import')
+            return self._import_redirect()
         config = get_import_config(request.session)
         sheet = config.get('sheet') or (self.sheet_names[0] if self.sheet_names else '')
         detected_header, detected_group = detect_header_layout(path, sheet_name=sheet)
@@ -2563,17 +2669,17 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
 
     def _render_mapping(self, request, path):
         config = get_import_config(request.session)
+        blocked = self._ensure_configure_entity_for_mapping(request, config, path)
+        if blocked is not None:
+            return blocked
         structure_fields, structure_type = self._structure_fields_for_config(config)
-        if structure_type is None:
-            messages.error(request, 'Выберите тип структуры.')
-            self.show_structure_type_error = True
-            return self._render_configure(request, path)
         properties = list(Property.objects.order_by('display_name', 'name'))
         match_policy = MATCH_BY_NAME
         self.target_choices = mapping_choices(
             properties,
             structure_fields,
             match_policy=match_policy,
+            identity_targets=self._mapping_identity_targets(),
         )
         self.mapping_catalog_groups = mapping_catalog_groups(self.target_choices)
         self.required_import_targets = required_import_targets(match_policy)
@@ -2643,6 +2749,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             }
             for column in self.wide_table.columns
         ]
+        extra_properties = self._mapping_extra_properties(config)
         self.field_mapping_rows = build_field_mapping_rows(
             columns=list(self.wide_table.columns),
             mapping=stored,
@@ -2651,6 +2758,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             target_labels=target_labels,
             sample_row=sample,
             tag_columns=config.get('tag_columns') or [],
+            extra_properties=extra_properties,
+            extra_identity=self._optional_addon_targets() or (),
         )
         self.unused_columns = unused_columns_from_mapping(
             list(self.wide_table.columns),
@@ -2662,6 +2771,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         self.addon_catalog_groups = addon_catalog_groups(
             properties=[],
             exclude_targets=used_targets,
+            optional_targets=self._optional_addon_targets(),
         )
         self.reference_properties = reference_properties_for_picker()
         self.missing_required_targets = missing_required_targets(
@@ -2679,7 +2789,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         self.draft_rows = drafts_from_session(config.get('draft'))
         if not self.draft_rows:
             return self._build_and_show_review(request, path)
-        if structure_type is None:
+        if self._requires_structure_type() and structure_type is None:
             messages.error(request, 'Не выбран тип структуры.')
             return self._render_configure(request, path)
         # Не перетираем отчёт, если его уже посчитали в этом запросе (apply/recheck).

@@ -1,0 +1,71 @@
+{% load scan_tags %}
+{% scan_preview_slides scan as slides %}
+<div class="scan-preview-carousel{% if size == 'tile' %} scan-preview-carousel--tile{% else %} scan-preview-carousel--detail{% endif %}"
+     data-scan-preview-carousel
+     data-initial-kind="c">
+    {% if detail_href %}
+    <a class="file-tile__preview file-tile__preview--link"
+       href="{{ detail_href }}"
+       aria-label="Открыть скан {{ scan.title }}">
+        {% for slide in slides %}
+        <span class="scan-preview-carousel__slide{% if slide.is_initial %} is-active{% endif %}"
+              data-scan-preview-slide
+              data-kind="{{ slide.kind }}"
+              data-scan-preview-label="{{ slide.label }}"
+              data-has-image="{% if slide.url %}1{% else %}0{% endif %}"
+              {% if not slide.is_initial %}hidden{% endif %}>
+            {% if slide.url %}
+            <img src="{{ slide.url }}"
+                 alt="{{ slide.label }} — {{ scan.title }}"
+                 class="file-tile__preview-img"
+                 loading="lazy">
+            {% else %}
+            <span class="file-tile__preview-placeholder" title="{{ slide.label }} не загружено" aria-hidden="true">
+                <i class="bi bi-image" aria-hidden="true"></i>
+                <span>{{ slide.label }}</span>
+            </span>
+            {% endif %}
+        </span>
+        {% endfor %}
+    </a>
+    {% else %}
+    <div class="scan-preview-frame__media">
+        {% for slide in slides %}
+        <span class="scan-preview-carousel__slide{% if slide.is_initial %} is-active{% endif %}"
+              data-scan-preview-slide
+              data-kind="{{ slide.kind }}"
+              data-scan-preview-label="{{ slide.label }}"
+              data-has-image="{% if slide.url %}1{% else %}0{% endif %}"
+              {% if not slide.is_initial %}hidden{% endif %}>
+            {% if slide.url %}
+            <img src="{{ slide.url }}"
+                 alt="{{ slide.label }} — {{ scan.title }}"
+                 class="scan-preview-thumb scan-preview-thumb--detail"
+                 loading="lazy">
+            {% else %}
+            <span class="scan-preview-thumb scan-preview-thumb--empty scan-preview-thumb--detail"
+                  title="{{ slide.label }} не загружено"
+                  aria-hidden="true">
+                <i class="bi bi-image" aria-hidden="true"></i>
+            </span>
+            {% endif %}
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="scan-preview-carousel__nav">
+        <button type="button"
+                class="scan-preview-carousel__btn"
+                data-scan-preview-dir="-1"
+                aria-label="Предыдущее превью">
+            <i class="bi bi-chevron-left" aria-hidden="true"></i>
+        </button>
+        <span class="scan-preview-carousel__label" data-scan-preview-caption>C-скан</span>
+        <button type="button"
+                class="scan-preview-carousel__btn"
+                data-scan-preview-dir="1"
+                aria-label="Следующее превью">
+            <i class="bi bi-chevron-right" aria-hidden="true"></i>
+        </button>
+    </div>
+</div>

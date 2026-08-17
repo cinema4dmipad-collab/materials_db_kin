@@ -28,6 +28,7 @@ urlpatterns = [
     path('<uuid:pk>/tags/', ScanTagsUpdateView.as_view(), name='tags'),
     path('<uuid:pk>/download/', ScanDownloadView.as_view(), name='download'),
     path('<uuid:pk>/preview/', ScanPreviewView.as_view(), name='preview'),
+    path('<uuid:pk>/preview/<str:kind>/', ScanPreviewView.as_view(), name='preview_kind'),
     path('<uuid:pk>/delete/', ScanDeleteView.as_view(), name='delete'),
     path(
         '<uuid:scan_pk>/attachments/',

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load ui_tags %}
+{% load static ui_tags %}
 
 {% block title %}Сканы — {{ sample.code }}{% endblock %}
 
@@ -7,8 +7,14 @@
 {% include 'samples/includes/sample_tabs.html' %}
 
 <div class="card mb-4">
-    <div class="card-header">
-        <h1 class="h5 mb-0">Сканы HDF5 — {{ sample.code }}</h1>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h1 class="h5 mb-0">Сканы HDF5 — {{ sample.code }}</h1>
+            <p class="text-muted small mb-0 mt-1">Название и метод задаются на отдельной форме вместе с файлом и превью.</p>
+        </div>
+        <a href="{% url 'scans:create' sample.pk %}"
+           class="btn btn-primary btn-sm"
+           data-attachments-add-anchor>Добавить</a>
     </div>
     <div class="card-body p-0">
         {% include 'includes/list_filter_bar.html' %}
@@ -23,20 +29,16 @@
             {% if has_active_filters %}
             По вашему запросу сканы не найдены. <a href="{{ filter_reset_url }}">Сбросить фильтры</a>.
             {% else %}
-            Сканов пока нет.
+            Сканов пока нет. <a href="{% url 'scans:create' sample.pk %}">Добавить скан</a>.
             {% endif %}
         </p>
         {% endif %}
     </div>
 </div>
+{% url 'scans:create' sample.pk as scans_add_url %}
+{% include 'includes/attachments_add_fab.html' with add_url=scans_add_url add_label='Добавить скан' %}
+{% endblock %}
 
-<div class="card">
-    <div class="card-header">
-        <h2 class="h5 mb-0">Прикрепить скан HDF5</h2>
-    </div>
-    <div class="card-body">
-        <p class="text-muted small mb-3">Файл HDF5 (.h5 / .hdf5) обязателен; превью C-скана (PNG/JPEG/WebP) — по желанию.</p>
-        {% include 'samples/includes/scan_attach_form.html' %}
-    </div>
-</div>
+{% block extra_scripts %}
+<script src="{% static 'js/attachments_add_fab.js' %}?v={{ app_version }}-aaf1"></script>
 {% endblock %}

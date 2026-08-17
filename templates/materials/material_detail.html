@@ -5,7 +5,7 @@
 
 {% block extra_head %}
 {% if show_composite_layers and composite_layers %}
-<link rel="stylesheet" href="{% static 'css/composite_layer_diagram.css' %}?v={{ app_version }}-cl4">
+<link rel="stylesheet" href="{% static 'css/composite_layer_diagram.css' %}?v={{ app_version }}-cl9">
 {% endif %}
 {% endblock %}
 
@@ -158,15 +158,21 @@
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <h2 class="h5 mb-0">Слои композита</h2>
-            {% if material.layers_symmetric %}
-            <span class="badge text-bg-light border">Симметричный</span>
+            {% if layer_diagram.layer_count_label %}
+            <span class="text-muted small">{{ layer_diagram.layer_count_label }}</span>
             {% endif %}
         </div>
         {% if layer_diagram %}
         <div class="composite-thickness-summary" aria-label="Сводка по толщине композита">
             <span class="composite-thickness-summary__label">Общая толщина</span>
             <span class="composite-thickness-summary__value">Σt = {{ layer_diagram.total_thickness|decimal_comma }} мм</span>
-            <span class="composite-thickness-summary__meta">{{ layer_diagram.layer_count }} сл.</span>
+            <span class="composite-thickness-summary__meta">{{ layer_diagram.layer_count_label }}</span>
+            {% if layer_diagram.reinforcement_formula %}
+            <span class="reinforcement-formula">
+                <span class="reinforcement-formula__label">Схема армирования</span>
+                <span class="reinforcement-formula__value">{{ layer_diagram.reinforcement_formula }}</span>
+            </span>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -225,7 +231,7 @@
 
 {% block extra_scripts %}
 {% if show_composite_layers and composite_layers and layer_diagram %}
-<script src="{% static 'js/composite_layer_diagram_live.js' %}?v={{ app_version }}-cl4"></script>
+<script src="{% static 'js/composite_layer_diagram_live.js' %}?v={{ app_version }}-cl9"></script>
 <script>
 (function () {
     var target = document.getElementById('composite-layer-diagram-static');
@@ -234,7 +240,10 @@
         return;
     }
     var layers = JSON.parse(dataNode.textContent);
-    window.CompositeLayerDiagramLive.renderStatic(target, layers);
+    window.CompositeLayerDiagramLive.renderStatic(target, layers, {
+        symmetric: {{ material.layers_symmetric|yesno:"true,false" }},
+        definingCount: {{ composite_layers|length }},
+    });
 })();
 </script>
 {% endif %}

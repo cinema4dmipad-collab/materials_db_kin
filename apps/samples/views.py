@@ -24,6 +24,7 @@ from apps.core.list_filters import (
     QuerySetFilterMixin,
     build_choice_label_filter,
 )
+from apps.core.table_sort import TableSortMixin
 from apps.materials.models import Material
 from apps.materials.structure_display import get_sample_structure_context
 from apps.core.property_form_display import enrich_property_form_display
@@ -267,17 +268,24 @@ class SampleFormsetMixin:
         )
 
 
-class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
+class SampleListView(AppViewMixin, QuerySetFilterMixin, TableSortMixin, ListView):
     model = Sample
     template_name = 'samples/list.html'
     context_object_name = 'samples'
     paginate_by = 10
     enable_tag_filter = True
-    search_fields = ('code', 'name', 'material__code', 'material__name')
+    sort_columns = (
+        ('code', 'code'),
+        ('name', 'name'),
+        ('material', 'material__code'),
+        ('created_at', 'created_at'),
+    )
+    search_fields = ('code', 'name', 'description', 'material__code', 'material__name')
     search_scopes = (
-        (ALL_SEARCH_SCOPE, 'Везде', ('code', 'name', 'material__code', 'material__name')),
+        (ALL_SEARCH_SCOPE, 'Везде', ('code', 'name', 'description', 'material__code', 'material__name')),
         ('code', 'Код', ('code',)),
         ('name', 'Название', ('name',)),
+        ('description', 'Описание', ('description',)),
         ('material', 'Материал', ('material__code', 'material__name')),
         (OBJECT_TYPE_SEARCH_SCOPE, 'Тип объекта', ()),
         (CREATOR_SEARCH_SCOPE, 'Создал', ()),
@@ -288,10 +296,12 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
     choice_filter_labels = {'object_type': 'Тип объекта'}
 
     def get_queryset(self):
-        return self.filter_queryset(
-            samples_visible_in(self.request.active_workspace)
-            .select_related('material', 'material__struct_type', 'created_by_user')
-            .prefetch_related('tags')
+        return self.apply_table_sort(
+            self.filter_queryset(
+                samples_visible_in(self.request.active_workspace)
+                .select_related('material', 'material__struct_type', 'created_by_user')
+                .prefetch_related('tags')
+            )
         )
 
     def get_choice_filter_options(self):
@@ -305,6 +315,11 @@ class SampleListView(AppViewMixin, QuerySetFilterMixin, ListView):
             ),
             CREATOR_SEARCH_SCOPE: CREATOR_WITH_LABEL_FILTER,
         }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self.get_table_sort_context())
+        return context
 
 
 class SampleDetailView(AppViewMixin, DetailView):

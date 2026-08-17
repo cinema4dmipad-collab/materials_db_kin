@@ -15,6 +15,7 @@ TARGET_TAGS = 'material.tags'
 TARGET_MANUFACTURER = 'material.manufacturer'
 TARGET_AVAILABILITY = 'material.availability'
 TARGET_TECHNOLOGY = 'material.technology'
+TARGET_OBJECT_TYPE = 'sample.object_type'
 TARGET_PROPERTY_PREFIX = 'property:'
 TARGET_STRUCTURE_PREFIX = 'structure:'
 
@@ -40,6 +41,21 @@ OPTIONAL_MATERIAL_TARGETS = (
     (TARGET_TECHNOLOGY, 'Технология'),
 )
 OPTIONAL_MATERIAL_TARGET_KEYS = frozenset(target for target, _label in OPTIONAL_MATERIAL_TARGETS)
+
+OPTIONAL_SAMPLE_TARGETS = (
+    (TARGET_DESCRIPTION, 'Описание'),
+    (TARGET_OBJECT_TYPE, 'Тип объекта'),
+)
+OPTIONAL_SAMPLE_TARGET_KEYS = frozenset(target for target, _label in OPTIONAL_SAMPLE_TARGETS)
+
+SAMPLE_TARGETS = (
+    (TARGET_SKIP, '— пропустить —'),
+    (TARGET_CODE, 'Код образца'),
+    (TARGET_NAME, 'Название'),
+    (TARGET_DESCRIPTION, 'Описание'),
+    (TARGET_OBJECT_TYPE, 'Тип объекта'),
+    (TARGET_TAGS, 'Теги (для «Марка» → марка::значение)'),
+)
 
 TARGET_TAG_ROW_PREFIX = 'tag:'
 
@@ -150,10 +166,11 @@ def mapping_choices(
     structure_fields=None,
     *,
     match_policy: str | None = None,
+    identity_targets=None,
 ) -> list[tuple[str, str]]:
     required_keys = {target for target, _label in required_import_targets(match_policy)}
     choices = []
-    for value, label in MATERIAL_TARGETS:
+    for value, label in identity_targets or MATERIAL_TARGETS:
         if value in required_keys:
             choices.append((value, f'{label} ★ обязательно'))
         else:
@@ -209,11 +226,12 @@ def addon_catalog_groups(
     properties=None,
     *,
     exclude_targets: set[str] | None = None,
+    optional_targets=None,
 ) -> list[dict]:
     """Каталог для «Поле материала»: опциональные поля / справочники материала."""
     excluded = exclude_targets or set()
     choices: list[tuple[str, str]] = []
-    for value, label in OPTIONAL_MATERIAL_TARGETS:
+    for value, label in optional_targets if optional_targets is not None else OPTIONAL_MATERIAL_TARGETS:
         if value not in excluded:
             choices.append((value, label))
     # properties=[] — доп. свойства добавляются модалкой «Добавить свойство».
@@ -250,6 +268,8 @@ def suggest_target(
         return TARGET_NAME
     if any(token in hay for token in ('код', 'code', 'артикул', 'sku')) and _free(TARGET_CODE):
         return TARGET_CODE
+    if any(token in hay for token in ('тип объекта', 'object_type', 'object type')) and _free(TARGET_OBJECT_TYPE):
+        return TARGET_OBJECT_TYPE
 
     best = TARGET_SKIP
     best_score = 0.0
@@ -322,6 +342,8 @@ def build_field_mapping_rows(
     target_labels: dict[str, str] | None = None,
     sample_row: dict | None = None,
     tag_columns: list[str] | None = None,
+    extra_properties=None,
+    extra_identity=None,
 ) -> list[dict]:
     """
     Проекция column→target на строки «поле → колонка» для UI.
@@ -349,8 +371,23 @@ def build_field_mapping_rows(
     for target, label in primary:
         # primary уже с чистыми подписями; mapping_choices добавляет «★ обязательно».
         ordered_targets.append((target, label, True))
+    extra_seen = set(primary_set)
+    for target, label in extra_identity or []:
+        if target in extra_seen:
+            continue
+        ordered_targets.append((target, label, False))
+        extra_seen.add(target)
+    for prop in extra_properties or []:
+        target = f'{TARGET_PROPERTY_PREFIX}{prop.pk}'
+        if target in extra_seen:
+            continue
+        prop_label = prop.display_name or prop.name
+        if getattr(prop, 'unit', None):
+            prop_label = f'{prop_label} ({prop.unit})'
+        ordered_targets.append((target, prop_label, False))
+        extra_seen.add(target)
     for target, (column, parse) in by_target.items():
-        if target in primary_set:
+        if target in extra_seen:
             continue
         if target == TARGET_TAGS:
             continue

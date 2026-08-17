@@ -2,6 +2,7 @@ from django import forms
 
 from apps.core.tag_forms import TagNamesFormMixin
 from apps.scans.models import ScanRecord
+from apps.scans.previews import PREVIEW_KINDS
 from apps.scans.title_utils import default_scan_title
 from apps.scans.validators import (
     format_max_scan_file_size,
@@ -22,10 +23,20 @@ class ScanTagsForm(TagNamesFormMixin, forms.ModelForm):
 class ScanRecordForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = ScanRecord
-        fields = ['file', 'preview', 'title', 'description', 'method']
+        fields = [
+            'title',
+            'method',
+            'description',
+            'file',
+            'preview_b_xz',
+            'preview_b_yz',
+            'preview',
+        ]
         labels = {
             'file': 'Файл HDF5',
             'preview': 'Превью C-скана',
+            'preview_b_xz': 'Превью B-скана-XZ',
+            'preview_b_yz': 'Превью B-скана-YZ',
             'title': 'Название',
             'description': 'Описание',
             'method': 'Метод',
@@ -40,22 +51,24 @@ class ScanRecordForm(TagNamesFormMixin, forms.ModelForm):
             css_class = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
             field.widget.attrs.setdefault('class', css_class)
         self.fields['description'].widget.attrs.setdefault('rows', 3)
-        self.fields['preview'].required = False
-        self.fields['preview'].widget.attrs.setdefault('accept', 'image/png,image/jpeg,image/webp')
         max_size = format_max_scan_file_size()
         self.fields['file'].help_text = f'Формат HDF5: файлы .h5 или .hdf5, до {max_size}.'
-        self.fields['preview'].help_text = (
-            f'Необязательно. PNG, JPEG или WebP, до {format_max_scan_preview_size()} — '
-            'миниатюра для списка сканов.'
-        )
+        self._configure_preview_fields()
         if self.instance.pk and self.instance.file:
             self.fields['file'].required = False
             self.fields['file'].help_text = 'Оставьте пустым, чтобы сохранить текущий файл.'
-        if self.instance.pk and self.instance.preview:
-            self.fields['preview'].help_text = (
-                self.fields['preview'].help_text
-                + ' Оставьте пустым, чтобы сохранить текущее превью.'
+
+    def _configure_preview_fields(self):
+        size = format_max_scan_preview_size()
+        for kind in PREVIEW_KINDS:
+            field = self.fields[kind.field]
+            field.required = False
+            field.widget.attrs.setdefault('accept', 'image/png,image/jpeg,image/webp')
+            field.help_text = (
+                f'Необязательно. PNG, JPEG или WebP, до {size} — {kind.label}.'
             )
+            if self.instance.pk and getattr(self.instance, kind.field):
+                field.help_text += ' Оставьте пустым, чтобы сохранить текущее превью.'
 
     def clean_file(self):
         uploaded_file = self.cleaned_data.get('file')
@@ -65,8 +78,17 @@ class ScanRecordForm(TagNamesFormMixin, forms.ModelForm):
             raise forms.ValidationError('Выберите файл для загрузки.')
         return uploaded_file
 
-    def clean_preview(self):
-        uploaded = self.cleaned_data.get('preview')
+    def _clean_preview_named(self, name):
+        uploaded = self.cleaned_data.get(name)
         if uploaded:
             validate_scan_preview(uploaded)
         return uploaded
+
+    def clean_preview(self):
+        return self._clean_preview_named('preview')
+
+    def clean_preview_b_xz(self):
+        return self._clean_preview_named('preview_b_xz')
+
+    def clean_preview_b_yz(self):
+        return self._clean_preview_named('preview_b_yz')

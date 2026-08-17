@@ -4,7 +4,7 @@
 {% block title %}{{ structure_type.name }} — Материалы{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/structure_materials_grid.css' %}?v={{ app_version }}-smg6" rel="stylesheet">
+<link href="{% static 'css/structure_materials_grid.css' %}?v={{ app_version }}-smg7" rel="stylesheet">
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 {% endblock %}
 
@@ -38,15 +38,10 @@
                 <table class="structure-materials-grid">
                     <thead>
                         <tr>
-                            <th scope="col" class="structure-materials-grid__name">Название</th>
-                            <th scope="col" class="structure-materials-grid__code">Код</th>
+                            {% include 'includes/sort_th.html' with label='Название' extra_class='structure-materials-grid__name' sort_col=table_sort.name %}
+                            {% include 'includes/sort_th.html' with label='Код' extra_class='structure-materials-grid__code' sort_col=table_sort.code %}
                             {% for col in materials_grid.columns %}
-                            <th scope="col" class="structure-materials-grid__field" title="{{ col.label }}">
-                                <span class="structure-materials-grid__col-label">{{ col.label_base }}</span>
-                                {% if col.unit %}
-                                <span class="structure-materials-grid__col-unit">{{ col.unit }}</span>
-                                {% endif %}
-                            </th>
+                            {% include 'includes/sort_th.html' with label=col.label_base unit=col.unit extra_class='structure-materials-grid__field' title=col.label sort_col=col.sort %}
                             {% endfor %}
                         </tr>
                     </thead>

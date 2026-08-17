@@ -1,6 +1,7 @@
 from django.db.models import Q
 
 from apps.core.models import Tag
+from apps.core.table_sort import sort_preserve_params
 
 TAG_SEARCH_SCOPE = '__tag__'
 ALL_SEARCH_SCOPE = ''
@@ -312,7 +313,7 @@ class QuerySetFilterMixin:
             'active_tags': active_tags,
             'has_active_filters': has_active_filters,
             'filter_reset_url': self.request.path,
-            'list_filter_preserve_params': [],
+            'list_filter_preserve_params': sort_preserve_params(params),
             'pagination_query': pagination_query.urlencode(),
             'remove_search_url': (
                 self._build_filter_url((self.search_param, self.search_scope_param))

@@ -17,6 +17,13 @@
             </div>
         </div>
 
+        {% if layer_diagram.reinforcement_formula %}
+        <div class="reinforcement-formula mb-3">
+            <span class="reinforcement-formula__label">Схема армирования</span>
+            <span class="reinforcement-formula__value">{{ layer_diagram.reinforcement_formula }}</span>
+        </div>
+        {% endif %}
+
         {% if layer_diagram.legend_mode == 'material' and layer_diagram.material_legend %}
         <div class="layer-material-legend mb-3">
             {% for entry in layer_diagram.material_legend %}
@@ -30,28 +37,39 @@
         <div class="layer-scale-legend mb-3" aria-label="Цветовая шкала">
             <div class="layer-scale-legend__bar"></div>
             <div class="layer-scale-legend__labels">
-                <span>{{ layer_diagram.scale.min|decimal_comma }} {{ layer_diagram.scale.unit }}</span>
-                <span>среднее</span>
-                <span>{{ layer_diagram.scale.max|decimal_comma }} {{ layer_diagram.scale.unit }}</span>
+                <span>{% if layer_diagram.scale.min_label %}{{ layer_diagram.scale.min_label }}{% else %}{{ layer_diagram.scale.min|decimal_comma }} {{ layer_diagram.scale.unit }}{% endif %}</span>
+                <span>{{ layer_diagram.scale.mid_label|default:"среднее" }}</span>
+                <span>{% if layer_diagram.scale.max_label %}{{ layer_diagram.scale.max_label }}{% else %}{{ layer_diagram.scale.max|decimal_comma }} {{ layer_diagram.scale.unit }}{% endif %}</span>
             </div>
         </div>
         {% endif %}
 
         <div class="layer-stack-panel">
             <div class="layer-stack-title">Сверху ↓ вниз</div>
-            <div class="layer-stack-column" style="--layer-stack-count: {{ layer_diagram.layer_count }};">
-                {% for item in layer_diagram.layers %}
-                <div class="layer-stack-segment"
-                     style="flex: {{ item.flex_grow }} 1 0%; background-color: {{ item.color }};"
-                     data-material-id="{{ item.material_id }}"
-                     data-thickness="{{ item.thickness_value }}"
-                     data-angle="{{ item.angle_value }}"
-                     title="Слой {{ item.layer_number }}: {{ item.material_label }} · {{ item.thickness }} мм · {{ item.angle }}°">
-                    <span class="layer-stack-segment-index">#{{ item.layer_number }}</span>
-                    <span class="layer-stack-material-code">{{ item.material_code }}</span>
+            <div class="layer-stack-column">
+                <div class="layer-stack-rows{% if layer_diagram.symmetric %} layer-stack-rows--symmetric{% endif %}" style="--layer-stack-count: {{ layer_diagram.layer_count }};">
+                    {% for item in layer_diagram.layers %}
+                    <div class="layer-stack-row"
+                         style="flex: {{ item.flex_grow }} 0 auto;"
+                         data-material-id="{{ item.material_id }}"
+                         data-thickness="{{ item.thickness_value }}"
+                         data-angle="{{ item.angle_value }}"
+                         title="Слой {{ item.layer_number }}: {{ item.material_label }} · {{ item.thickness }} мм · {{ item.angle }}°">
+                        <div class="layer-stack-swatch" style="background-color: {{ item.color }};"></div>
+                        <div class="layer-stack-meta">
+                            <span class="layer-stack-segment-index">#{{ item.layer_number }}</span>
+                            <span class="layer-stack-material-code">{{ item.material_code }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if layer_diagram.symmetric %}
+                    <hr class="layer-stack-symmetry-line" aria-hidden="true">
+                    {% endif %}
                 </div>
-                {% endfor %}
             </div>
+            {% if layer_diagram.mirror_note %}
+            <div class="layer-stack-mirror-note">{{ layer_diagram.mirror_note }}</div>
+            {% endif %}
             <div class="layer-stack-caption">{{ layer_diagram.legend_caption }}</div>
         </div>
     </div>

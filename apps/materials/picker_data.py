@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from apps.materials.layer_thickness import layer_thickness_mm_by_material_id
 from apps.materials.models import Material
 from apps.workspaces.services import materials_in_workspace_tab, materials_shared_in, materials_visible_in
 
@@ -7,7 +8,7 @@ MATERIAL_PICKER_SCOPE_WORKSPACE = 'workspace'
 MATERIAL_PICKER_SCOPE_SHARED = 'shared'
 
 
-def _material_picker_item(material: Material, scopes: list[str]) -> dict:
+def _material_picker_item(material: Material, scopes: list[str], thickness_mm=None) -> dict:
     return {
         'material_id': str(material.pk),
         'code': material.code,
@@ -15,16 +16,21 @@ def _material_picker_item(material: Material, scopes: list[str]) -> dict:
         'label': f'{material.code} - {material.name}',
         'struct_type_name': material.struct_type.name if material.struct_type_id else 'Без типа',
         'scopes': scopes,
+        'thickness_mm': thickness_mm,
     }
 
 
 def materials_for_picker(workspace=None) -> list[dict]:
     if workspace is None:
-        materials = Material.objects.select_related('struct_type').order_by('code', 'name')
+        materials = list(
+            Material.objects.select_related('struct_type').order_by('code', 'name')
+        )
+        thicknesses = layer_thickness_mm_by_material_id(materials)
         return [
             _material_picker_item(
                 item,
                 [MATERIAL_PICKER_SCOPE_WORKSPACE, MATERIAL_PICKER_SCOPE_SHARED],
+                thickness_mm=thicknesses.get(item.pk),
             )
             for item in materials
         ]
@@ -42,8 +48,10 @@ def materials_for_picker(workspace=None) -> list[dict]:
         else:
             by_pk[item.pk] = (item, [MATERIAL_PICKER_SCOPE_SHARED])
 
+    materials = [material for material, _scopes in by_pk.values()]
+    thicknesses = layer_thickness_mm_by_material_id(materials)
     items = [
-        _material_picker_item(material, scopes)
+        _material_picker_item(material, scopes, thickness_mm=thicknesses.get(material.pk))
         for material, scopes in by_pk.values()
     ]
     items.sort(key=lambda row: (row['code'], row['name']))

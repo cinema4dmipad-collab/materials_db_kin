@@ -49,8 +49,10 @@ from apps.api.schemas import (
     ScanFilesPayload,
     ScanListQuery,
     ScanListResponse,
+    ScanOptionsOut,
     ScanOut,
     ScanPath,
+    ScanPreviewKindPath,
     WorkspaceOut,
 )
 from apps.api.serializers import (
@@ -63,8 +65,15 @@ from apps.api.serializers import (
 )
 from apps.core.file_download import StorageUnavailable, build_file_download_response
 from apps.scans.models import ScanRecord
+from apps.scans.previews import (
+    apply_uploaded_previews,
+    delete_replaced_preview_files,
+    preview_file,
+    resolve_preview_kind,
+    scan_options_payload,
+)
 from apps.scans.title_utils import default_scan_title
-from apps.scans.validators import validate_scan_file, validate_scan_preview
+from apps.scans.validators import validate_scan_file
 from apps.workspaces.permissions import WorkspacePerm
 
 _ERROR_RESPONSES = (
@@ -176,7 +185,11 @@ class SampleListController(BaseApiController):
             queryset = queryset.filter(material_id=parsed_query.material_id)
         search = (parsed_query.search or '').strip()
         if search:
-            queryset = queryset.filter(Q(code__icontains=search) | Q(name__icontains=search))
+            queryset = queryset.filter(
+                Q(code__icontains=search)
+                | Q(name__icontains=search)
+                | Q(description__icontains=search)
+            )
         meta, items = _paginate(
             queryset,
             limit=parsed_query.limit,
@@ -265,13 +278,11 @@ class ScanDetailController(BaseApiController):
             message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
             raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
 
-        preview = self.request.FILES.get('preview')
-        if preview is not None:
-            try:
-                validate_scan_preview(preview)
-            except ValidationError as exc:
-                message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
-                raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
+        try:
+            old_preview_names = apply_uploaded_previews(scan, self.request.FILES)
+        except ValidationError as exc:
+            message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
+            raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
 
         if parsed_body.method:
             allowed_methods = {choice[0] for choice in ScanRecord.METHODS}
@@ -286,10 +297,7 @@ class ScanDetailController(BaseApiController):
             scan.description = parsed_body.description
 
         old_file_name = scan.file.name if scan.file else ''
-        old_preview_name = scan.preview.name if scan.preview else ''
         scan.file = uploaded
-        if preview is not None:
-            scan.preview = preview
         scan.uploaded_by = self.request.user.get_username()
         scan.uploaded_by_user = self.request.user
         scan.save()
@@ -299,15 +307,7 @@ class ScanDetailController(BaseApiController):
                 scan.file.storage.delete(old_file_name)
             except Exception:  # noqa: BLE001 — best-effort cleanup
                 pass
-        if (
-            preview is not None
-            and old_preview_name
-            and old_preview_name != (scan.preview.name if scan.preview else '')
-        ):
-            try:
-                scan.preview.storage.delete(old_preview_name)
-            except Exception:  # noqa: BLE001 — best-effort cleanup
-                pass
+        delete_replaced_preview_files(scan, old_preview_names)
 
         from apps.api.scan_meta import parse_tag_names
         from apps.core.tag_utils import assign_tags
@@ -345,14 +345,6 @@ class ScanCreateController(BaseApiController):
             message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
             raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
 
-        preview = self.request.FILES.get('preview')
-        if preview is not None:
-            try:
-                validate_scan_preview(preview)
-            except ValidationError as exc:
-                message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
-                raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
-
         method = parsed_body.method or 'echo'
         allowed_methods = {choice[0] for choice in ScanRecord.METHODS}
         if method not in allowed_methods:
@@ -370,8 +362,11 @@ class ScanCreateController(BaseApiController):
             uploaded_by_user=self.request.user,
         )
         scan.file = uploaded
-        if preview is not None:
-            scan.preview = preview
+        try:
+            apply_uploaded_previews(scan, self.request.FILES)
+        except ValidationError as exc:
+            message = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
+            raise api_error(message, HTTPStatus.BAD_REQUEST) from exc
         scan.save()
 
         from apps.api.scan_meta import (
@@ -419,7 +414,7 @@ class ScanDownloadController(BaseApiController):
 
 
 class ScanPreviewController(BaseApiController):
-    """Inline C-scan preview image (proxied; S3 may be unreachable from clients)."""
+    """Inline scan preview image (proxied; S3 may be unreachable from clients)."""
 
     validate_responses: ClassVar[bool] = False
 
@@ -428,22 +423,53 @@ class ScanPreviewController(BaseApiController):
         *_ERROR_RESPONSES,
     )
     def get(self, parsed_path: Path[ScanPath]) -> FileResponse:
+        return _scan_preview_response(self.request, parsed_path.scan_id, kind_slug=None)
+
+
+class ScanPreviewKindController(BaseApiController):
+    validate_responses: ClassVar[bool] = False
+
+    @validate(
+        FileResponseSpec(as_attachment=False, status_code=HTTPStatus.OK),
+        *_ERROR_RESPONSES,
+    )
+    def get(self, parsed_path: Path[ScanPreviewKindPath]) -> FileResponse:
+        return _scan_preview_response(
+            self.request,
+            parsed_path.scan_id,
+            kind_slug=parsed_path.kind,
+        )
+
+
+class ScanOptionsController(BaseApiController):
+    """Catalog for KeenetiX save dialog: methods and preview field names."""
+
+    def get(self) -> ScanOptionsOut:
         workspace = require_workspace(self.request)
         require_perm(self.request.user, workspace, WorkspacePerm.SCAN_VIEW)
-        scan = scans_qs(workspace).filter(pk=parsed_path.scan_id).first()
-        if scan is None or not scan.preview:
-            raise api_error('Не найдено.', HTTPStatus.NOT_FOUND)
-        filename = scan.preview.name.rsplit('/', 1)[-1]
-        try:
-            return build_file_download_response(
-                scan.preview,
-                filename=filename,
-                as_attachment=False,
-            )
-        except Http404 as exc:
-            raise api_error('Не найдено.', HTTPStatus.NOT_FOUND) from exc
-        except StorageUnavailable as exc:
-            raise api_error(
-                'Файловое хранилище недоступно (S3/SeaweedFS).',
-                HTTPStatus.SERVICE_UNAVAILABLE,
-            ) from exc
+        payload = scan_options_payload()
+        return ScanOptionsOut(**payload)
+
+
+def _scan_preview_response(request, scan_id, *, kind_slug: str | None) -> FileResponse:
+    workspace = require_workspace(request)
+    require_perm(request.user, workspace, WorkspacePerm.SCAN_VIEW)
+    scan = scans_qs(workspace).filter(pk=scan_id).first()
+    kind = resolve_preview_kind(kind_slug)
+    field = preview_file(scan, kind) if scan is not None and kind is not None else None
+    if field is None:
+        raise api_error('Не найдено.', HTTPStatus.NOT_FOUND)
+    filename = field.name.rsplit('/', 1)[-1]
+    try:
+        return build_file_download_response(
+            field,
+            filename=filename,
+            as_attachment=False,
+        )
+    except Http404 as exc:
+        raise api_error('Не найдено.', HTTPStatus.NOT_FOUND) from exc
+    except StorageUnavailable as exc:
+        raise api_error(
+            'Файловое хранилище недоступно (S3/SeaweedFS).',
+            HTTPStatus.SERVICE_UNAVAILABLE,
+        ) from exc

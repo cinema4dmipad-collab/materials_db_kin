@@ -1,0 +1,26 @@
+{% if sort_col %}
+<th scope="col"
+    class="{% if extra_class %}{{ extra_class }} {% endif %}{% if sort_col.active %}is-sorted{% endif %}"
+    aria-sort="{{ sort_col.aria_sort }}"
+    {% if title %}title="{{ title }}"{% endif %}>
+    <a href="?{{ sort_col.query }}"
+       class="table-sort{% if sort_col.active %} table-sort--active{% endif %}"
+       aria-label="Сортировать: {{ label }}">
+        <span class="table-sort__text">
+            <span class="table-sort__label">{{ label }}</span>
+            {% if unit %}<span class="table-sort__unit structure-materials-grid__col-unit">{{ unit }}</span>{% endif %}
+        </span>
+        <span class="table-sort__icon" aria-hidden="true">
+            {% if sort_col.active and sort_col.dir == 'desc' %}
+            <i class="bi bi-caret-down-fill"></i>
+            {% elif sort_col.active %}
+            <i class="bi bi-caret-up-fill"></i>
+            {% else %}
+            <i class="bi bi-chevron-expand"></i>
+            {% endif %}
+        </span>
+    </a>
+</th>
+{% else %}
+<th scope="col" class="{{ extra_class }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</th>
+{% endif %}

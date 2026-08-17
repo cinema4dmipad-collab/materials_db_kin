@@ -51,6 +51,11 @@ urlpatterns = [
     ),
     path('v1/scans/', controllers.ScanListController.as_view(), name='scans'),
     path(
+        'v1/scans/options/',
+        controllers.ScanOptionsController.as_view(),
+        name='scan_options',
+    ),
+    path(
         'v1/scans/<uuid:scan_id>/',
         controllers.ScanDetailController.as_view(),
         name='scan_detail',
@@ -64,5 +69,10 @@ urlpatterns = [
         'v1/scans/<uuid:scan_id>/preview/',
         controllers.ScanPreviewController.as_view(),
         name='scan_preview',
+    ),
+    path(
+        'v1/scans/<uuid:scan_id>/preview/<str:kind>/',
+        controllers.ScanPreviewKindController.as_view(),
+        name='scan_preview_kind',
     ),
 ]

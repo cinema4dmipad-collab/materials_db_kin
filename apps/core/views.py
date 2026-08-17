@@ -115,6 +115,21 @@ def _build_dashboard_attention(*, request, workspace):
             }
         )
 
+    sample_import_path = request.session.get('sample_import_temp_path')
+    if sample_import_path:
+        from pathlib import Path as _Path
+
+        if _Path(sample_import_path).exists():
+            items.append(
+                {
+                    'kind': 'sample_import_pending',
+                    'label': 'Продолжить импорт образцов',
+                    'count': 1,
+                    'url': reverse('samples:import'),
+                    'detail': request.session.get('sample_import_original_name') or 'файл',
+                }
+            )
+
     from apps.materials.imports.review_status import count_pending_import_review
 
     pending_review = count_pending_import_review(workspace)

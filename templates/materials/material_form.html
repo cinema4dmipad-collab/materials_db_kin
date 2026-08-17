@@ -8,7 +8,7 @@
 {% block content %}
 <link href="{% static 'css/reference_properties_picker.css' %}" rel="stylesheet">
 <link href="{% static 'css/choice_picker.css' %}?v={{ app_version }}-dict1" rel="stylesheet">
-{% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}?v={{ app_version }}-cl4" rel="stylesheet">{% endif %}
+{% if layer_formset %}<link href="{% static 'css/composite_layer_diagram.css' %}?v={{ app_version }}-cl9" rel="stylesheet">{% endif %}
 <div class="card mb-4 sticky-form-page">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h1 class="h4 mb-0">{% if material %}Редактирование материала{% else %}Новый материал{% endif %}</h1>
@@ -242,8 +242,18 @@
             {% if layer_formset %}
             <div class="card mb-4 composite-layers-card">
                 <div class="card-header composite-layers-card__header d-flex flex-wrap align-items-center gap-2">
-                    <div>
+                    <div class="d-flex align-items-center gap-1">
                         <span class="fw-semibold">Слои композита</span>
+                        <span class="import-help__trigger" tabindex="0" aria-label="Подсказка по слоям композита">
+                            <span class="import-help__mark" aria-hidden="true">?</span>
+                            <span class="import-help__tip" role="tooltip">
+                                Клик по строке — выбор, Shift+клик — диапазон, Ctrl+клик — несколько.<br>
+                                Del — удалить выбранные, Ins — добавить слой.<br>
+                                «Расчёт» делит целевую Σt поровну; замочек рядом с толщиной фиксирует слой.<br>
+                                При выборе материала слоя подставляется его параметр «Толщина», если слой не зафиксирован.<br>
+                                «Симметричный» — в таблице только первая половина (при нечёте последний слой центральный), зеркало в превью.
+                            </span>
+                        </span>
                         <span id="layers-selection-meta" class="text-muted small ms-2"></span>
                     </div>
                     <div id="composite-layer-thickness-summary" class="composite-thickness-summary d-none ms-auto" aria-live="polite"></div>
@@ -345,11 +355,7 @@
                                     </tbody>
                                 </table>
                             </div>
-                            <p class="composite-layers-hint text-muted small px-3 py-2 mb-0 border-top">
-                                Клик по строке — выбор, Shift+клик — диапазон, Ctrl+клик — несколько. Del — удалить выбранные, Ins — добавить слой.
-                                «Расчёт» делит целевую Σt поровну; замочек рядом с толщиной фиксирует слой.
-                                «Симметричный» — в таблице только первая половина (при нечёте последний слой центральный), зеркало в превью.
-                            </p>
+                            <p id="composite-layers-mirror-note" class="composite-layers-mirror-note d-none px-3 py-2 mb-0 border-top"></p>
                         </div>
                         <div class="col-lg-5 col-xl-4">
                             <div id="composite-layer-diagram-live" class="h-100"></div>
@@ -417,6 +423,7 @@
 <script src="{% static 'js/choice_picker_fields.js' %}"></script>
 <script src="{% static 'js/material_dictionary_fields.js' %}?v={{ app_version }}-dict1"></script>
 <script src="{% static 'js/material_properties_formset.js' %}"></script>
-<script src="{% static 'js/composite_layer_diagram_live.js' %}?v={{ app_version }}-cl4"></script>
-<script src="{% static 'js/composite_layers_formset.js' %}?v={{ app_version }}-cl4"></script>
+<script src="{% static 'js/composite_layer_diagram_live.js' %}?v={{ app_version }}-cl9"></script>
+<script src="{% static 'js/composite_layers_formset.js' %}?v={{ app_version }}-cl10"></script>
+<script src="{% static 'js/import_help_tips.js' %}?v={{ app_version }}-hints5"></script>
 {% endblock %}

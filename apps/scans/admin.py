@@ -26,7 +26,9 @@ class ScanRecordAdmin(admin.ModelAdmin):
 
     @admin.display(description='Превью', boolean=True)
     def has_preview(self, obj):
-        return bool(obj.preview)
+        from apps.scans.previews import has_any_preview
+
+        return has_any_preview(obj)
 
 
 @admin.register(ScanAttachment)

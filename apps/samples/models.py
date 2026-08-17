@@ -26,6 +26,7 @@ class Sample(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=50)
     name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, verbose_name='Описание')
     material = models.ForeignKey(
         Material,
         on_delete=models.CASCADE,

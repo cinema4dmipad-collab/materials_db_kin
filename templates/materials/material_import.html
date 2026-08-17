@@ -1,22 +1,22 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Импорт материалов — База композитов{% endblock %}
+{% block title %}{{ import_page_title|default:"Импорт материалов" }} — База композитов{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-tags4" rel="stylesheet">
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-tags5" rel="stylesheet">
 <link href="{% static 'css/reference_properties_picker.css' %}?v={{ app_version }}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
 <div class="card mb-4{% if step == 'mapping' %} import-map-page{% endif %}">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <h1 class="h4 mb-0">Импорт материалов</h1>
+        <h1 class="h4 mb-0">{{ import_page_title|default:"Импорт материалов" }}</h1>
         <div class="d-flex flex-wrap gap-2">
             {% if has_staged_file %}
-            <a href="{% url 'materials:import' %}?cancel=1" class="btn btn-outline-danger btn-sm">Отменить импорт</a>
+            <a href="{{ import_url }}?cancel=1" class="btn btn-outline-danger btn-sm">Отменить импорт</a>
             {% endif %}
-            <a href="{% url 'materials:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
+            <a href="{{ list_url }}" class="btn btn-outline-secondary btn-sm">К списку</a>
         </div>
     </div>
     <div class="card-body">
@@ -58,7 +58,7 @@
         <div class="alert alert-secondary py-2 small">
             Сейчас загружен файл <strong>{{ staged_filename }}</strong>.
             Выберите другой файл, чтобы заменить его, или
-            <a href="{% url 'materials:import' %}?step=configure">вернитесь к настройке листа</a>.
+            <a href="{{ import_url }}?step=configure">вернитесь к настройке листа</a>.
         </div>
         {% endif %}
         <form method="post" enctype="multipart/form-data" novalidate data-native-file-upload="1">
@@ -85,14 +85,20 @@
                 {% endfor %}
             </div>
         </form>
+        {% if show_examples %}
         <p class="small text-muted mt-3 mb-0">
             Примеры для проверки:
+            {% if import_kind == 'sample' %}
+            <a href="{% url 'samples:import_example' %}">таблица CSV</a>
+            {% else %}
             <a href="{% url 'materials:import_example' %}">большая таблица Excel</a>
             ·
             <a href="{% url 'materials:import_example' %}?kind=csv">то же CSV</a>
             ·
             <a href="{% url 'materials:import_example' %}?kind=cli">формат CLI</a>
+            {% endif %}
         </p>
+        {% endif %}
         {% endif %}
 
         {% if has_staged_file and step == 'configure' %}
@@ -218,7 +224,7 @@
                     <span class="import-schema__arrow-glyph">→</span>
                 </div>
 
-                <section class="import-schema__pane import-schema__pane--db{% if show_structure_type_error %} is-invalid{% endif %}"
+                <section class="import-schema__pane import-schema__pane--db{% if show_structure_type_error or show_material_error %} is-invalid{% endif %}"
                          aria-labelledby="import-schema-db-title">
                     <header class="import-schema__pane-head">
                         <div class="import-schema__pane-eyebrow">Назначение</div>
@@ -226,6 +232,41 @@
                     </header>
 
                     <div class="import-schema__db-stack">
+                        {% if import_kind == 'sample' %}
+                        <div class="import-schema__control import-schema__control--structure">
+                            <label class="form-label" for="import-material">
+                                Материал <span class="text-danger">*</span>
+                                <span class="import-help__trigger" tabindex="0" aria-label="Подсказка по материалу">
+                                    <span class="import-help__mark" aria-hidden="true">?</span>
+                                    <span class="import-help__tip import-help__tip--end" role="tooltip">
+                                        Все строки файла станут образцами этого материала.
+                                        Сопоставление колонок возьмёт поля его типа структуры,
+                                        свойства справочника и теги.
+                                    </span>
+                                </span>
+                            </label>
+                            {% if import_materials %}
+                            <select name="material_id"
+                                    id="import-material"
+                                    class="form-select js-material-select material-picker-select{% if show_material_error %} is-invalid{% endif %}"
+                                    data-material-picker="true"
+                                    required>
+                                <option value="">— выберите материал —</option>
+                                {% for mat in import_materials %}
+                                <option value="{{ mat.pk }}"{% if config.material_id == mat.pk|stringformat:"s" %} selected{% endif %}>{{ mat.code }} — {{ mat.name }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <div class="alert alert-warning py-2 small mb-0">
+                                Нет доступных материалов в этом пространстве.
+                                <a href="{% url 'materials:create' %}">Создайте материал</a>.
+                            </div>
+                            {% endif %}
+                            {% if show_material_error %}
+                            <div class="invalid-feedback d-block">Выберите материал — без него нельзя продолжить.</div>
+                            {% endif %}
+                        </div>
+                        {% else %}
                         <div class="import-schema__control import-schema__control--structure">
                             <label class="form-label" for="import-structure-type">
                                 Структура <span class="text-danger">*</span>
@@ -259,7 +300,9 @@
                             <div class="invalid-feedback d-block">Выберите тип структуры — без него нельзя продолжить.</div>
                             {% endif %}
                         </div>
+                        {% endif %}
 
+                        {% if show_dictionaries %}
                         <div class="import-schema__control import-schema__control--dicts">
                             <div class="form-check mb-0">
                                 <input type="checkbox" class="form-check-input" name="create_missing_dictionaries"
@@ -280,11 +323,14 @@
                                 Создавать отсутствующие значения при импорте
                             </p>
                         </div>
+                        {% endif %}
                     </div>
                 </section>
             </div>
         </form>
-        {% if structure_types %}
+        {% if import_kind == 'sample' %}
+        {% include 'includes/reference_materials_modal.html' %}
+        {% elif structure_types %}
         {% include 'includes/reference_structure_types_modal.html' %}
         {% endif %}
         {% endif %}
@@ -327,8 +373,10 @@
             </nav>
         </div>
 
+        {% if show_templates %}
         {% include 'materials/includes/import_templates_load_form.html' %}
         {% include 'materials/includes/import_templates_panel.html' %}
+        {% endif %}
 
         {{ file_columns|json_script:"import-file-columns" }}
         <form method="post"
@@ -450,7 +498,7 @@
                                                     aria-expanded="true"
                                                     aria-controls="import-map-field-rows-material">
                                                 <span class="import-map-section__chevron" aria-hidden="true"></span>
-                                                <span class="import-map-section__title">Справочники</span>
+                                                <span class="import-map-section__title">{{ mapping_identity_section_title|default:"Справочники" }}</span>
                                                 <span class="badge text-bg-light border import-map-section__count"
                                                       data-map-section-count>0</span>
                                             </button>
@@ -463,7 +511,7 @@
                                                         aria-expanded="false"
                                                         aria-controls="import-map-addon-menu"
                                                         {% if not addon_catalog_groups %}disabled{% endif %}>
-                                                    Поле материала
+                                                    {{ addon_field_label|default:"Поле материала" }}
                                                 </button>
                                                 <div class="dropdown-menu dropdown-menu-end import-map-addon-menu"
                                                      id="import-map-addon-menu"
@@ -509,7 +557,7 @@
                                 <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_material %} d-none{% endif %}{% endfor %}"
                                     data-map-section-empty>
                                     <td colspan="4" class="text-muted small">
-                                        Нет полей справочников — нажмите «Поле материала».
+                                        Нет дополнительных полей — нажмите «{{ addon_field_label|default:"Поле материала" }}».
                                     </td>
                                 </tr>
                             </tbody>
@@ -628,7 +676,7 @@
         {% if has_staged_file and step == 'review' %}
         <p class="small text-muted mb-3">
             Файл: <strong>{{ staged_filename }}</strong>
-            {% if selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
+            {% if selected_material %} · материал: <strong>{{ selected_material.code }} — {{ selected_material.name }}</strong>{% elif selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
         </p>
 
         {% include 'materials/includes/import_review_grid.html' %}
@@ -639,7 +687,7 @@
             Файл: <strong>{{ staged_filename }}</strong>
             · построчно <strong>{{ iterate_position }}</strong> / {{ iterate_total }}
             · обработано {{ iterate_done }}
-            {% if selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
+            {% if selected_material %} · материал: <strong>{{ selected_material.code }} — {{ selected_material.name }}</strong>{% elif selected_structure_type %} · структура: <strong>{{ selected_structure_type.name }}</strong>{% endif %}
         </p>
         <div class="progress mb-3" role="progressbar"
              aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ iterate_percent }}"
@@ -839,10 +887,15 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/import_busy.js' %}?v={{ app_version }}-map4"></script>
-<script src="{% static 'js/import_help_tips.js' %}?v={{ app_version }}-hints4"></script>
+<script src="{% static 'js/import_help_tips.js' %}?v={{ app_version }}-hints5"></script>
 {% if step == 'configure' %}
+{% if import_kind == 'sample' %}
+<script src="{% static 'js/reference_materials_picker.js' %}?v={{ app_version }}"></script>
+<script src="{% static 'js/material_picker_fields.js' %}?v={{ app_version }}"></script>
+{% else %}
 <script src="{% static 'js/reference_structure_types_picker.js' %}?v={{ app_version }}"></script>
 <script src="{% static 'js/structure_type_picker_field.js' %}?v={{ app_version }}"></script>
+{% endif %}
 <script>
 (function () {
     var form = document.querySelector('form input[name="action"][value="configure"]');

@@ -12,6 +12,7 @@ from apps.core.list_filters import (
     TAG_SEARCH_SCOPE,
     QuerySetFilterMixin,
 )
+from apps.core.table_sort import build_sort_state, parse_table_sort
 
 from apps.core.creator import creator_label
 from apps.materials.picker_data import materials_for_picker
@@ -156,7 +157,13 @@ class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMi
         )
 
     def get_context_data(self, **kwargs):
-        from apps.structures.materials_grid import build_structure_materials_grid
+        from apps.structures.grid_sort import sort_structure_materials
+        from apps.structures.materials_grid import (
+            build_structure_materials_grid,
+            structure_data_fields,
+            structure_field_headers,
+            structure_sql_rows_by_id,
+        )
 
         context = super().get_context_data(**kwargs)
         page_number = self.request.GET.get('page', 1)
@@ -165,16 +172,31 @@ class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMi
         except (TypeError, ValueError):
             page_number = 1
 
-        materials_qs = self._materials_queryset()
-        total = materials_qs.count()
+        fields = structure_data_fields(self.structure_type)
+        sort_keys = ['name', 'code', *[field.name for field in fields]]
+        sort_key, sort_dir = parse_table_sort(self.request, sort_keys, 'code')
+        rows_by_id = (
+            structure_sql_rows_by_id(self.structure_type)
+            if self.structure_type.is_created
+            else {}
+        )
+        materials = sort_structure_materials(
+            self._materials_queryset(),
+            sort_key=sort_key,
+            direction=sort_dir,
+            fields=fields,
+            rows_by_id=rows_by_id,
+        )
+        total = len(materials)
         offset = (page_number - 1) * self.paginate_by
-        page_materials = list(materials_qs[offset:offset + self.paginate_by])
+        page_materials = materials[offset:offset + self.paginate_by]
         if self.structure_type.is_created:
-            grid = build_structure_materials_grid(self.structure_type, page_materials)
+            grid = build_structure_materials_grid(
+                self.structure_type,
+                page_materials,
+                rows_by_id=rows_by_id,
+            )
         else:
-            from apps.structures.materials_grid import structure_data_fields, structure_field_headers
-
-            fields = structure_data_fields(self.structure_type)
             grid = {
                 'columns': structure_field_headers(fields),
                 'rows': [
@@ -188,9 +210,14 @@ class StructureRecordListView(AppViewMixin, StructureTypeMixin, QuerySetFilterMi
                 'fields': fields,
             }
 
+        sort_state = build_sort_state(self.request, sort_keys, sort_key, sort_dir)
+        for column in grid['columns']:
+            column['sort'] = sort_state.get(column['name'])
+
         num_pages = max((total + self.paginate_by - 1) // self.paginate_by, 1)
 
         context['materials_grid'] = grid
+        context['table_sort'] = sort_state
         context['page_number'] = page_number
         context['num_pages'] = num_pages
         context['total'] = total

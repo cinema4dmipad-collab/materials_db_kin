@@ -22,6 +22,7 @@ class ImportReport:
     dictionaries_linked_by_code: list[str] = field(default_factory=list)
     affected_material_ids: list[str] = field(default_factory=list)
     errors: list[ImportErrorItem] = field(default_factory=list)
+    entity_noun: str = 'материалов'
 
     @property
     def ok(self) -> bool:
@@ -43,11 +44,11 @@ class ImportReport:
     def summary_lines(self) -> list[str]:
         prefix = 'Будет' if self.dry_run else 'Итого'
         lines = [
-            f'{prefix}: материалов создано {self.materials_created}, обновлено {self.materials_updated}',
+            f'{prefix}: {self.entity_noun} создано {self.materials_created}, обновлено {self.materials_updated}',
             f'{prefix}: свойств создано {self.properties_created}, обновлено {self.properties_updated}',
         ]
         if self.tags_merged:
-            lines.append(f'{prefix}: материалов с объединением тегов {self.tags_merged}')
+            lines.append(f'{prefix}: записей с объединением тегов {self.tags_merged}')
         if self.dictionaries_created:
             lines.append(
                 f'{prefix}: значений справочников создано — {len(self.dictionaries_created)}'

@@ -54,7 +54,7 @@ def _looks_like_preview_image(header: bytes) -> bool:
 
 
 def validate_scan_preview(uploaded_file):
-    """Optional C-scan thumbnail: PNG / JPEG / WebP, small size."""
+    """Optional B/C-scan thumbnail: PNG / JPEG / WebP, small size."""
     if uploaded_file is None:
         return
     extension = os.path.splitext(uploaded_file.name)[1].lower()

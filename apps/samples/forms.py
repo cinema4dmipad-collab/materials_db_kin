@@ -113,16 +113,18 @@ class SampleTagsForm(TagNamesFormMixin, forms.ModelForm):
 class SampleForm(TagNamesFormMixin, forms.ModelForm):
     class Meta:
         model = Sample
-        fields = ['code', 'name', 'material', 'object_type']
+        fields = ['code', 'name', 'description', 'material', 'object_type']
         labels = {
             'code': 'Код',
             'name': 'Название',
+            'description': 'Описание',
             'material': 'Материал',
             'object_type': 'Тип объекта',
         }
         widgets = {
             'code': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
             'name': forms.TextInput(attrs=_BOOTSTRAP_INPUT),
+            'description': forms.Textarea(attrs={**_BOOTSTRAP_INPUT, 'rows': 3}),
             'material': forms.Select(attrs=material_select_widget_attrs(
                 **{'data-sample-material-select': 'true'},
             )),

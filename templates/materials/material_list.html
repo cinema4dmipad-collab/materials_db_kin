@@ -75,15 +75,15 @@
                             <th class="list-bulk-col" scope="col">
                                 <span class="visually-hidden">Выбор</span>
                             </th>
-                            <th>Код</th>
-                            <th>Название</th>
+                            {% include 'includes/sort_th.html' with label='Код' sort_col=table_sort.code %}
+                            {% include 'includes/sort_th.html' with label='Название' sort_col=table_sort.name %}
                             {% if material_scope == 'shared' %}
                             <th>Источник</th>
                             {% endif %}
-                            <th>Тип структуры</th>
+                            {% include 'includes/sort_th.html' with label='Тип структуры' sort_col=table_sort.struct_type %}
                             <th>Теги</th>
                             <th>Создал</th>
-                            <th>Дата создания</th>
+                            {% include 'includes/sort_th.html' with label='Дата создания' sort_col=table_sort.created_at %}
                             <th class="text-end">Действия</th>
                         </tr>
                     </thead>

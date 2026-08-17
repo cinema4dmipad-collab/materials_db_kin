@@ -110,6 +110,36 @@
         row.classList.toggle('layer-form-row--thickness-locked', locked);
     }
 
+    function materialThicknessMm(materialId) {
+        if (!materialId || !window.ReferenceMaterialsPicker) {
+            return NaN;
+        }
+        var item = window.ReferenceMaterialsPicker.getMaterials().find(function (entry) {
+            return entry.material_id === materialId;
+        });
+        if (!item || item.thickness_mm == null || item.thickness_mm === '') {
+            return NaN;
+        }
+        var value = Number(item.thickness_mm);
+        return Number.isFinite(value) ? value : NaN;
+    }
+
+    function applyMaterialThickness(row) {
+        if (!row || isThicknessLocked(row)) {
+            return;
+        }
+        var select = row.querySelector('select[name$="-material"]');
+        var thicknessInput = row.querySelector('input[name$="-thickness"]');
+        if (!select || !thicknessInput) {
+            return;
+        }
+        var value = materialThicknessMm(select.value);
+        if (!Number.isFinite(value) || value <= 0) {
+            return;
+        }
+        thicknessInput.value = formatLocalizedNumber(value, 4);
+    }
+
     function setThicknessLocked(row, locked) {
         var lockInput = row.querySelector('input[name$="-thickness_locked"]');
         if (!lockInput) {
@@ -522,9 +552,34 @@
             if (!visibleRows.length) {
                 ui.selectionMeta.textContent = '';
             } else if (!selectedCount) {
-                ui.selectionMeta.textContent = visibleRows.length + ' сл.';
+                var symmetric = isSymmetricMode();
+                if (window.CompositeLayerDiagramLive && window.CompositeLayerDiagramLive.formatLayerCountLabel) {
+                    ui.selectionMeta.textContent = window.CompositeLayerDiagramLive.formatLayerCountLabel(
+                        visibleRows.length,
+                        symmetric
+                    );
+                } else {
+                    ui.selectionMeta.textContent = visibleRows.length + ' сл.';
+                }
             } else {
                 ui.selectionMeta.textContent = 'Выбрано ' + selectedCount + ' из ' + visibleRows.length;
+            }
+        }
+
+        var mirrorNote = document.getElementById('composite-layers-mirror-note');
+        if (mirrorNote) {
+            var note = '';
+            if (visibleRows.length && isSymmetricMode()
+                    && window.CompositeLayerDiagramLive
+                    && window.CompositeLayerDiagramLive.formatMirrorNote) {
+                note = window.CompositeLayerDiagramLive.formatMirrorNote(visibleRows.length);
+            }
+            if (note) {
+                mirrorNote.textContent = note;
+                mirrorNote.classList.remove('d-none');
+            } else {
+                mirrorNote.textContent = '';
+                mirrorNote.classList.add('d-none');
             }
         }
     }
@@ -536,8 +591,12 @@
         container.dataset.layerDiagramDelegationBound = 'true';
 
         function handleLayerFieldUpdate(event) {
-            if (!event.target.closest('.layer-form-row')) {
+            var row = event.target.closest('.layer-form-row');
+            if (!row) {
                 return;
+            }
+            if (event.type === 'change' && event.target.matches('select[name$="-material"]')) {
+                applyMaterialThickness(row);
             }
             refreshDiagram(container);
         }
@@ -840,6 +899,7 @@
         if (symmetricCheckbox) {
             symmetricCheckbox.addEventListener('change', function () {
                 refreshDiagram(container);
+                updateToolbarState(container, ui);
             });
         }
 
