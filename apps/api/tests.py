@@ -305,6 +305,51 @@ class ApiV1Tests(TestCase):
         self.assertEqual(detail.status_code, 200, detail.content)
         self.assertEqual(detail.json()['title'], 'Updated title')
 
+    def test_update_scan_adds_three_previews_with_same_filename(self):
+        from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
+
+        from apps.scans.models import ScanRecord
+
+        scan = self.scan
+        response = self.client.put(
+            reverse('api:scan_detail', kwargs={'scan_id': scan.pk}),
+            data=encode_multipart(
+                BOUNDARY,
+                {
+                    'file': make_hdf5_upload('updated-three.h5'),
+                    'preview': make_preview_upload('preview.png'),
+                    'preview_b_xz': make_preview_upload('preview.png'),
+                    'preview_b_yz': make_preview_upload('preview.png'),
+                },
+            ),
+            content_type=MULTIPART_CONTENT,
+            **self._headers(),
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertTrue(body.get('preview_url'))
+        self.assertTrue(body.get('preview_b_xz_url'))
+        self.assertTrue(body.get('preview_b_yz_url'))
+        scan = ScanRecord.objects.get(pk=scan.pk)
+        names = {scan.preview.name, scan.preview_b_xz.name, scan.preview_b_yz.name}
+        self.assertEqual(len(names), 3)
+        for kind, url_key in (
+            ('c', 'preview_url'),
+            ('b-xz', 'preview_b_xz_url'),
+            ('b-yz', 'preview_b_yz_url'),
+        ):
+            kind_url = reverse(
+                'api:scan_preview_kind',
+                kwargs={'scan_id': scan.pk, 'kind': kind},
+            ) if kind != 'c' else reverse(
+                'api:scan_preview',
+                kwargs={'scan_id': scan.pk},
+            )
+            self.assertIn(kind_url, body[url_key])
+            preview_response = self.client.get(kind_url, **self._headers())
+            self.assertEqual(preview_response.status_code, 200)
+            self.assertTrue(b''.join(preview_response.streaming_content).startswith(b'\x89PNG'))
+
     def test_token_create_on_profile(self):
         self.client.login(username=self.user.username, password=self.password)
         response = self.client.post(

@@ -47,10 +47,10 @@
         <div class="layer-stack-panel">
             <div class="layer-stack-title">Сверху ↓ вниз</div>
             <div class="layer-stack-column">
-                <div class="layer-stack-rows{% if layer_diagram.symmetric %} layer-stack-rows--symmetric{% endif %}" style="--layer-stack-count: {{ layer_diagram.layer_count }};">
+                <div class="layer-stack-rows{% if layer_diagram.symmetric %} layer-stack-rows--symmetric{% endif %}">
                     {% for item in layer_diagram.layers %}
                     <div class="layer-stack-row"
-                         style="flex: {{ item.flex_grow }} 0 auto;"
+                         style="flex: {{ item.flex_grow }} 1 0;"
                          data-material-id="{{ item.material_id }}"
                          data-thickness="{{ item.thickness_value }}"
                          data-angle="{{ item.angle_value }}"

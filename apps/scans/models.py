@@ -1,9 +1,36 @@
+import os
 import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.samples.models import Sample
+
+_PREVIEW_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
+
+
+def _scan_preview_upload_to(instance, filename, kind: str) -> str:
+    """Unique object key per kind so B/C uploads cannot overwrite each other in S3."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in _PREVIEW_EXTENSIONS:
+        ext = '.png'
+    date = timezone.now().strftime('%Y/%m/%d')
+    ident = instance.pk or uuid.uuid4()
+    unique = uuid.uuid4().hex[:12]
+    return f'scans/previews/{date}/{ident}_{kind}_{unique}{ext}'
+
+
+def scan_preview_c_upload_to(instance, filename):
+    return _scan_preview_upload_to(instance, filename, 'c')
+
+
+def scan_preview_b_xz_upload_to(instance, filename):
+    return _scan_preview_upload_to(instance, filename, 'b_xz')
+
+
+def scan_preview_b_yz_upload_to(instance, filename):
+    return _scan_preview_upload_to(instance, filename, 'b_yz')
 
 
 class ScanRecord(models.Model):
@@ -30,19 +57,19 @@ class ScanRecord(models.Model):
         verbose_name='Файл скана (HDF5)',
     )
     preview = models.FileField(
-        upload_to='scans/previews/%Y/%m/%d/',
+        upload_to=scan_preview_c_upload_to,
         blank=True,
         verbose_name='Превью C-скана',
         help_text='Необязательное изображение (PNG/JPEG/WebP) C-скана для списка и карточки.',
     )
     preview_b_xz = models.FileField(
-        upload_to='scans/previews/%Y/%m/%d/',
+        upload_to=scan_preview_b_xz_upload_to,
         blank=True,
         verbose_name='Превью B-скана-XZ',
         help_text='Необязательное изображение (PNG/JPEG/WebP) B-скана в плоскости XZ.',
     )
     preview_b_yz = models.FileField(
-        upload_to='scans/previews/%Y/%m/%d/',
+        upload_to=scan_preview_b_yz_upload_to,
         blank=True,
         verbose_name='Превью B-скана-YZ',
         help_text='Необязательное изображение (PNG/JPEG/WebP) B-скана в плоскости YZ.',

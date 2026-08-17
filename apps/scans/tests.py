@@ -429,10 +429,14 @@ class ScanViewsTests(TestCase):
         scan = ScanRecord.objects.get(title='Surface scan')
 
         self.assertTrue(scan.file.storage.exists(scan.file.name))
-        self.assertTrue(scan.preview)
-        self.assertTrue(scan.preview.storage.exists(scan.preview.name))
-        self.assertTrue(scan.preview_b_xz)
-        self.assertTrue(scan.preview_b_yz)
+        self.assertFalse(scan.preview)
+        self.assertFalse(scan.preview_b_xz)
+        self.assertFalse(scan.preview_b_yz)
+
+        scan.preview = make_preview_upload('surface.png')
+        scan.preview_b_xz = make_preview_upload('b-xz.png')
+        scan.preview_b_yz = make_preview_upload('b-yz.png')
+        scan.save()
 
         list_response = self.client.get(reverse('scans:list', kwargs={'sample_pk': self.sample.pk}))
 
@@ -614,6 +618,10 @@ class ScanViewsTests(TestCase):
             f'<input type="text" name="title" value="{self.sample.name} #0001"',
             html=False,
         )
+        self.assertNotContains(response, 'name="preview"')
+        self.assertNotContains(response, 'name="preview_b_xz"')
+        self.assertNotContains(response, 'name="preview_b_yz"')
+        self.assertNotContains(response, 'Превью C-скана')
 
     def test_scans_tab_add_opens_separate_form(self):
         scans_url = reverse('scans:list', kwargs={'sample_pk': self.sample.pk})
@@ -644,6 +652,41 @@ class ScanViewsTests(TestCase):
 
 
 class ScanPreviewKindTests(TestCase):
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        from apps.materials.models import Material
+        from apps.samples.models import Sample
+        from apps.workspaces.models import Workspace
+
+        self.media_root = tempfile.mkdtemp()
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_root,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {
+                    'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+                },
+            },
+        )
+        self.settings_override.enable()
+        self._shutil = shutil
+        self.workspace = Workspace.objects.create(slug='preview-ws', name='Preview WS')
+        self.material = Material.objects.create(code='MAT-PREV-1', name='Preview material')
+        self.sample = Sample.objects.create(
+            code='SMP-PREV-1',
+            name='Preview sample',
+            material=self.material,
+            workspace=self.workspace,
+        )
+
+    def tearDown(self):
+        self.settings_override.disable()
+        self._shutil.rmtree(self.media_root, ignore_errors=True)
+
     def test_resolve_preview_kind_defaults_to_c_scan(self):
         from apps.scans.previews import resolve_preview_kind
 
@@ -651,3 +694,52 @@ class ScanPreviewKindTests(TestCase):
         self.assertEqual(resolve_preview_kind('b-xz').field, 'preview_b_xz')
         self.assertEqual(resolve_preview_kind('preview_b_yz').slug, 'b-yz')
         self.assertIsNone(resolve_preview_kind('unknown'))
+
+    def test_same_original_filename_keeps_three_distinct_preview_files(self):
+        from apps.scans.previews import apply_uploaded_previews
+
+        scan = ScanRecord.objects.create(
+            sample=self.sample,
+            title='Three previews',
+            method='echo',
+            file=make_hdf5_upload('three.h5'),
+            workspace=self.workspace,
+        )
+        apply_uploaded_previews(
+            scan,
+            {
+                'preview': make_preview_upload('preview.png'),
+                'preview_b_xz': make_preview_upload('preview.png'),
+                'preview_b_yz': make_preview_upload('preview.png'),
+            },
+        )
+        scan.save()
+
+        names = {scan.preview.name, scan.preview_b_xz.name, scan.preview_b_yz.name}
+        self.assertEqual(len(names), 3)
+        self.assertIn('_c_', scan.preview.name)
+        self.assertIn('_b_xz_', scan.preview_b_xz.name)
+        self.assertIn('_b_yz_', scan.preview_b_yz.name)
+
+    def test_preview_aliases_map_kind_keys_to_fields(self):
+        from apps.scans.previews import apply_uploaded_previews
+
+        scan = ScanRecord.objects.create(
+            sample=self.sample,
+            title='Alias previews',
+            method='echo',
+            file=make_hdf5_upload('alias.h5'),
+            workspace=self.workspace,
+        )
+        apply_uploaded_previews(
+            scan,
+            {
+                'c': make_preview_upload('c.png'),
+                'b_xz': make_preview_upload('xz.png'),
+                'b-yz': make_preview_upload('yz.png'),
+            },
+        )
+        scan.save()
+        self.assertTrue(scan.preview)
+        self.assertTrue(scan.preview_b_xz)
+        self.assertTrue(scan.preview_b_yz)

@@ -1472,6 +1472,7 @@ class PublicMaterialFormStructureLinkTests(MaterialStructureLinkTests):
         self.assertContains(detail_response, 'layer-stack-swatch')
         self.assertContains(detail_response, 'layer-material-legend')
         self.assertContains(detail_response, 'flex:')
+        self.assertContains(detail_response, '1 0;')
         self.assertContains(detail_response, 'background-color:')
         self.assertContains(detail_response, 'composite_layer_diagram.css')
         self.assertContains(detail_response, 'MAT-LAYER-001 - Layer material')

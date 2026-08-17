@@ -465,6 +465,7 @@ def _scan_preview_response(request, scan_id, *, kind_slug: str | None) -> FileRe
             field,
             filename=filename,
             as_attachment=False,
+            cache_control='private, no-store',
         )
     except Http404 as exc:
         raise api_error('Не найдено.', HTTPStatus.NOT_FOUND) from exc

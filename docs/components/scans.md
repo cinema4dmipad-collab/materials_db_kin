@@ -16,7 +16,7 @@ Location: `apps/scans/`
 * HDF5 signature check on upload
 * Optional previews (C-scan, B-scan XZ, B-scan YZ): `.png` / `.jpg` / `.jpeg` / `.webp`, max 5 MB, image magic check
 
-Large HDF5 files supported via streaming storage and extended Gunicorn timeout. Preview is a separate small file (not extracted from HDF5).
+Large HDF5 files supported via streaming storage and extended Gunicorn timeout. Preview is a separate small file (not extracted from HDF5). The public create/edit form uploads only the HDF5 file; preview images are accepted on the API (KeenetiX).
 
 ## Public UI
 
@@ -24,7 +24,7 @@ Large HDF5 files supported via streaming storage and extended Gunicorn timeout. 
 |-----|--------|
 | `/scans/` | All scans (global list, tile grid) |
 | `/samples/<pk>/scans/` | Scans for one sample (tile grid); **Добавить** opens a separate create form |
-| `/samples/<pk>/scans/create/` | Upload HDF5 + title/method/previews |
+| `/samples/<pk>/scans/create/` | Upload HDF5 + title/method (previews only via API / KeenetiX) |
 | `/samples/<pk>/scans/<pk>/` | Detail / edit / delete under sample namespace |
 | `…/scans/<pk>/attachments/` | Document attachments for a scan |
 | `…/scans/<pk>/tags/` | POST — save tags from detail card (when scan’s workspace is active) |

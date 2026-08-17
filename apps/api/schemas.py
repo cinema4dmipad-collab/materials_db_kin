@@ -163,6 +163,9 @@ class ScanFilesPayload(BaseModel):
     model_config = ConfigDict(extra='ignore')
 
     file: ScanFileMeta
+    preview: ScanFileMeta | None = None
+    preview_b_xz: ScanFileMeta | None = None
+    preview_b_yz: ScanFileMeta | None = None
 
 
 class SamplePath(BaseModel):

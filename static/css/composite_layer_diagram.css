@@ -1,5 +1,9 @@
 .composite-layer-diagram {
     background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
 }
 
 .composite-layer-diagram__title {
@@ -109,27 +113,45 @@
 }
 
 .composite-layer-diagram .reinforcement-formula {
+    flex: 0 0 auto;
     margin-bottom: 0.75rem;
 }
 
+.composite-layer-diagram > .d-flex,
+.composite-layer-diagram .layer-material-legend,
+.composite-layer-diagram .layer-scale-legend {
+    flex: 0 0 auto;
+}
+
 .composite-layers-layout {
+    align-items: stretch;
     min-height: 320px;
 }
 
 .composite-layers-layout > [class*="col-"]:last-child {
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    max-height: calc(100dvh - 6.5rem);
+    position: sticky;
+    top: 0.75rem;
 }
 
-#composite-layer-diagram-live {
+#composite-layer-diagram-live,
+#composite-layer-diagram-static {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
 }
 
 #composite-layer-diagram-live .composite-layer-diagram:not(.composite-layer-diagram--empty),
 .composite-layers-layout > [class*="col-"]:last-child .composite-layer-diagram {
-    flex: 0 0 auto;
-    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
 }
 
 .composite-layers-layout--edit .composite-layers-edit-table .form-control,
@@ -399,6 +421,7 @@
     flex-direction: column;
     justify-content: center;
     min-height: 320px;
+    height: auto;
 }
 
 .composite-layer-material__label {
@@ -435,10 +458,14 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.75rem;
+    flex: 1 1 auto;
+    gap: 0.5rem;
+    min-height: 0;
+    width: 100%;
 }
 
 .layer-stack-title {
+    flex: 0 0 auto;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -449,31 +476,30 @@
 .layer-stack-column {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
     width: 100%;
-    max-width: 300px;
+    max-width: 280px;
+    min-height: 0;
     position: relative;
 }
 
 .layer-stack-rows {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
     width: 100%;
+    height: 16rem;
+    min-height: 0;
     position: relative;
-    --layer-stack-segment-height: 2.5rem;
-    --layer-stack-min-preview: 20rem;
-    height: max(
-        calc(var(--layer-stack-count, 1) * var(--layer-stack-segment-height)),
-        var(--layer-stack-min-preview)
-    );
 }
 
 .layer-stack-row {
     display: grid;
-    grid-template-columns: 5.75rem minmax(0, 1fr);
-    column-gap: 0.55rem;
+    grid-template-columns: 4.75rem minmax(0, 1fr);
+    column-gap: 0.45rem;
     align-items: stretch;
-    flex-shrink: 0;
-    min-height: var(--layer-stack-segment-height);
+    min-height: 2px;
+    overflow: hidden;
 }
 
 .layer-stack-swatch {
@@ -485,14 +511,14 @@
 
 .layer-stack-row:first-child .layer-stack-swatch {
     border-top: 2px solid #0f172a;
-    border-top-left-radius: 0.5rem;
-    border-top-right-radius: 0.5rem;
+    border-top-left-radius: 0.375rem;
+    border-top-right-radius: 0.375rem;
 }
 
 .layer-stack-row:last-of-type .layer-stack-swatch {
     border-bottom: 2px solid #0f172a;
-    border-bottom-left-radius: 0.5rem;
-    border-bottom-right-radius: 0.5rem;
+    border-bottom-left-radius: 0.375rem;
+    border-bottom-right-radius: 0.375rem;
 }
 
 .layer-stack-symmetry-line {
@@ -500,7 +526,7 @@
     position: absolute;
     left: 0;
     top: 50%;
-    width: 5.75rem;
+    width: 4.75rem;
     margin: 0;
     border: 0;
     border-top: 2px dashed #000;
@@ -509,6 +535,7 @@
 
 .layer-stack-mirror-note,
 .composite-layers-mirror-note {
+    flex: 0 0 auto;
     color: #334155;
     font-size: 0.8125rem;
     font-weight: 600;
@@ -524,23 +551,26 @@
 .layer-stack-meta {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.3rem;
     min-width: 0;
+    min-height: 0;
+    overflow: hidden;
     color: #0f172a;
 }
 
 .layer-stack-segment-index {
     flex-shrink: 0;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.15;
     color: #0f172a;
 }
 
 .layer-stack-material-code {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.02em;
+    line-height: 1.15;
     color: #0f172a;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -548,6 +578,7 @@
 }
 
 .layer-stack-caption {
+    flex: 0 0 auto;
     font-size: 0.75rem;
     color: #64748b;
     text-align: center;
@@ -588,8 +619,21 @@
         border-bottom: 1px solid #dee2e6;
     }
 
+    .composite-layers-layout > [class*="col-"]:last-child {
+        position: static;
+        max-height: none;
+        min-height: 18rem;
+    }
+
     .layer-stack-column {
         max-width: 320px;
+        flex: 0 0 auto;
+    }
+
+    .layer-stack-rows {
+        flex: 0 0 auto;
+        height: min(20rem, 50vh);
+        max-height: min(20rem, 50vh);
     }
 }
 

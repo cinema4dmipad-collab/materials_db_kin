@@ -27,36 +27,6 @@
         <div class="invalid-feedback d-block">{{ error }}</div>
         {% endfor %}
     </div>
-    <div class="col-md-4">
-        <label class="form-label" for="{{ scan_form.preview_b_xz.id_for_label }}">{{ scan_form.preview_b_xz.label }}</label>
-        {{ scan_form.preview_b_xz }}
-        {% if scan_form.preview_b_xz.help_text %}
-        <div class="form-text">{{ scan_form.preview_b_xz.help_text }}</div>
-        {% endif %}
-        {% for error in scan_form.preview_b_xz.errors %}
-        <div class="invalid-feedback d-block">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="col-md-4">
-        <label class="form-label" for="{{ scan_form.preview_b_yz.id_for_label }}">{{ scan_form.preview_b_yz.label }}</label>
-        {{ scan_form.preview_b_yz }}
-        {% if scan_form.preview_b_yz.help_text %}
-        <div class="form-text">{{ scan_form.preview_b_yz.help_text }}</div>
-        {% endif %}
-        {% for error in scan_form.preview_b_yz.errors %}
-        <div class="invalid-feedback d-block">{{ error }}</div>
-        {% endfor %}
-    </div>
-    <div class="col-md-4">
-        <label class="form-label" for="{{ scan_form.preview.id_for_label }}">{{ scan_form.preview.label }}</label>
-        {{ scan_form.preview }}
-        {% if scan_form.preview.help_text %}
-        <div class="form-text">{{ scan_form.preview.help_text }}</div>
-        {% endif %}
-        {% for error in scan_form.preview.errors %}
-        <div class="invalid-feedback d-block">{{ error }}</div>
-        {% endfor %}
-    </div>
     <div class="col-12">
         <label class="form-label" for="{{ scan_form.description.id_for_label }}">{{ scan_form.description.label }}</label>
         {{ scan_form.description }}

@@ -333,4 +333,5 @@ class ScanPreviewView(AppViewMixin, SampleScanMixin, View):
             field,
             filename=filename,
             as_attachment=False,
+            cache_control='private, no-store',
         )

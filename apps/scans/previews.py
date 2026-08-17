@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from django.core.exceptions import ValidationError
 from django.urls import reverse
@@ -51,6 +52,23 @@ def preview_file(scan, kind: ScanPreviewKind):
     return field
 
 
+def _preview_upload_from_files(files, kind: ScanPreviewKind):
+    """Accept official field names and KeenetiX aliases (kind / slug)."""
+    aliases = (
+        kind.field,
+        kind.key,
+        kind.slug,
+        kind.key.replace('_', '-'),
+        f'preview_{kind.key}',
+        f'preview-{kind.slug}',
+    )
+    for alias in aliases:
+        uploaded = files.get(alias)
+        if uploaded is not None:
+            return uploaded
+    return None
+
+
 def has_any_preview(scan) -> bool:
     return any(preview_file(scan, kind) for kind in PREVIEW_KINDS)
 
@@ -71,7 +89,7 @@ def apply_uploaded_previews(scan, files) -> dict[str, str]:
     old_names: dict[str, str] = {}
     first_error: ValidationError | None = None
     for kind in PREVIEW_KINDS:
-        uploaded = files.get(kind.field)
+        uploaded = _preview_upload_from_files(files, kind)
         if uploaded is None:
             continue
         try:
@@ -104,23 +122,35 @@ def delete_replaced_preview_files(scan, old_names: dict[str, str]) -> None:
             pass
 
 
+def _preview_url_version(scan, kind: ScanPreviewKind) -> str:
+    field = preview_file(scan, kind)
+    if not field or not field.name:
+        return ''
+    token = field.name.rsplit('/', 1)[-1]
+    return f'?v={quote(token, safe="")}'
+
+
 def web_preview_url(scan, kind: ScanPreviewKind) -> str:
     kwargs = {'sample_pk': scan.sample_id, 'pk': scan.pk}
     if kind.key == 'c':
-        return reverse('scans:preview', kwargs=kwargs)
-    kwargs['kind'] = kind.slug
-    return reverse('scans:preview_kind', kwargs=kwargs)
+        url = reverse('scans:preview', kwargs=kwargs)
+    else:
+        kwargs['kind'] = kind.slug
+        url = reverse('scans:preview_kind', kwargs=kwargs)
+    return url + _preview_url_version(scan, kind)
 
 
 def api_preview_url(scan, kind: ScanPreviewKind) -> str | None:
     if not preview_file(scan, kind):
         return None
     if kind.key == 'c':
-        return reverse('api:scan_preview', kwargs={'scan_id': scan.pk})
-    return reverse(
-        'api:scan_preview_kind',
-        kwargs={'scan_id': scan.pk, 'kind': kind.slug},
-    )
+        url = reverse('api:scan_preview', kwargs={'scan_id': scan.pk})
+    else:
+        url = reverse(
+            'api:scan_preview_kind',
+            kwargs={'scan_id': scan.pk, 'kind': kind.slug},
+        )
+    return url + _preview_url_version(scan, kind)
 
 
 def scan_options_payload() -> dict:

@@ -555,7 +555,7 @@
         var stackHtml = diagram.layers.map(function (item) {
             return ''
                 + '<div class="layer-stack-row"'
-                + ' style="flex: ' + item.flex_grow + ' 0 auto;"'
+                + ' style="flex: ' + item.flex_grow + ' 1 0;"'
                 + ' data-material-id="' + escapeHtml(String(item.material_id)) + '"'
                 + ' data-thickness="' + escapeHtml(String(item.thickness)) + '"'
                 + ' data-angle="' + escapeHtml(String(item.angle_value != null ? item.angle_value : item.angle)) + '"'
@@ -581,8 +581,7 @@
             + '<div class="layer-stack-panel">'
             + '<div class="layer-stack-title">Сверху ↓ вниз</div>'
             + '<div class="layer-stack-column">'
-            + '<div class="layer-stack-rows' + (diagram.symmetric ? ' layer-stack-rows--symmetric' : '')
-            + '" style="--layer-stack-count: ' + diagram.layer_count + ';">'
+            + '<div class="layer-stack-rows' + (diagram.symmetric ? ' layer-stack-rows--symmetric' : '') + '">'
             + stackHtml
             + (diagram.symmetric ? '<hr class="layer-stack-symmetry-line" aria-hidden="true">' : '')
             + '</div>'

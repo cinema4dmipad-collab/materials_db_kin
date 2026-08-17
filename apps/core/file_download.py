@@ -5,7 +5,13 @@ class StorageUnavailable(OSError):
     """Raised when object storage is unreachable (timeout / connection error)."""
 
 
-def build_file_download_response(file_field, *, filename=None, as_attachment=True):
+def build_file_download_response(
+    file_field,
+    *,
+    filename=None,
+    as_attachment=True,
+    cache_control=None,
+):
     if not file_field or not file_field.name:
         raise Http404('Файл не найден')
 
@@ -38,6 +44,8 @@ def build_file_download_response(file_field, *, filename=None, as_attachment=Tru
         as_attachment=as_attachment,
         filename=download_name,
     )
+    if cache_control:
+        response['Cache-Control'] = cache_control
     try:
         size = file_field.size
         if size is not None:
