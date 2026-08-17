@@ -68,6 +68,15 @@ class MaterialStructureLinkTests(TransactionTestCase):
         kwargs.setdefault('home_workspace', self.legacy_workspace)
         return Material.objects.create(**kwargs)
 
+    def assert_material_row_listed(self, response, code, listed=True):
+        # List HTML also embeds every workspace material in the «Создать на основе»
+        # picker JSON, so row presence is checked via the table checkbox label.
+        marker = f'aria-label="Выбрать {code}"'
+        if listed:
+            self.assertContains(response, marker)
+        else:
+            self.assertNotContains(response, marker)
+
     def create_sample(self, **kwargs):
         from apps.samples.models import Sample
 
@@ -347,7 +356,7 @@ class MaterialStructureLinkTests(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Свойства')
         self.assertContains(response, 'Из параметров структуры')
-        self.assertContains(response, 'Дополнительные свойства')
+        self.assertContains(response, 'Physical properties')
         self.assertContains(response, 'Density')
         self.assertContains(response, '1,55')
         self.assertContains(response, 'g/cm3')
@@ -563,8 +572,8 @@ class MaterialStructureLinkTests(TransactionTestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'MAT-LIST-002')
-        self.assertNotContains(response, 'MAT-LIST-001')
+        self.assert_material_row_listed(response, 'MAT-LIST-002')
+        self.assert_material_row_listed(response, 'MAT-LIST-001', listed=False)
         self.assertContains(response, 'type-pill-link')
         self.assertContains(response, 'Test Panel')
 
@@ -594,9 +603,9 @@ class MaterialStructureLinkTests(TransactionTestCase):
             {'import_source': 'Сводная по материалам.xlsx'},
         )
         self.assertEqual(filtered.status_code, 200)
-        self.assertContains(filtered, 'MAT-SRC-002')
-        self.assertNotContains(filtered, 'MAT-SRC-001')
-        self.assertNotContains(filtered, 'MAT-SRC-003')
+        self.assert_material_row_listed(filtered, 'MAT-SRC-002')
+        self.assert_material_row_listed(filtered, 'MAT-SRC-001', listed=False)
+        self.assert_material_row_listed(filtered, 'MAT-SRC-003', listed=False)
 
     def test_material_export_single_structure_with_structure_fields(self):
         from io import BytesIO
@@ -736,9 +745,9 @@ class MaterialStructureLinkTests(TransactionTestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'MAT-LIST-TAGGED')
-        self.assertNotContains(response, 'MAT-LIST-001')
-        self.assertNotContains(response, 'MAT-LIST-002')
+        self.assert_material_row_listed(response, 'MAT-LIST-TAGGED')
+        self.assert_material_row_listed(response, 'MAT-LIST-001', listed=False)
+        self.assert_material_row_listed(response, 'MAT-LIST-002', listed=False)
         # Search chip keeps list-filter-chip--removable; tags use entity-tag chips.
         self.assertContains(response, 'list-filter-chip--removable', count=1)
         self.assertContains(response, 'data-tag-slug="prepreg"', count=1)
@@ -769,7 +778,7 @@ class MaterialAdminStructureLinkTests(MaterialStructureLinkTests):
         self.assertEqual(inline.fk_name, 'parent_material')
         self.assertEqual(
             list(inline.fields),
-            ['layer_number', 'material', 'angle', 'thickness'],
+            ['layer_number', 'material', 'angle', 'thickness', 'thickness_locked'],
         )
         self.assertEqual(inline.extra, 0)
         self.assertEqual(inline.formset, CompositeLayerFormSet)

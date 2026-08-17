@@ -61,8 +61,9 @@ class MaterialMetadataDictionaryTests(TestCase):
             {'manufacturer': str(self.manufacturer.pk)},
         )
         self.assertEqual(filtered.status_code, 200)
-        self.assertContains(filtered, 'META-001')
-        self.assertNotContains(filtered, 'META-002')
+        # Picker JSON on the list page still lists every workspace material.
+        self.assertContains(filtered, 'aria-label="Выбрать META-001"')
+        self.assertNotContains(filtered, 'aria-label="Выбрать META-002"')
 
         detail = self.client.get(
             reverse('materials:detail', args=[Material.objects.get(code='META-001').pk])
