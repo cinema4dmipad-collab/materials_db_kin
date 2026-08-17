@@ -50,7 +50,7 @@
                 <div class="layer-stack-rows{% if layer_diagram.symmetric %} layer-stack-rows--symmetric{% endif %}">
                     {% for item in layer_diagram.layers %}
                     <div class="layer-stack-row"
-                         style="flex: {{ item.flex_grow }} 1 0;"
+                         style="flex: {{ item.flex_grow }} 0 1.35rem;"
                          data-material-id="{{ item.material_id }}"
                          data-thickness="{{ item.thickness_value }}"
                          data-angle="{{ item.angle_value }}"

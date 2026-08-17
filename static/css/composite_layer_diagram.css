@@ -488,18 +488,21 @@
     flex-direction: column;
     flex: 1 1 auto;
     width: 100%;
-    height: 16rem;
-    min-height: 0;
+    min-height: 8rem;
+    overflow-x: hidden;
+    overflow-y: auto;
     position: relative;
 }
 
 .layer-stack-row {
+    --layer-stack-row-min: 1.35rem;
     display: grid;
     grid-template-columns: 4.75rem minmax(0, 1fr);
     column-gap: 0.45rem;
     align-items: stretch;
-    min-height: 2px;
-    overflow: hidden;
+    flex-shrink: 0;
+    min-height: var(--layer-stack-row-min);
+    overflow: visible;
 }
 
 .layer-stack-swatch {
@@ -553,7 +556,7 @@
     align-items: center;
     gap: 0.3rem;
     min-width: 0;
-    min-height: 0;
+    min-height: var(--layer-stack-row-min, 1.35rem);
     overflow: hidden;
     color: #0f172a;
 }
@@ -631,9 +634,8 @@
     }
 
     .layer-stack-rows {
-        flex: 0 0 auto;
-        height: min(20rem, 50vh);
-        max-height: min(20rem, 50vh);
+        flex: 1 1 auto;
+        max-height: min(28rem, 60vh);
     }
 }
 

@@ -555,7 +555,7 @@
         var stackHtml = diagram.layers.map(function (item) {
             return ''
                 + '<div class="layer-stack-row"'
-                + ' style="flex: ' + item.flex_grow + ' 1 0;"'
+                + ' style="flex: ' + item.flex_grow + ' 0 1.35rem;"'
                 + ' data-material-id="' + escapeHtml(String(item.material_id)) + '"'
                 + ' data-thickness="' + escapeHtml(String(item.thickness)) + '"'
                 + ' data-angle="' + escapeHtml(String(item.angle_value != null ? item.angle_value : item.angle)) + '"'

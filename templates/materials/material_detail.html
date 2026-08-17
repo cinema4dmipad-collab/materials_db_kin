@@ -5,7 +5,7 @@
 
 {% block extra_head %}
 {% if show_composite_layers and composite_layers %}
-<link rel="stylesheet" href="{% static 'css/composite_layer_diagram.css' %}?v={{ app_version }}-cl11">
+<link rel="stylesheet" href="{% static 'css/composite_layer_diagram.css' %}?v={{ app_version }}-cl12">
 {% endif %}
 {% endblock %}
 
@@ -231,7 +231,7 @@
 
 {% block extra_scripts %}
 {% if show_composite_layers and composite_layers and layer_diagram %}
-<script src="{% static 'js/composite_layer_diagram_live.js' %}?v={{ app_version }}-cl11"></script>
+<script src="{% static 'js/composite_layer_diagram_live.js' %}?v={{ app_version }}-cl12"></script>
 <script>
 (function () {
     var target = document.getElementById('composite-layer-diagram-static');
