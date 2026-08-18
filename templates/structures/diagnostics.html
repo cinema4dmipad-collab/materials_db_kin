@@ -17,6 +17,20 @@
         </div>
     </div>
     <div class="card-body">
+        <div class="alert alert-light border mb-3 small">
+            <p class="mb-2 fw-semibold">Как пользоваться</p>
+            <ol class="mb-2 ps-3">
+                <li>Страница показывает расхождения между метаданными типов, SQL-таблицами и карточками материалов.</li>
+                <li>В колонке <strong>«Что делать»</strong> — пояснение; в <strong>«Исправление»</strong> — кнопка, если есть автоматическое действие.</li>
+                <li>Каждое исправление запрашивает подтверждение в модальном окне — можно отменить.</li>
+                <li>После правки обновите страницу: список пересчитается.</li>
+            </ol>
+            <p class="mb-0 text-muted">
+                Не все проблемы чинятся автоматически (например, отсутствие свойства в справочнике).
+                Опасные действия (удаление колонок и строк) помечены красной кнопкой.
+            </p>
+        </div>
+
         <div class="d-flex flex-wrap gap-3 mb-3">
             <span class="badge text-bg-danger">Ошибки: {{ summary.errors }}</span>
             <span class="badge text-bg-warning text-dark">Предупреждения: {{ summary.warnings }}</span>
@@ -31,8 +45,9 @@
                         <th>Уровень</th>
                         <th>Проблема</th>
                         <th>Детали</th>
+                        <th>Что делать</th>
                         <th>Тип / материал</th>
-                        <th class="text-end">Действие</th>
+                        <th class="text-end">Исправление</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -49,30 +64,15 @@
                         </td>
                         <td>{{ issue.title }}</td>
                         <td>{{ issue.detail }}</td>
+                        <td class="small">{{ issue.remediation|safe }}</td>
                         <td class="small">
-                            {% if issue.structure_code %}<code>{{ issue.structure_code }}</code>{% endif %}
+                            {% if issue.structure_code %}
+                            <a href="{% url 'structures:type_manage' issue.structure_code %}"><code>{{ issue.structure_code }}</code></a>
+                            {% endif %}
                             {% if issue.material_code %} · {{ issue.material_code }}{% endif %}
                         </td>
                         <td class="text-end">
-                            {% if issue.repair.action == 'rename_column' %}
-                            <form method="post"
-                                  class="d-inline"
-                                  data-confirm-delete-form
-                                  data-confirm-title="Переименовать колонку"
-                                  data-confirm-message="Переименовать «{{ issue.repair.old_name }}» → «{{ issue.repair.new_name }}» в таблице структуры?"
-                                  data-confirm-submit="Переименовать">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="rename_column">
-                                <input type="hidden" name="structure_code" value="{{ issue.repair.structure_code }}">
-                                <input type="hidden" name="old_name" value="{{ issue.repair.old_name }}">
-                                <input type="hidden" name="new_name" value="{{ issue.repair.new_name }}">
-                                <button type="submit" class="btn btn-sm btn-primary">
-                                    Переименовать колонку
-                                </button>
-                            </form>
-                            {% else %}
-                            —
-                            {% endif %}
+                            {% include 'structures/includes/diagnostics_repair_form.html' with issue=issue %}
                         </td>
                     </tr>
                     {% endfor %}

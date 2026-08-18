@@ -15,15 +15,18 @@ def mirrored_layer_count(defining_count: int) -> int:
     return defining_count - 1
 
 
+def expanded_layer_count(defining_count: int) -> int:
+    """Full stack size after symmetric expansion."""
+    if defining_count <= 0:
+        return 0
+    return defining_count + mirrored_layer_count(defining_count)
+
+
 def format_layer_count_label(defining_count: int, *, symmetric: bool = False) -> str:
     if defining_count <= 0:
         return ''
-    if not symmetric:
-        return f'{defining_count} сл.'
-    mirror_count = mirrored_layer_count(defining_count)
-    if mirror_count <= 0:
-        return f'{defining_count} сл.'
-    return f'{defining_count} сл. (+ {mirror_count} сим. слоёв)'
+    count = expanded_layer_count(defining_count) if symmetric else defining_count
+    return f'{count} сл.'
 
 
 def format_mirror_note(defining_count: int) -> str:

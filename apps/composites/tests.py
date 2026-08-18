@@ -90,11 +90,11 @@ class CompositeLayerModelTests(TestCase):
         self.assertEqual(format_layer_count_label(8), '8 сл.')
         self.assertEqual(
             format_layer_count_label(8, symmetric=True),
-            '8 сл. (+ 8 сим. слоёв)',
+            '16 сл.',
         )
         self.assertEqual(
             format_layer_count_label(5, symmetric=True),
-            '5 сл. (+ 4 сим. слоёв)',
+            '9 сл.',
         )
         self.assertEqual(format_mirror_note(8), '+ 8 симметричных слоёв')
         self.assertEqual(format_mirror_note(1), '')
@@ -382,8 +382,7 @@ class CompositeLayerDiagramTests(TestCase):
         self.assertEqual(diagram['defining_count'], 3)
         self.assertEqual(diagram['mirror_count'], 2)
         self.assertTrue(diagram['symmetric'])
-        self.assertEqual(diagram['layer_count_label'], '3 сл. (+ 2 сим. слоёв)')
-        self.assertEqual(diagram['mirror_note'], '+ 2 симметричных слоёв')
+        self.assertEqual(diagram['layer_count_label'], '5 сл.')
         self.assertAlmostEqual(diagram['total_thickness'], 0.9)
         codes = [item['material_code'] for item in diagram['layers']]
         self.assertEqual(codes, ['MAT-DIA-A', 'MAT-DIA-B', 'MAT-DIA-A', 'MAT-DIA-B', 'MAT-DIA-A'])

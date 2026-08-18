@@ -1,0 +1,37 @@
+{% if issue.repair.action %}
+<form method="post"
+      class="d-inline diagnostics-repair-form"
+      data-confirm-delete-form
+      data-confirm-title="{{ issue.repair.confirm_title }}"
+      data-confirm-message="{{ issue.repair.confirm_message }}"
+      data-confirm-submit="{{ issue.repair.submit_label }}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="{{ issue.repair.action }}">
+    {% if issue.repair.structure_code %}
+    <input type="hidden" name="structure_code" value="{{ issue.repair.structure_code }}">
+    {% endif %}
+    {% if issue.repair.old_name %}
+    <input type="hidden" name="old_name" value="{{ issue.repair.old_name }}">
+    {% endif %}
+    {% if issue.repair.new_name %}
+    <input type="hidden" name="new_name" value="{{ issue.repair.new_name }}">
+    {% endif %}
+    {% if issue.repair.field_name %}
+    <input type="hidden" name="field_name" value="{{ issue.repair.field_name }}">
+    {% endif %}
+    {% if issue.repair.column_name %}
+    <input type="hidden" name="column_name" value="{{ issue.repair.column_name }}">
+    {% endif %}
+    {% if issue.repair.material_code %}
+    <input type="hidden" name="material_code" value="{{ issue.repair.material_code }}">
+    {% endif %}
+    {% if issue.repair.row_id %}
+    <input type="hidden" name="row_id" value="{{ issue.repair.row_id }}">
+    {% endif %}
+    <button type="submit" class="btn btn-sm {{ issue.repair.submit_class|default:'btn-primary' }}">
+        {{ issue.repair.submit_label }}
+    </button>
+</form>
+{% else %}
+<span class="text-muted">—</span>
+{% endif %}

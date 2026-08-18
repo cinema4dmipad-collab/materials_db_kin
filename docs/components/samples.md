@@ -59,6 +59,8 @@ Configure step: pick a **material** (picker modal). Mapping constructor loads:
 * catalog properties already on the material (operator can add more)
 * description, object type, tags
 
+Numeric structure/property rows have a **Погрешность** drop slot (± or range from a second column), same as material import.
+
 Apply creates `Sample` rows in the active workspace, copies the material’s SQL structure row and `MaterialProperty` values, then overlays mapped columns. Tags from the file are assigned; import-review status tags (`статус::на проверке`) are **not** added.
 
 ## Relation to Scans

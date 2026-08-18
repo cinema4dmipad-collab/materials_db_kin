@@ -59,6 +59,65 @@ SAMPLE_TARGETS = (
 
 TARGET_TAG_ROW_PREFIX = 'tag:'
 
+BOUND_KIND_TOLERANCE = 'tolerance'
+BOUND_KIND_RANGE = 'range'
+BOUND_KIND_CHOICES = (
+    (BOUND_KIND_TOLERANCE, '±'),
+    (BOUND_KIND_RANGE, 'Диапазон'),
+)
+_BOUND_KINDS = {BOUND_KIND_TOLERANCE, BOUND_KIND_RANGE}
+
+
+def mapping_bound_column(entry) -> int | None:
+    """Индекс колонки погрешности/второй границы, если задан на записи значения."""
+    if not isinstance(entry, dict):
+        return None
+    raw = entry.get('bound_column')
+    if raw in (None, ''):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def mapping_bound_kind(entry) -> str:
+    if not isinstance(entry, dict):
+        return BOUND_KIND_TOLERANCE
+    kind = str(entry.get('bound_kind') or BOUND_KIND_TOLERANCE).strip()
+    return kind if kind in _BOUND_KINDS else BOUND_KIND_TOLERANCE
+
+
+def bound_column_indices(mapping: dict | None) -> set[int]:
+    used: set[int] = set()
+    for entry in (mapping or {}).values():
+        index = mapping_bound_column(entry)
+        if index is not None:
+            used.add(index)
+    return used
+
+
+def target_accepts_bound(
+    target: str,
+    *,
+    structure_fields=None,
+    properties=None,
+) -> bool:
+    """± / диапазон из второй колонки — только числовые свойства и DecimalField."""
+    if (target or '').startswith(TARGET_STRUCTURE_PREFIX):
+        field_name = target.split(':', 1)[1]
+        for structure_field in structure_fields or []:
+            if structure_field.name == field_name:
+                return structure_field.field_type == 'DecimalField'
+        return False
+    if (target or '').startswith(TARGET_PROPERTY_PREFIX):
+        prop_id = target.split(':', 1)[1]
+        for prop in properties or []:
+            if str(prop.pk) == prop_id:
+                return getattr(prop, 'data_type', '') == 'number'
+        return False
+    return False
+
 
 def field_mapping_section(target: str, *, is_primary: bool) -> str:
     """Секция конструктора: primary | material | property | tag."""
@@ -344,6 +403,7 @@ def build_field_mapping_rows(
     tag_columns: list[str] | None = None,
     extra_properties=None,
     extra_identity=None,
+    properties=None,
 ) -> list[dict]:
     """
     Проекция column→target на строки «поле → колонка» для UI.
@@ -354,9 +414,11 @@ def build_field_mapping_rows(
     primary_keys = [target for target, _label in primary]
     primary_set = set(primary_keys)
     required_keys = {target for target, _label in required_import_targets(match_policy)}
+    property_list = list(properties or extra_properties or [])
 
     # target → first column index (v1: одна колонка на цель)
     by_target: dict[str, tuple[WideColumn, str]] = {}
+    bound_by_value_index: dict[int, tuple[int | None, str]] = {}
     for column in columns:
         key = str(column.index)
         if key not in mapping:
@@ -366,6 +428,10 @@ def build_field_mapping_rows(
             continue
         if target not in by_target:
             by_target[target] = (column, parse)
+            bound_by_value_index[column.index] = (
+                mapping_bound_column(mapping[key]),
+                mapping_bound_kind(mapping[key]),
+            )
 
     ordered_targets: list[tuple[str, str, bool]] = []
     for target, label in primary:
@@ -386,6 +452,8 @@ def build_field_mapping_rows(
             prop_label = f'{prop_label} ({prop.unit})'
         ordered_targets.append((target, prop_label, False))
         extra_seen.add(target)
+        if prop not in property_list:
+            property_list.append(prop)
     for target, (column, parse) in by_target.items():
         if target in extra_seen:
             continue
@@ -394,12 +462,21 @@ def build_field_mapping_rows(
         ordered_targets.append((target, _field_ui_label(labels.get(target, target)), False))
 
     sample = sample_row or {}
+    column_by_index = {column.index: column for column in columns}
     rows: list[dict] = []
     for target, label, is_primary in ordered_targets:
         column = None
         parse = PARSE_AUTO
+        bound_column = None
+        bound_kind = BOUND_KIND_TOLERANCE
         if target in by_target:
             column, parse = by_target[target]
+            bound_index, bound_kind = bound_by_value_index.get(
+                column.index,
+                (None, BOUND_KIND_TOLERANCE),
+            )
+            if bound_index is not None:
+                bound_column = column_by_index.get(bound_index)
         sample_text = _sample_text(sample.get(column.index)) if column is not None else '—'
         section = field_mapping_section(target, is_primary=is_primary)
         rows.append({
@@ -416,12 +493,19 @@ def build_field_mapping_rows(
             'is_required_target': target in required_keys,
             'column': column,
             'column_index': column.index if column is not None else None,
+            'bound_column': bound_column,
+            'bound_column_index': bound_column.index if bound_column is not None else None,
+            'bound_kind': bound_kind,
+            'accepts_bound': target_accepts_bound(
+                target,
+                structure_fields=structure_fields,
+                properties=property_list,
+            ),
             'parse': parse,
             'sample': sample_text,
             'tag_preview': '',
         })
 
-    column_by_index = {column.index: column for column in columns}
     for col_index in resolve_tag_column_indices(columns, mapping, tag_columns):
         column = column_by_index.get(col_index)
         if column is None:
@@ -447,6 +531,10 @@ def build_field_mapping_rows(
             'is_required_target': False,
             'column': column,
             'column_index': column.index,
+            'bound_column': None,
+            'bound_column_index': None,
+            'bound_kind': BOUND_KIND_TOLERANCE,
+            'accepts_bound': False,
             'parse': parse,
             'sample': sample_text,
             'tag_preview': tag_preview,
@@ -473,8 +561,11 @@ def unused_columns_from_mapping(
 ) -> list[dict]:
     """Колонки файла без назначенной цели (skip / нет в mapping)."""
     sample = sample_row or {}
+    bound_used = bound_column_indices(mapping)
     unused: list[dict] = []
     for column in columns:
+        if column.index in bound_used:
+            continue
         key = str(column.index)
         if key in mapping:
             target, _parse = normalize_mapping_entry(mapping[key])
@@ -529,11 +620,23 @@ def mapping_for_session(mapping_rows: list[dict]) -> dict:
     """mapping_rows: {column, target, parse} → session dict by index."""
     result = {}
     for item in mapping_rows:
-        result[str(item['column'].index)] = {
+        entry = {
             'target': item['target'],
             'parse': item.get('parse') or PARSE_AUTO,
             'label': item['column'].display,
         }
+        bound_index = item.get('bound_column_index')
+        if bound_index is None and item.get('bound_column') is not None:
+            bound_index = item['bound_column'].index
+        if bound_index is not None:
+            entry['bound_column'] = int(bound_index)
+            entry['bound_kind'] = item.get('bound_kind') or BOUND_KIND_TOLERANCE
+            bound_obj = item.get('bound_column')
+            if bound_obj is not None:
+                entry['bound_label'] = bound_obj.display
+            elif item.get('bound_label'):
+                entry['bound_label'] = item['bound_label']
+        result[str(item['column'].index)] = entry
     return result
 
 
@@ -570,6 +673,8 @@ def profile_payload_from_mapping(
                 'label': (entry.get('label') if isinstance(entry, dict) else ''),
                 'target': normalize_mapping_entry(entry)[0],
                 'parse': normalize_mapping_entry(entry)[1],
+                'bound_label': _bound_label_for_entry(mapping, entry),
+                'bound_kind': mapping_bound_kind(entry),
             }
             for entry in mapping.values()
         ],
@@ -595,6 +700,7 @@ def apply_profile_to_columns(columns: list[WideColumn], profile_columns: list[di
                 by_label.setdefault(tail.casefold(), item)
 
     mapping = {}
+    pending_bounds: list[tuple[int, str]] = []
     for col in columns:
         item = (
             by_label.get(col.display.casefold())
@@ -605,14 +711,45 @@ def apply_profile_to_columns(columns: list[WideColumn], profile_columns: list[di
                 'target': item.get('target') or TARGET_SKIP,
                 'parse': item.get('parse') or PARSE_AUTO,
                 'label': col.display,
+                'bound_kind': mapping_bound_kind(item),
             }
+            bound_label = (item.get('bound_label') or '').strip()
+            if bound_label:
+                pending_bounds.append((col.index, bound_label))
         else:
             mapping[str(col.index)] = {
                 'target': TARGET_SKIP,
                 'parse': PARSE_AUTO,
                 'label': col.display,
             }
+    label_to_index: dict[str, int] = {}
+    for col in columns:
+        label_to_index[col.display.casefold()] = col.index
+        if col.label:
+            label_to_index.setdefault((col.label or '').casefold(), col.index)
+    for value_index, bound_label in pending_bounds:
+        bound_index = label_to_index.get(bound_label.casefold())
+        if bound_index is None and ' / ' in bound_label:
+            tail = bound_label.rsplit(' / ', 1)[-1].strip()
+            bound_index = label_to_index.get(tail.casefold())
+        if bound_index is not None:
+            mapping[str(value_index)]['bound_column'] = bound_index
     return mapping
+
+
+def _bound_label_for_entry(mapping: dict, entry) -> str:
+    if not isinstance(entry, dict):
+        return ''
+    stored = (entry.get('bound_label') or '').strip()
+    if stored:
+        return stored
+    bound_index = mapping_bound_column(entry)
+    if bound_index is None:
+        return ''
+    bound_entry = mapping.get(str(bound_index))
+    if isinstance(bound_entry, dict):
+        return (bound_entry.get('label') or '').strip()
+    return ''
 
 
 def import_templates_for_workspace(workspace) -> list[dict]:

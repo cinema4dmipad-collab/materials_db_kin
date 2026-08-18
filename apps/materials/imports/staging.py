@@ -17,6 +17,9 @@ from apps.materials.imports.mapping import (
     TARGET_STRUCTURE_PREFIX,
     TARGET_TAGS,
     TARGET_TECHNOLOGY,
+    BOUND_KIND_RANGE,
+    mapping_bound_column,
+    mapping_bound_kind,
     normalize_mapping_entry,
     resolve_tag_column_indices,
 )
@@ -160,10 +163,16 @@ def build_staging_draft(
     }
     map_by_index = {}
     parse_by_index = {}
+    bound_by_value_index: dict[int, tuple[int, str]] = {}
+    bound_used: set[int] = set()
     for key, entry in (mapping or {}).items():
         target, parse_mode = normalize_mapping_entry(entry)
         map_by_index[int(key)] = target
         parse_by_index[int(key)] = parse_mode
+        bound_index = mapping_bound_column(entry)
+        if bound_index is not None:
+            bound_by_value_index[int(key)] = (bound_index, mapping_bound_kind(entry))
+            bound_used.add(bound_index)
 
     tag_indices = set(
         resolve_tag_column_indices(table.columns, mapping, tag_columns)
@@ -190,6 +199,8 @@ def build_staging_draft(
         warnings: list[str] = []
 
         for col in table.columns:
+            if col.index in bound_used and map_by_index.get(col.index, TARGET_SKIP) == TARGET_SKIP:
+                continue
             target = map_by_index.get(col.index, TARGET_SKIP)
             in_tags = col.index in tag_indices
             if target == TARGET_SKIP and not in_tags:
@@ -232,8 +243,23 @@ def build_staging_draft(
                             # Числовое поле нельзя писать «как текст» — иначе «30±3» уйдёт в ручную правку.
                             parse_mode = PARSE_AUTO
                         parsed = parse_property_cell(raw, mode=parse_mode)
+                        parsed, bound_unrecognized = _combine_value_with_bound(
+                            parsed,
+                            wide_row=wide_row,
+                            col_index=col.index,
+                            bound_by_value_index=bound_by_value_index,
+                            expects_number=expects_number,
+                        )
                         field_label = (structure_field.label or structure_field.name or '').strip()
-                        if parsed is None:
+                        if bound_unrecognized:
+                            struct_vals.append(
+                                _unrecognized_structure_value(
+                                    structure_field=structure_field,
+                                    column_label=col.display,
+                                    raw=_as_text(raw),
+                                )
+                            )
+                        elif parsed is None:
                             # Сопоставлено, но пусто — оставляем в черновике (можно снять галочку).
                             struct_vals.append(
                                 DraftStructureValue(
@@ -289,7 +315,22 @@ def build_staging_draft(
                         elif expects_number and parse_mode == PARSE_TEXT:
                             parse_mode = PARSE_AUTO
                         parsed = parse_property_cell(raw, mode=parse_mode)
-                        if parsed is None:
+                        parsed, bound_unrecognized = _combine_value_with_bound(
+                            parsed,
+                            wide_row=wide_row,
+                            col_index=col.index,
+                            bound_by_value_index=bound_by_value_index,
+                            expects_number=expects_number,
+                        )
+                        if bound_unrecognized:
+                            props.append(
+                                _unrecognized_property_value(
+                                    prop_info=prop_info,
+                                    column_label=col.display,
+                                    raw=_as_text(raw),
+                                )
+                            )
+                        elif parsed is None:
                             props.append(
                                 DraftProperty(
                                     property_name=prop_info[1],
@@ -1537,6 +1578,47 @@ def _tag_scope_from_column(group: str, label: str) -> str:
     cleaned = re.sub(r'\s*[\(,].*$', '', raw).strip()
     cleaned = re.sub(r'\s+', ' ', cleaned)
     return (cleaned or 'тег')[:40]
+
+
+def _combine_value_with_bound(
+    parsed: dict | None,
+    *,
+    wide_row: dict,
+    col_index: int,
+    bound_by_value_index: dict[int, tuple[int, str]],
+    expects_number: bool,
+) -> tuple[dict | None, bool]:
+    """Подмешивает вторую колонку (± или диапазон). Второй флаг — не разобрали bound."""
+    if not expects_number:
+        return parsed, False
+    spec = bound_by_value_index.get(col_index)
+    if not spec:
+        return parsed, False
+    bound_index, bound_kind = spec
+    bound_raw = wide_row.get(bound_index)
+    if is_blank_cell(bound_raw):
+        return parsed, False
+    if parsed is None:
+        return None, True
+    bound_parsed = parse_property_cell(bound_raw, mode=PARSE_AUTO)
+    if bound_parsed is None or not _is_numeric_parse(bound_parsed):
+        return None, True
+    extra = bound_parsed.get('value')
+    if (
+        bound_parsed.get('value_kind') == VALUE_KIND_TOLERANCE
+        and bound_parsed.get('value_b') not in (None, '')
+    ):
+        extra = bound_parsed.get('value_b')
+    kind = VALUE_KIND_RANGE if bound_kind == BOUND_KIND_RANGE else VALUE_KIND_TOLERANCE
+    combined = dict(parsed)
+    combined['value_kind'] = kind
+    combined['value'] = str(parsed.get('value') or '')
+    combined['value_b'] = '' if extra is None else str(extra)
+    combined['confidence'] = CONFIDENCE_OK
+    combined['note'] = (
+        'диапазон (две колонки)' if kind == VALUE_KIND_RANGE else '± погрешность (две колонки)'
+    )
+    return combined, False
 
 
 def _is_numeric_parse(parsed: dict) -> bool:

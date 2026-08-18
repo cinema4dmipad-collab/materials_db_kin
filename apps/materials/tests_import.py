@@ -444,6 +444,44 @@ class MaterialImportMappingUnitTests(TestCase):
         self.assertEqual(len(structure_rows), 1)
         self.assertEqual(structure_rows[0]['column_index'], 1)
 
+    def test_bound_column_is_used_and_shown_on_numeric_rows(self):
+        from apps.materials.imports.wide import WideColumn
+
+        columns = [
+            WideColumn(index=0, label='Наименование', group=''),
+            WideColumn(index=1, label='Плотность пов', group=''),
+            WideColumn(index=2, label='Погрешность', group=''),
+        ]
+        mapping = {
+            '0': {'target': TARGET_NAME, 'parse': 'auto'},
+            '1': {
+                'target': f'{TARGET_PROPERTY_PREFIX}{self.density.pk}',
+                'parse': 'auto',
+                'bound_column': 2,
+                'bound_kind': 'range',
+            },
+            '2': {'target': TARGET_SKIP, 'parse': 'auto'},
+        }
+        rows = build_field_mapping_rows(
+            columns=columns,
+            mapping=mapping,
+            extra_properties=[self.density],
+            properties=[self.density],
+            match_policy='name',
+            sample_row={0: 'Т-23', 1: '300', 2: '320'},
+        )
+        name_row = next(row for row in rows if row['target'] == TARGET_NAME)
+        self.assertFalse(name_row['accepts_bound'])
+        prop_row = next(
+            row for row in rows if row['target'] == f'{TARGET_PROPERTY_PREFIX}{self.density.pk}'
+        )
+        self.assertTrue(prop_row['accepts_bound'])
+        self.assertEqual(prop_row['column_index'], 1)
+        self.assertEqual(prop_row['bound_column_index'], 2)
+        self.assertEqual(prop_row['bound_kind'], 'range')
+        unused = unused_columns_from_mapping(columns, mapping)
+        self.assertEqual([col['index'] for col in unused], [])
+
     def test_build_staging_draft_tag_column_alongside_field_mapping(self):
         from apps.materials.imports.wide import WideColumn
 
@@ -1879,6 +1917,8 @@ class MaterialImportUITests(TestCase):
         self.assertContains(response, 'Поля для записи')
         self.assertContains(response, 'Колонки файла')
         self.assertContains(response, 'Колонка файла')
+        self.assertContains(response, 'Погрешность')
+        self.assertContains(response, 'import-map-bound-kind')
         self.assertContains(response, 'Тип поля')
         self.assertContains(response, 'import-map-expr-slot')
         self.assertContains(response, 'import-map-panel')
@@ -1918,6 +1958,14 @@ class MaterialImportUITests(TestCase):
         self.assertNotContains(response, 'Поля для подстановки')
         self.assertNotContains(response, 'import-map-addon-modal')
         self.assertNotContains(response, 'Название ★ обязательно')
+        self.assertContains(response, 'form="import-map-form"')
+        self.assertContains(response, 'import-map-continue')
+        self.assertContains(response, 'novalidate')
+        constructor_js = (
+            Path(__file__).resolve().parents[2] / 'static' / 'js' / 'import_mapping_constructor.js'
+        ).read_text(encoding='utf-8')
+        self.assertIn("document.querySelectorAll('.import-map-continue')", constructor_js)
+        self.assertNotIn("form.querySelectorAll('.import-map-continue')", constructor_js)
 
     def test_configure_does_not_show_match_policy(self):
         with self.wide_sample.open('rb') as handle:
@@ -2918,6 +2966,58 @@ class MaterialImportUnrecognizedFieldTests(TestCase):
         self.assertEqual(prop.value, '30')
         self.assertEqual(prop.value_b, '3')
         self.assertEqual(prop.property_label, 'Разрывная')
+
+    def test_staging_combines_bound_column_as_tolerance_or_range(self):
+        table = WideTable(
+            sheet_name='CSV',
+            header_row=1,
+            columns=[
+                WideColumn(index=0, label='Наименование'),
+                WideColumn(index=1, label='Плотность'),
+                WideColumn(index=2, label='Погрешность'),
+                WideColumn(index=3, label='До'),
+            ],
+            rows=[
+                {0: 'Ткань A', 1: '30', 2: '3', 3: '40'},
+            ],
+            preview_rows=[{0: 'Ткань A', 1: '30', 2: '3', 3: '40'}],
+        )
+        mapping = {
+            '0': {'target': 'material.name', 'parse': 'auto'},
+            '1': {
+                'target': f'property:{self.breaking_prop.pk}',
+                'parse': 'auto',
+                'bound_column': 2,
+                'bound_kind': 'tolerance',
+            },
+            '2': {'target': TARGET_SKIP, 'parse': 'auto'},
+            '3': {'target': TARGET_SKIP, 'parse': 'auto'},
+        }
+        drafts = build_staging_draft(
+            table,
+            mapping,
+            workspace=self.workspace,
+            match_policy=MATCH_BY_NAME,
+            structure_type_id=str(self.structure_type.pk),
+        )
+        prop = drafts[0].properties[0]
+        self.assertEqual(prop.value_kind, 'tolerance')
+        self.assertEqual(prop.value, '30')
+        self.assertEqual(prop.value_b, '3')
+
+        mapping['1']['bound_column'] = 3
+        mapping['1']['bound_kind'] = 'range'
+        drafts = build_staging_draft(
+            table,
+            mapping,
+            workspace=self.workspace,
+            match_policy=MATCH_BY_NAME,
+            structure_type_id=str(self.structure_type.pk),
+        )
+        prop = drafts[0].properties[0]
+        self.assertEqual(prop.value_kind, 'range')
+        self.assertEqual(prop.value, '30')
+        self.assertEqual(prop.value_b, '40')
 
     def test_tolerance_slash_variants_parse(self):
         for raw in ('30±3', '30 +/- 3', '30+-3'):

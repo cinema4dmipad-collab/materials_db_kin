@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from apps.composites.layer_symmetry import (
     format_layer_count_label,
-    format_mirror_note,
     mirrored_layer_count,
 )
 from apps.composites.reinforcement_formula import build_reinforcement_formula
@@ -245,7 +244,6 @@ def build_layer_diagram(
             stored_count,
             symmetric=is_symmetric,
         ),
-        'mirror_note': format_mirror_note(stored_count) if is_symmetric else '',
         'reinforcement_formula': build_reinforcement_formula(
             item['angle_value'] for item in diagram_layers
         ),

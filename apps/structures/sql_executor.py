@@ -88,6 +88,96 @@ class SQLExecutor:
             return {'success': False, 'error': str(exc)}
 
     @classmethod
+    def create_missing_table(cls, structure_type: StructureType) -> dict:
+        """Create physical table when metadata says is_created but table was lost."""
+        if cls.table_exists(structure_type):
+            return {
+                'success': False,
+                'error': f'Таблица «{structure_type.table_name}» уже существует.',
+            }
+        was_created = structure_type.is_created
+        if was_created:
+            structure_type.is_created = False
+            structure_type.save(update_fields=['is_created'])
+        result = cls.create_table(structure_type)
+        if not result['success'] and was_created:
+            structure_type.is_created = True
+            structure_type.save(update_fields=['is_created'])
+        return result
+
+    @classmethod
+    def sync_created_flag(cls, structure_type: StructureType) -> dict:
+        """Mark type as created when SQL table already exists."""
+        if not cls.table_exists(structure_type):
+            return {
+                'success': False,
+                'error': f'Таблицы «{structure_type.table_name}» нет в БД.',
+            }
+        if not structure_type.is_created:
+            structure_type.is_created = True
+            structure_type.save(update_fields=['is_created'])
+        try:
+            cls._ensure_decimal_companion_columns(structure_type)
+        except ValueError as exc:
+            return {'success': False, 'error': str(exc)}
+        return {'success': True, 'error': None}
+
+    @classmethod
+    def drop_column(cls, structure_type: StructureType, column_name: str) -> dict:
+        """Drop a physical column (and decimal companions when dropping the base)."""
+        from apps.structures.decimal_range import (
+            decimal_base_column_name,
+            decimal_companion_columns,
+            legacy_decimal_column_names,
+        )
+
+        dropped: list[str] = []
+        try:
+            cls.validate_identifier(column_name)
+            if not structure_type.is_created or not cls.table_exists(structure_type):
+                return {
+                    'success': False,
+                    'dropped': dropped,
+                    'error': 'Таблица структуры не создана.',
+                }
+            if structure_type.fields.filter(name=column_name).exists():
+                return {
+                    'success': False,
+                    'dropped': dropped,
+                    'error': (
+                        f'Колонка «{column_name}» соответствует полю типа — '
+                        'удаление отменено.'
+                    ),
+                }
+
+            targets = [column_name]
+            if decimal_base_column_name(column_name) is None:
+                targets.extend(decimal_companion_columns(column_name))
+                targets.extend(legacy_decimal_column_names(column_name))
+
+            table_name = cls.quote_identifier(structure_type.table_name)
+            with connection.cursor() as cursor:
+                for name in dict.fromkeys(targets):
+                    if not cls.column_exists(structure_type, name):
+                        continue
+                    if structure_type.fields.filter(name=name).exists():
+                        continue
+                    cursor.execute(
+                        f'ALTER TABLE {table_name} DROP COLUMN '
+                        f'{cls.quote_identifier(name)}'
+                    )
+                    dropped.append(name)
+            if not dropped:
+                return {
+                    'success': False,
+                    'dropped': dropped,
+                    'error': f'Колонки «{column_name}» нет в таблице.',
+                }
+            return {'success': True, 'dropped': dropped, 'error': None}
+        except Exception as exc:
+            return {'success': False, 'dropped': dropped, 'error': str(exc)}
+
+    @classmethod
     def drop_table(cls, structure_type: StructureType) -> dict:
         try:
             table_name = cls.quote_identifier(structure_type.table_name)

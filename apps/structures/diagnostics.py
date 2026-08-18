@@ -12,6 +12,7 @@ from apps.structures.decimal_range import (
     is_decimal_companion_column,
     legacy_decimal_column_names,
 )
+from apps.structures.diagnostics_repairs import build_repair, structure_repair_context
 from apps.structures.models import StructureType
 from apps.structures.sql_executor import SQLExecutor
 from apps.structures.table_storage import SERVICE_COLUMNS, get_row
@@ -31,7 +32,235 @@ class DiagnosticIssue:
     structure_code: str = ''
     material_code: str = ''
     count: int = 1
+    field_name: str = ''
+    column_name: str = ''
+    row_id: str = ''
     repair: dict = dc_field(default_factory=dict)
+    remediation: str = ''
+
+
+REMEDIATION_BY_CODE: dict[str, str] = {
+    'flag_table_drift_missing': (
+        'Откройте <strong>управление типом</strong> ({structure_link}) и нажмите '
+        '«Создать таблицу», если поля актуальны. Если SQL-таблицу удалили вручную — '
+        'создайте её заново. Если тип больше не используется — перенесите или удалите '
+        'материалы, затем удалите тип.'
+    ),
+    'flag_table_drift_orphan_table': (
+        'В БД осталась таблица, а тип помечен как черновик ({structure_link}). '
+        'Если данные нужны — создайте таблицу штатно на странице управления '
+        '(или обратитесь к администратору БД). Если таблица лишняя — удалите её '
+        'на странице управления типом.'
+    ),
+    'missing_decimal_column': (
+        'Колонка для числового поля не создана. На странице управления типом '
+        '({structure_link}) добавьте поле с тем же кодом — для созданного типа '
+        'это выполнит <code>ALTER TABLE ADD COLUMN</code>. Если поле уже в списке, '
+        'нужна ручная правка SQL или помощь администратора.'
+    ),
+    'missing_column': (
+        'Поле есть в метаданных типа, колонки в SQL нет. На странице управления '
+        '({structure_link}) добавьте поле с тем же именем или выполните миграцию '
+        'колонки. Проверьте также пару «переименование без таблицы» в этой же '
+        'диагностике.'
+    ),
+    'field_without_catalog_property': (
+        'Создайте в <strong>справочнике свойств</strong> запись с кодом, совпадающим '
+        'с именем поля, или переименуйте поле под существующее свойство. На чтение '
+        'SQL это обычно не влияет, но мешает синхронизации точности чисел и валидации '
+        'типа для внешних клиентов.'
+    ),
+    'orphan_sql_column': (
+        'Лишняя колонка в SQL — часто след переименования поля без '
+        '<code>RENAME COLUMN</code>. Проверьте строку «Похоже на переименование» '
+        'для этого типа; иначе удалите колонку вручную (осторожно: возможна потеря '
+        'данных) или верните поле в метаданные типа.'
+    ),
+    'rename_column_suggested': (
+        'Нажмите <strong>«Переименовать колонку»</strong> справа — SQL приведётся к '
+        'метаданным. Перед этим убедитесь, что в типе нет второго поля со старым '
+        'именем колонки.'
+    ),
+    'half_link_type_only': (
+        'У материала <strong>{material_code}</strong> задан тип, но нет строки параметров. '
+        'Откройте <strong>карточку материала</strong> и сохраните форму — создастся '
+        'SQL-строка. Если тип выбран ошибочно — смените или очистите тип структуры.'
+    ),
+    'half_link_type_only_more': (
+        'Исправьте каждый материал из сообщений «Материал с типом без строки структуры» '
+        'выше: сохранение карточки или сброс некорректной привязки.'
+    ),
+    'half_link_props_only': (
+        'У материала <strong>{material_code}</strong> указан <code>struct_props_id</code>, '
+        'но не задан тип структуры. На карточке материала выберите тип или очистите '
+        'ссылку на строку (через админку, если поле недоступно в форме).'
+    ),
+    'material_points_to_missing_table': (
+        'Материал <strong>{material_code}</strong> ссылается на тип без рабочей таблицы. '
+        'Создайте таблицу типа ({structure_link}) или перенесите материал ({migrate_link}).'
+    ),
+    'orphan_struct_props_id': (
+        'У материала <strong>{material_code}</strong> указан id строки, которой нет в SQL. '
+        'Откройте карточку и сохраните форму — будет создана новая строка. '
+        'Либо вручную привяжите существующую запись из таблицы типа.'
+    ),
+    'orphan_struct_props_id_more': (
+        'Повторите для каждого материала из списка «Нет строки структуры» выше.'
+    ),
+    'shared_struct_row': (
+        'Несколько материалов делят одну SQL-строку — изменения одного перезаписывают '
+        'данные других. Для каждого материала нужна отдельная строка: откройте карточку '
+        'и сохраните форму (создаст копию параметров) или дублируйте материал.'
+    ),
+    'shared_struct_row_more': (
+        'Разделите общие SQL-строки по рекомендации «Несколько материалов на одну '
+        'SQL-строку» выше.'
+    ),
+    'scan_failed': (
+        'Не удалось прочитать таблицу типа ({structure_link}). Проверьте права доступа '
+        'к БД, имя таблицы и целостность схемы PostgreSQL.'
+    ),
+    'orphan_sql_rows': (
+        'Строки в SQL без материалов — обычно после удаления материала. Можно удалить '
+        'записи на странице материалов типа ({structure_link}) или оставить; на работу '
+        'приложения не влияют, но засоряют таблицу.'
+    ),
+    'deletion_rules_ok': (
+        'Справочно: правила удаления настроены штатно. Действий не требуется.'
+    ),
+}
+
+
+def _structure_manage_link(structure_code: str) -> str:
+    if not structure_code:
+        return 'управление типом'
+    from django.urls import reverse
+
+    url = reverse('structures:type_manage', args=[structure_code])
+    return f'<a href="{url}">{structure_code}</a>'
+
+
+def _migrate_link() -> str:
+    from django.urls import reverse
+
+    url = reverse('structures:migrate')
+    return f'<a href="{url}">Перенос структуры</a>'
+
+
+def _material_detail_hint(material_code: str) -> str:
+    if not material_code:
+        return 'материал'
+    return material_code
+
+
+def attach_issue_repairs(
+    issues: list[DiagnosticIssue],
+    types_by_code: dict[str, StructureType],
+) -> None:
+    """Attach confirmable repair actions where automation is available."""
+    rename_old_names = {
+        (issue.structure_code, issue.repair.get('old_name'))
+        for issue in issues
+        if issue.code == 'rename_column_suggested' and issue.repair.get('old_name')
+    }
+
+    for issue in issues:
+        if issue.repair.get('action') == 'rename_column' and 'confirm_title' not in issue.repair:
+            st = types_by_code.get(issue.structure_code)
+            ctx = structure_repair_context(st) if st else {}
+            payload = {
+                key: value
+                for key, value in issue.repair.items()
+                if key
+                not in {
+                    'action',
+                    'confirm_title',
+                    'confirm_message',
+                    'submit_label',
+                    'submit_class',
+                    'structure_code',
+                    'structure_name',
+                    'table_name',
+                }
+            }
+            issue.repair = build_repair('rename_column', **ctx, **payload)
+            continue
+
+        if issue.repair:
+            continue
+
+        st = types_by_code.get(issue.structure_code)
+        ctx = structure_repair_context(st) if st else {}
+
+        if issue.code == 'flag_table_drift_missing' and st:
+            issue.repair = build_repair('create_missing_table', **ctx)
+        elif issue.code == 'flag_table_drift_orphan_table' and st:
+            issue.repair = build_repair('sync_created_flag', **ctx)
+        elif issue.code in {'missing_column', 'missing_decimal_column'} and st and issue.field_name:
+            issue.repair = build_repair(
+                'add_missing_column',
+                field_name=issue.field_name,
+                **ctx,
+            )
+        elif issue.code == 'orphan_sql_column' and st and issue.column_name:
+            if (issue.structure_code, issue.column_name) in rename_old_names:
+                continue
+            issue.repair = build_repair(
+                'drop_orphan_column',
+                column_name=issue.column_name,
+                **ctx,
+            )
+        elif issue.code == 'half_link_type_only' and issue.material_code:
+            issue.repair = build_repair(
+                'create_material_structure_row',
+                material_code=issue.material_code,
+                **ctx,
+            )
+        elif issue.code == 'half_link_props_only' and issue.material_code:
+            issue.repair = build_repair(
+                'clear_struct_props_id',
+                material_code=issue.material_code,
+            )
+        elif issue.code == 'material_points_to_missing_table' and st:
+            issue.repair = build_repair('create_missing_table', **ctx)
+        elif issue.code == 'orphan_struct_props_id' and issue.material_code:
+            issue.repair = build_repair(
+                'create_material_structure_row',
+                material_code=issue.material_code,
+                **ctx,
+            )
+        elif issue.code == 'shared_struct_row' and st and issue.row_id:
+            codes = issue.detail.replace('Коды: ', '').split(', ')
+            issue.repair = build_repair(
+                'split_shared_structure_row',
+                row_id=issue.row_id,
+                material_codes=', '.join(codes[1:] if len(codes) > 1 else codes),
+                **ctx,
+            )
+        elif issue.code == 'orphan_sql_rows' and st:
+            issue.repair = build_repair(
+                'delete_orphan_sql_rows',
+                orphan_count=str(issue.count),
+                **ctx,
+            )
+
+
+def attach_issue_remediation(issues: list[DiagnosticIssue]) -> None:
+    """Fill remediation hints for the diagnostics UI."""
+    for issue in issues:
+        template = REMEDIATION_BY_CODE.get(issue.code, '')
+        if not template:
+            issue.remediation = (
+                'Обратитесь к администратору базы с кодом проблемы '
+                f'<code>{issue.code}</code> и текстом детали.'
+            )
+            continue
+        issue.remediation = template.format(
+            structure_code=issue.structure_code or '—',
+            material_code=_material_detail_hint(issue.material_code),
+            structure_link=_structure_manage_link(issue.structure_code),
+            migrate_link=_migrate_link(),
+        )
 
 
 def _expected_columns(structure_type: StructureType) -> set[str]:
@@ -116,6 +345,7 @@ def run_structure_normalization_diagnostics(
                                 title='Нет колонки DecimalField',
                                 detail=f'«{st.name}»: отсутствует колонка «{col}».',
                                 structure_code=st.code,
+                                field_name=fld.name,
                             )
                         )
                 if fld.name not in physical:
@@ -132,6 +362,7 @@ def run_structure_normalization_diagnostics(
                             'колонки в таблице нет.'
                         ),
                         structure_code=st.code,
+                        field_name=fld.name,
                     )
                 )
 
@@ -163,6 +394,7 @@ def run_structure_normalization_diagnostics(
                         'в метаданных (возможное переименование без ALTER TABLE).'
                     ),
                     structure_code=st.code,
+                    column_name=col,
                 )
             )
 
@@ -278,10 +510,12 @@ def run_structure_normalization_diagnostics(
         )
 
     shared_count = 0
-    for (_st_pk, _row_id), codes in shared_keys.items():
+    types_by_pk = {st.pk: st for st in types}
+    for (st_pk, row_id), codes in shared_keys.items():
         if len(codes) < 2:
             continue
         shared_count += 1
+        st = types_by_pk.get(st_pk)
         if shared_count <= limit_per_check:
             issues.append(
                 DiagnosticIssue(
@@ -290,6 +524,8 @@ def run_structure_normalization_diagnostics(
                     title='Несколько материалов на одну SQL-строку',
                     detail='Коды: ' + ', '.join(codes[:10]),
                     count=len(codes),
+                    structure_code=st.code if st else '',
+                    row_id=row_id,
                 )
             )
     if shared_count > limit_per_check:
@@ -363,6 +599,8 @@ def run_structure_normalization_diagnostics(
     # Sort: errors first
     order = {SEVERITY_ERROR: 0, SEVERITY_WARNING: 1, SEVERITY_INFO: 2}
     issues.sort(key=lambda i: (order.get(i.severity, 9), i.code, i.structure_code))
+    attach_issue_repairs(issues, {st.code: st for st in types})
+    attach_issue_remediation(issues)
     return issues
 
 

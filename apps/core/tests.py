@@ -869,6 +869,8 @@ class HelpPageTests(TestCase):
         self.assertContains(response, 'Знаков после запятой')
         self.assertContains(response, 'проблемные ячейки')
         self.assertContains(response, 'каталог колонок')
+        self.assertContains(response, 'Погрешность')
+        self.assertContains(response, 'Диапазон')
         self.assertContains(response, 'Выгрузить в Excel')
         self.assertContains(response, 'одного типа структуры')
         self.assertContains(response, 'пропускаются')

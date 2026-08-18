@@ -645,9 +645,49 @@ button.import-map-catalog-item:disabled {
     z-index: 2;
 }
 
+.import-map-table__bound-col {
+    min-width: 8.5rem;
+    width: 9.5rem;
+}
+
 .import-map-table__parse-col {
     min-width: 6.5rem;
     width: 7rem;
+}
+
+.import-map-bound {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 8rem;
+}
+
+.import-map-bound-kind {
+    font-size: 0.72rem;
+    max-width: 100%;
+    padding-bottom: 0.12rem;
+    padding-left: 0.3rem;
+    padding-right: 1.4rem;
+    padding-top: 0.12rem;
+}
+
+.import-map-row__bound--na {
+    color: var(--kx-text-muted, #6c757d);
+}
+
+.import-map-row.is-selected.is-bound-slot .import-map-row__bound .import-map-expr-slot {
+    background: #fff;
+    border-color: var(--kx-brand, #007679);
+    border-style: solid;
+    box-shadow: 0 0 0 2px rgba(0, 118, 121, 0.2);
+}
+
+.import-map-expr-slot[data-drop-slot="bound"].is-empty .import-map-expr-label:empty::before {
+    content: '↘ колонка ±';
+}
+
+.import-map-expr-slot[data-drop-slot="bound"][data-placeholder-kind="range"].is-empty .import-map-expr-label:empty::before {
+    content: '↘ колонка «до»';
 }
 
 .import-map-parse {

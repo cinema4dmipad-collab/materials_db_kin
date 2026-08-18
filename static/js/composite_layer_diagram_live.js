@@ -133,18 +133,19 @@
         return definingCount % 2 === 0 ? definingCount : definingCount - 1;
     }
 
+    function expandedLayerCount(definingCount) {
+        if (!(definingCount > 0)) {
+            return 0;
+        }
+        return definingCount + mirroredLayerCount(definingCount);
+    }
+
     function formatLayerCountLabel(definingCount, symmetric) {
         if (!(definingCount > 0)) {
             return '';
         }
-        if (!symmetric) {
-            return definingCount + ' сл.';
-        }
-        var mirrorCount = mirroredLayerCount(definingCount);
-        if (mirrorCount <= 0) {
-            return definingCount + ' сл.';
-        }
-        return definingCount + ' сл. (+ ' + mirrorCount + ' сим. слоёв)';
+        var count = symmetric ? expandedLayerCount(definingCount) : definingCount;
+        return count + ' сл.';
     }
 
     function formatMirrorNote(definingCount) {
@@ -472,7 +473,6 @@
             mirror_count: symmetric ? mirroredLayerCount(definingCount) : 0,
             symmetric: symmetric,
             layer_count_label: formatLayerCountLabel(definingCount, symmetric),
-            mirror_note: symmetric ? formatMirrorNote(definingCount) : '',
             reinforcement_formula: buildReinforcementFormula(layers.map(function (layer) {
                 return layer.angle_value != null ? layer.angle_value : layer.angle;
             })),
@@ -585,9 +585,6 @@
             + (diagram.symmetric ? '<hr class="layer-stack-symmetry-line" aria-hidden="true">' : '')
             + '</div>'
             + '</div>'
-            + (diagram.mirror_note
-                ? '<div class="layer-stack-mirror-note">' + escapeHtml(diagram.mirror_note) + '</div>'
-                : '')
             + '<div class="layer-stack-caption">' + escapeHtml(diagram.legend_caption) + '</div>'
             + '</div>'
             + '</div>';

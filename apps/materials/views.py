@@ -1828,6 +1828,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
 
     def _mapping_from_post(self, request) -> dict:
         """Читает map_*/parse_* из POST (текущий UI конструктора)."""
+        from apps.materials.imports.mapping import BOUND_KIND_TOLERANCE, mapping_bound_kind
+
         mapping = {}
         for key, value in request.POST.items():
             if not key.startswith('map_'):
@@ -1837,10 +1839,23 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             except ValueError:
                 continue
             parse_mode = request.POST.get(f'parse_{col_index}') or 'auto'
-            mapping[str(col_index)] = {
+            entry = {
                 'target': value or TARGET_SKIP,
                 'parse': parse_mode,
             }
+            bound_raw = (request.POST.get(f'bound_{col_index}') or '').strip()
+            if bound_raw:
+                try:
+                    entry['bound_column'] = int(bound_raw)
+                    entry['bound_kind'] = mapping_bound_kind(
+                        {'bound_kind': request.POST.get(f'bound_kind_{col_index}') or BOUND_KIND_TOLERANCE}
+                    )
+                    bound_label = (request.POST.get(f'bound_label_{col_index}') or '').strip()
+                    if bound_label:
+                        entry['bound_label'] = bound_label
+                except ValueError:
+                    pass
+            mapping[str(col_index)] = entry
         return mapping
 
     def _default_tags_from_post(self, request) -> str:
@@ -2760,6 +2775,7 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
             tag_columns=config.get('tag_columns') or [],
             extra_properties=extra_properties,
             extra_identity=self._optional_addon_targets() or (),
+            properties=properties,
         )
         self.unused_columns = unused_columns_from_mapping(
             list(self.wide_table.columns),

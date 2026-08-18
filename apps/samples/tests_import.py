@@ -224,6 +224,44 @@ class SampleImportUITests(TestCase):
         self.assertIn('sample.object_type', targets)
         self.assertContains(mapping, self.density_field.label)
         self.assertContains(mapping, 'Примечание')
+        self.assertEqual(mapping.context['missing_required_targets'], [])
+        self.assertContains(mapping, 'import-map-continue')
+        self.assertContains(mapping, 'form="import-map-form"')
+        self.assertNotRegex(
+            mapping.content.decode('utf-8'),
+            r'class="btn btn-primary import-map-continue[^"]*"\s+disabled',
+        )
+
+    def test_mapping_continue_starts_disabled_without_name_column(self):
+        uploaded = SimpleUploadedFile(
+            'samples_no_name.csv',
+            'Код образца,Плотность пов\nS-1,280\n'.encode('utf-8'),
+            content_type='text/csv',
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse('samples:import'),
+                {'action': 'upload', 'file': uploaded},
+            ).status_code,
+            302,
+        )
+        mapping = self.client.post(
+            reverse('samples:import'),
+            {
+                'action': 'configure',
+                'sheet': 'CSV',
+                'header_row': '1',
+                'group_row': '',
+                'material_id': str(self.material.pk),
+            },
+        )
+        self.assertEqual(mapping.status_code, 200)
+        self.assertEqual(mapping.context['step'], 'mapping')
+        self.assertTrue(mapping.context['missing_required_targets'])
+        self.assertRegex(
+            mapping.content.decode('utf-8'),
+            r'class="btn btn-primary import-map-continue[^"]*"\s+disabled',
+        )
 
     def test_sample_import_session_does_not_share_material_keys(self):
         with self.csv.open('rb') as handle:

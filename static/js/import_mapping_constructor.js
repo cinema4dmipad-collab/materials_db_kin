@@ -51,6 +51,7 @@
     var addFieldBtn = document.getElementById('import-map-add-field');
 
     var selectedRow = null;
+    var activeSlot = 'value';
     var dragPayload = null;
     var suppressNextClick = false;
     var parseModes = [];
@@ -58,6 +59,12 @@
 
     function rows() {
         return Array.prototype.slice.call(form.querySelectorAll('[data-import-map-row]'));
+    }
+
+    function continueButtons() {
+        // Кнопки «Вперёд» / «Построчно» живут в навбаре вне <form>,
+        // с form="import-map-form" — искать их нужно по документу.
+        return Array.prototype.slice.call(document.querySelectorAll('.import-map-continue'));
     }
 
     function catalogItems() {
@@ -139,7 +146,8 @@
         options = options || {};
         var needle = String(index);
         var matches = rows().filter(function (row) {
-            return row.getAttribute('data-column-index') === needle;
+            return row.getAttribute('data-column-index') === needle
+                || row.getAttribute('data-bound-column-index') === needle;
         });
         if (options.tagOnly) {
             return matches.find(function (row) { return isTagRow(row); }) || null;
@@ -177,12 +185,44 @@
         return row ? row.querySelector('.import-map-column-value') : null;
     }
 
+    function rowAcceptsBound(row) {
+        return !!(row && row.getAttribute('data-accepts-bound') === '1');
+    }
+
+    function boundInput(row) {
+        return row ? row.querySelector('.import-map-bound-value') : null;
+    }
+
+    function boundSlotEl(row) {
+        return row ? row.querySelector('[data-drop-slot="bound"]') : null;
+    }
+
+    function boundKindSelect(row) {
+        return row ? row.querySelector('.import-map-bound-kind') : null;
+    }
+
+    function setActiveSlot(row, slot) {
+        activeSlot = (slot === 'bound' && rowAcceptsBound(row)) ? 'bound' : 'value';
+        rows().forEach(function (item) {
+            item.classList.toggle('is-bound-slot', item === row && activeSlot === 'bound');
+        });
+    }
+
+    function slotOfEvent(event) {
+        var slot = event.target && event.target.closest
+            ? event.target.closest('[data-drop-slot]')
+            : null;
+        return slot ? (slot.getAttribute('data-drop-slot') || 'value') : 'value';
+    }
+
     function rowLabelEl(row) {
         return row ? row.querySelector('.import-map-expr-label') : null;
     }
 
     function rowSlotEl(row) {
-        return row ? row.querySelector('.import-map-expr-slot') : null;
+        return row
+            ? (row.querySelector('[data-drop-slot="value"]') || row.querySelector('.import-map-expr-slot'))
+            : null;
     }
 
     function parseSelect(row) {
@@ -199,7 +239,7 @@
         return meta ? meta.sample : '—';
     }
 
-    function selectRow(row) {
+    function selectRow(row, slot) {
         if (selectedRow) {
             selectedRow.classList.remove('is-selected');
             selectedRow.setAttribute('aria-selected', 'false');
@@ -208,6 +248,12 @@
         if (selectedRow) {
             selectedRow.classList.add('is-selected');
             selectedRow.setAttribute('aria-selected', 'true');
+            setActiveSlot(selectedRow, slot || 'value');
+        } else {
+            activeSlot = 'value';
+            rows().forEach(function (item) {
+                item.classList.remove('is-bound-slot');
+            });
         }
         if (catalogPanel) {
             catalogPanel.classList.toggle('is-armed', !!selectedRow);
@@ -275,6 +321,37 @@
         if (parse && !parse.classList.contains('import-map-parse--tag')) {
             parse.disabled = isEmpty;
         }
+        syncBoundSlotUi(row);
+    }
+
+    function syncBoundSlotUi(row) {
+        var input = boundInput(row);
+        var slot = boundSlotEl(row);
+        if (!input || !slot) {
+            row.removeAttribute('data-bound-column-index');
+            return;
+        }
+        var index = (input.value || '').trim();
+        var isEmpty = !index;
+        if (isEmpty) {
+            row.removeAttribute('data-bound-column-index');
+        } else {
+            row.setAttribute('data-bound-column-index', index);
+        }
+        slot.classList.toggle('is-empty', isEmpty);
+        slot.setAttribute('draggable', isEmpty ? 'false' : 'true');
+        var kindEl = boundKindSelect(row);
+        var kind = (kindEl && kindEl.value) || 'tolerance';
+        slot.setAttribute('data-placeholder-kind', kind);
+        slot.title = isEmpty
+            ? (kind === 'range'
+                ? 'Перетащите колонку «до» / максимум'
+                : 'Перетащите колонку погрешности ±')
+            : 'Перетащите в другое поле или обратно в каталог';
+        var labelEl = slot.querySelector('.import-map-expr-label');
+        if (labelEl) {
+            labelEl.textContent = isEmpty ? '' : (input.getAttribute('data-label') || columnLabel(index));
+        }
     }
 
     function assignColumn(row, columnIndex, label, sample) {
@@ -301,19 +378,55 @@
         refreshState();
     }
 
-    function clearRowExpression(row) {
-        assignColumn(row, '', '', '—');
+    function assignBoundColumn(row, columnIndex, label) {
+        var input = boundInput(row);
+        if (!input || !rowAcceptsBound(row)) {
+            return;
+        }
+        var index = columnIndex == null || columnIndex === '' ? '' : String(columnIndex);
+        input.value = index;
+        if (!index) {
+            input.removeAttribute('data-label');
+        } else {
+            input.setAttribute('data-label', label || columnLabel(index));
+        }
+        syncBoundSlotUi(row);
+        refreshState();
     }
 
-    function canAssignColumn(row, columnIndex, options) {
+    function clearBoundColumn(row) {
+        assignBoundColumn(row, '', '');
+    }
+
+    function clearRowExpression(row) {
+        assignColumn(row, '', '', '—');
+        clearBoundColumn(row);
+    }
+
+    function rowUsesColumn(row, columnIndex) {
+        var needle = String(columnIndex);
+        var valueInput = columnInput(row);
+        var bound = boundInput(row);
+        return (valueInput && String(valueInput.value) === needle)
+            || (bound && String(bound.value) === needle);
+    }
+
+    function canAssignToSlot(row, slot, columnIndex, options) {
         options = options || {};
         if (columnIndex == null || columnIndex === '') {
             return true;
         }
+        if (slot === 'bound' && !rowAcceptsBound(row)) {
+            return false;
+        }
         var needle = String(columnIndex);
-        var input = columnInput(row);
-        if (input && String(input.value) === needle) {
+        var current = slot === 'bound' ? boundInput(row) : columnInput(row);
+        if (current && String(current.value) === needle) {
             return true;
+        }
+        var otherSlot = slot === 'bound' ? columnInput(row) : boundInput(row);
+        if (otherSlot && String(otherSlot.value) === needle) {
+            return false;
         }
         var ignoreField = options.ignoreFieldTarget;
         return !rows().some(function (other) {
@@ -326,8 +439,12 @@
             if (ignoreField && other.getAttribute('data-field-target') === ignoreField) {
                 return false;
             }
-            return other.getAttribute('data-column-index') === needle;
+            return rowUsesColumn(other, needle);
         });
+    }
+
+    function canAssignColumn(row, columnIndex, options) {
+        return canAssignToSlot(row, 'value', columnIndex, options);
     }
 
     function syncHiddenInputs() {
@@ -336,7 +453,13 @@
         }
         var byIndex = {};
         fileColumns.forEach(function (col) {
-            byIndex[String(col.index)] = { target: SKIP, parse: 'auto' };
+            byIndex[String(col.index)] = {
+                target: SKIP,
+                parse: 'auto',
+                boundColumn: '',
+                boundKind: 'tolerance',
+                boundLabel: '',
+            };
         });
         rows().forEach(function (row) {
             if (isTagRow(row)) {
@@ -348,19 +471,36 @@
             if (!target || !input || !input.value) {
                 return;
             }
+            var bound = boundInput(row);
+            var kindEl = boundKindSelect(row);
             byIndex[String(input.value)] = {
                 target: target,
                 parse: (parse && parse.value) || 'auto',
+                boundColumn: (bound && bound.value) || '',
+                boundKind: (kindEl && kindEl.value) || 'tolerance',
+                boundLabel: (bound && bound.getAttribute('data-label')) || '',
             };
         });
         Object.keys(byIndex).forEach(function (index) {
             var mapInput = hiddenBox.querySelector('[data-map-index="' + index + '"]');
             var parseInput = hiddenBox.querySelector('[data-parse-index="' + index + '"]');
+            var boundHidden = hiddenBox.querySelector('[data-bound-index="' + index + '"]');
+            var boundKindHidden = hiddenBox.querySelector('[data-bound-kind-index="' + index + '"]');
+            var boundLabelHidden = hiddenBox.querySelector('[data-bound-label-index="' + index + '"]');
             if (mapInput) {
                 mapInput.value = byIndex[index].target;
             }
             if (parseInput) {
                 parseInput.value = byIndex[index].parse;
+            }
+            if (boundHidden) {
+                boundHidden.value = byIndex[index].boundColumn || '';
+            }
+            if (boundKindHidden) {
+                boundKindHidden.value = byIndex[index].boundKind || 'tolerance';
+            }
+            if (boundLabelHidden) {
+                boundLabelHidden.value = byIndex[index].boundLabel || '';
             }
         });
 
@@ -391,6 +531,10 @@
             if (index) {
                 used[String(index)] = row;
             }
+            var boundIndex = row.getAttribute('data-bound-column-index');
+            if (boundIndex) {
+                used[String(boundIndex)] = row;
+            }
         });
         catalogItems().forEach(function (btn) {
             var index = btn.getAttribute('data-column-index');
@@ -402,8 +546,8 @@
             btn.disabled = false;
             btn.setAttribute('draggable', isUsed ? 'false' : 'true');
             btn.title = isUsed
-                ? 'Уже в поле — клик выделит; можно также перетащить в «Теги»'
-                : 'Клик или перетащите в «Колонка файла»';
+                ? 'Уже в поле — клик выделит; можно также перетащить в «Теги» или в «Погрешность»'
+                : 'Клик или перетащите в «Колонка файла» / «Погрешность»';
         });
     }
 
@@ -443,14 +587,18 @@
         }
     }
 
-    function rowAllowsDrop(row, payload) {
+    function rowAllowsDrop(row, payload, slot) {
         if (!row || !payload || payload.columnIndex == null || payload.columnIndex === '') {
             return false;
         }
         if (isTagRow(row)) {
             return canAssignTagColumn(payload.columnIndex, { ignoreTagRow: row });
         }
-        return canAssignColumn(row, payload.columnIndex, {
+        var destSlot = slot || 'value';
+        if (destSlot === 'bound' && !rowAcceptsBound(row)) {
+            return false;
+        }
+        return canAssignToSlot(row, destSlot, payload.columnIndex, {
             ignoreFieldTarget: payload.source === 'row' ? payload.fieldTarget : null,
         });
     }
@@ -465,8 +613,9 @@
         return payload.source === 'row' ? 'move' : 'copy';
     }
 
-    function writeRowDragPayload(event, row) {
-        var input = columnInput(row);
+    function writeRowDragPayload(event, row, slot) {
+        slot = slot || 'value';
+        var input = slot === 'bound' ? boundInput(row) : columnInput(row);
         if (!input || !input.value) {
             event.preventDefault();
             return false;
@@ -474,12 +623,13 @@
         event.stopPropagation();
         writeDragPayload(event, {
             source: 'row',
+            slot: slot,
             fieldTarget: row.getAttribute('data-field-target'),
             columnIndex: input.value,
             label: input.getAttribute('data-label') || columnLabel(input.value),
             sample: input.getAttribute('data-sample') || columnSample(input.value),
         });
-        selectRow(row);
+        selectRow(row, slot);
         return true;
     }
 
@@ -510,8 +660,9 @@
         }, 0);
     }
 
-    function setSlotDropState(row, payload) {
-        var slot = rowSlotEl(row);
+    function setSlotDropState(row, payload, destSlot) {
+        destSlot = destSlot || 'value';
+        var slot = destSlot === 'bound' ? boundSlotEl(row) : rowSlotEl(row);
         if (!slot || !payload || payload.columnIndex == null || payload.columnIndex === '') {
             return;
         }
@@ -519,14 +670,11 @@
             payload.source === 'row'
             && payload.fieldTarget
             && payload.fieldTarget === row.getAttribute('data-field-target')
+            && (payload.slot || 'value') === destSlot
         ) {
             return;
         }
-        var allowed = isTagRow(row)
-            ? canAssignTagColumn(payload.columnIndex, { ignoreTagRow: row })
-            : canAssignColumn(row, payload.columnIndex, {
-                ignoreFieldTarget: payload.source === 'row' ? payload.fieldTarget : null,
-            });
+        var allowed = rowAllowsDrop(row, payload, destSlot);
         slot.classList.toggle('is-drop-hover', allowed);
         slot.classList.toggle('is-drop-blocked', !allowed);
         row.classList.toggle('is-drop-over', true);
@@ -537,13 +685,34 @@
         if (!row || columnIndex == null || columnIndex === '') {
             return;
         }
-        selectRow(row);
+        var slot = options.slot || 'value';
+        selectRow(row, slot);
+        if (slot === 'bound') {
+            var bound = boundInput(row);
+            if (!options.fromDrag && bound && String(bound.value) === String(columnIndex)) {
+                clearBoundColumn(row);
+                return;
+            }
+            if (!canAssignToSlot(row, 'bound', columnIndex, {
+                ignoreFieldTarget: options.clearSourceRow
+                    ? options.clearSourceRow.getAttribute('data-field-target')
+                    : null,
+            })) {
+                return;
+            }
+            var boundOwner = findRowByColumnIndex(columnIndex);
+            if (boundOwner && boundOwner !== row) {
+                clearColumnFromRow(boundOwner, columnIndex);
+            }
+            assignBoundColumn(row, columnIndex, label);
+            return;
+        }
         var input = columnInput(row);
         if (!options.fromDrag && input && String(input.value) === String(columnIndex)) {
             if (isTagRow(row)) {
                 removeFieldRow(row);
             } else {
-                clearRowExpression(row);
+                assignColumn(row, '', '', '—');
             }
             return;
         }
@@ -558,7 +727,7 @@
             assignColumn(row, columnIndex, label, sample);
             return;
         }
-        if (!canAssignColumn(row, columnIndex, {
+        if (!canAssignToSlot(row, 'value', columnIndex, {
             ignoreFieldTarget: options.clearSourceRow
                 ? options.clearSourceRow.getAttribute('data-field-target')
                 : null,
@@ -567,23 +736,43 @@
         }
         var owner = findRowByColumnIndex(columnIndex);
         if (owner && owner !== row) {
-            if (isTagRow(owner)) {
-                removeFieldRow(owner);
-            } else {
-                clearRowExpression(owner);
-            }
+            clearColumnFromRow(owner, columnIndex);
         }
         assignColumn(row, columnIndex, label, sample);
     }
 
-    function dropPayloadOnRow(row, payload) {
+    function clearColumnFromRow(row, columnIndex) {
+        var needle = String(columnIndex);
+        if (isTagRow(row)) {
+            var tagInput = columnInput(row);
+            if (tagInput && String(tagInput.value) === needle) {
+                removeFieldRow(row);
+            }
+            return;
+        }
+        var valueInput = columnInput(row);
+        if (valueInput && String(valueInput.value) === needle) {
+            assignColumn(row, '', '', '—');
+        }
+        var bound = boundInput(row);
+        if (bound && String(bound.value) === needle) {
+            clearBoundColumn(row);
+        }
+    }
+
+    function dropPayloadOnRow(row, payload, destSlot) {
         if (!row || !payload || payload.columnIndex == null || payload.columnIndex === '') {
             return;
+        }
+        destSlot = destSlot || payload.destSlot || 'value';
+        if (destSlot === 'bound' && !rowAcceptsBound(row)) {
+            destSlot = 'value';
         }
         var sourceRow = payload.source === 'row' && payload.fieldTarget
             ? findRowByTarget(payload.fieldTarget)
             : null;
-        if (sourceRow === row) {
+        var sourceSlot = payload.slot || 'value';
+        if (sourceRow === row && sourceSlot === destSlot) {
             return;
         }
         if (isTagRow(row)) {
@@ -593,33 +782,48 @@
             assignColumn(row, payload.columnIndex, payload.label, payload.sample);
             if (sourceRow && isTagRow(sourceRow) && sourceRow !== row) {
                 removeFieldRow(sourceRow);
+            } else if (sourceRow && sourceSlot === 'bound') {
+                clearBoundColumn(sourceRow);
+            } else if (sourceRow && sourceRow !== row) {
+                assignColumn(sourceRow, '', '', '—');
             }
             selectRow(row);
             return;
         }
-        if (sourceRow) {
-            if (!canAssignColumn(row, payload.columnIndex, {
+        if (sourceRow && sourceRow !== row) {
+            if (!canAssignToSlot(row, destSlot, payload.columnIndex, {
                 ignoreFieldTarget: payload.fieldTarget,
             })) {
                 return;
             }
-            var destInput = columnInput(row);
+            var destInput = destSlot === 'bound' ? boundInput(row) : columnInput(row);
             var destIndex = destInput ? destInput.value : '';
             var destLabel = destInput ? (destInput.getAttribute('data-label') || '') : '';
             var destSample = destInput ? (destInput.getAttribute('data-sample') || '') : '';
-            assignColumn(row, payload.columnIndex, payload.label, payload.sample);
+            if (destSlot === 'bound') {
+                assignBoundColumn(row, payload.columnIndex, payload.label);
+            } else {
+                assignColumn(row, payload.columnIndex, payload.label, payload.sample);
+            }
             if (destIndex) {
-                assignColumn(sourceRow, destIndex, destLabel, destSample);
+                if (sourceSlot === 'bound') {
+                    assignBoundColumn(sourceRow, destIndex, destLabel);
+                } else {
+                    assignColumn(sourceRow, destIndex, destLabel, destSample);
+                }
             } else if (isTagRow(sourceRow)) {
                 removeFieldRow(sourceRow);
+            } else if (sourceSlot === 'bound') {
+                clearBoundColumn(sourceRow);
             } else {
-                clearRowExpression(sourceRow);
+                assignColumn(sourceRow, '', '', '—');
             }
-            selectRow(row);
+            selectRow(row, destSlot);
             return;
         }
         applyColumnToRow(row, payload.columnIndex, payload.label, payload.sample, {
             fromDrag: true,
+            slot: destSlot,
         });
     }
 
@@ -628,10 +832,20 @@
             return;
         }
         var sourceRow = findRowByTarget(payload.fieldTarget);
-        if (sourceRow) {
-            clearRowExpression(sourceRow);
-            selectRow(sourceRow);
+        if (!sourceRow) {
+            return;
         }
+        if (payload.slot === 'bound') {
+            clearBoundColumn(sourceRow);
+            selectRow(sourceRow, 'bound');
+            return;
+        }
+        if (isTagRow(sourceRow)) {
+            removeFieldRow(sourceRow);
+            return;
+        }
+        assignColumn(sourceRow, '', '', '—');
+        selectRow(sourceRow);
     }
 
     function refreshRequiredHighlight() {
@@ -670,19 +884,17 @@
 
         var colOwners = {};
         var duplicates = [];
-        rows().forEach(function (row) {
-            row.classList.remove('is-duplicate');
-            var input = columnInput(row);
-            if (!input || !input.value) {
+        function noteOwner(row, idx, label) {
+            if (!idx) {
                 return;
             }
-            var idx = String(input.value);
+            idx = String(idx);
             if (colOwners[idx]) {
                 var ownerRow = colOwners[idx];
                 var fieldAndTagPair = isTagRow(ownerRow) !== isTagRow(row);
                 if (!fieldAndTagPair) {
                     duplicates.push({
-                        column: input.getAttribute('data-label') || columnLabel(idx),
+                        column: label || columnLabel(idx),
                         targets: [
                             ownerRow.getAttribute('data-field-label') || '',
                             row.getAttribute('data-field-label') || '',
@@ -693,6 +905,17 @@
                 }
             } else {
                 colOwners[idx] = row;
+            }
+        }
+        rows().forEach(function (row) {
+            row.classList.remove('is-duplicate');
+            var input = columnInput(row);
+            if (input && input.value) {
+                noteOwner(row, input.value, input.getAttribute('data-label'));
+            }
+            var bound = boundInput(row);
+            if (bound && bound.value) {
+                noteOwner(row, bound.value, bound.getAttribute('data-label'));
             }
         });
 
@@ -705,7 +928,20 @@
             }).join('');
         }
 
-        form.querySelectorAll('.import-map-continue').forEach(function (button) {
+        var duplicateBox = document.getElementById('import-duplicate-targets');
+        var duplicateList = document.getElementById('import-duplicate-list');
+        if (duplicateBox && duplicateList) {
+            duplicateBox.classList.toggle('d-none', duplicates.length === 0);
+            duplicateList.innerHTML = duplicates.map(function (item) {
+                return '<li>'
+                    + escapeHtml(item.column || '')
+                    + ': '
+                    + escapeHtml((item.targets || []).join(', '))
+                    + '</li>';
+            }).join('');
+        }
+
+        continueButtons().forEach(function (button) {
             button.disabled = duplicates.length > 0 || missingRequired.length > 0;
         });
 
@@ -876,6 +1112,25 @@
         addFieldBtn.disabled = visible === 0;
     }
 
+    function boundCellHtml(acceptsBound, fieldLabel) {
+        if (!acceptsBound) {
+            return '<td class="import-map-row__bound import-map-row__bound--na">'
+                + '<span class="text-muted" aria-hidden="true">—</span></td>';
+        }
+        return ''
+            + '<td class="import-map-row__bound"><div class="import-map-bound">'
+            + '<select class="form-select form-select-sm import-map-bound-kind" aria-label="Тип погрешности для '
+            + escapeAttr(fieldLabel) + '">'
+            + '<option value="tolerance" selected>±</option>'
+            + '<option value="range">Диапазон</option>'
+            + '</select>'
+            + '<span class="import-map-expr-slot is-empty" data-drop-slot="bound" data-placeholder-kind="tolerance" draggable="false"'
+            + ' title="Перетащите колонку погрешности или «до»">'
+            + '<span class="import-map-expr-label"></span></span>'
+            + '<input type="hidden" class="import-map-bound-value" value="">'
+            + '</div></td>';
+    }
+
     function addFieldRow(target, label, options) {
         options = options || {};
         if (findRowByTarget(target)) {
@@ -888,6 +1143,7 @@
             return null;
         }
         collectParseModes();
+        var acceptsBound = options.acceptsBound === true || options.acceptsBound === 1 || options.acceptsBound === '1';
         var tr = document.createElement('tr');
         tr.className = 'import-map-row is-unmapped';
         tr.setAttribute('data-import-map-row', '');
@@ -895,6 +1151,7 @@
         tr.setAttribute('data-field-label', label);
         tr.setAttribute('data-is-primary', isPrimary ? '1' : '0');
         tr.setAttribute('data-map-section-kind', section);
+        tr.setAttribute('data-accepts-bound', acceptsBound ? '1' : '0');
         tr.setAttribute('data-is-required', required.indexOf(target) !== -1 ? '1' : '0');
         tr.tabIndex = 0;
         tr.setAttribute('role', 'option');
@@ -908,11 +1165,12 @@
             + '<div class="import-map-row__sample import-map-row__sample-live">—</div>'
             + '</td>'
             + '<td class="import-map-row__expr">'
-            + '<span class="import-map-expr-slot is-empty" data-drop-slot draggable="false"'
+            + '<span class="import-map-expr-slot is-empty" data-drop-slot="value" draggable="false"'
             + ' title="Перетащите колонку сюда или выберите строку и кликните колонку справа">'
             + '<span class="import-map-expr-label"></span></span>'
             + '<input type="hidden" class="import-map-column-value" value="">'
             + '</td>'
+            + boundCellHtml(acceptsBound, label)
             + '<td class="import-map-row__parse">'
             + '<select class="form-select form-select-sm import-map-parse" disabled aria-label="Тип поля для '
             + escapeAttr(label) + '">' + parseOptionsHtml('auto') + '</select>'
@@ -965,6 +1223,7 @@
         tr.setAttribute('data-mapping-target', TARGET_TAGS);
         tr.setAttribute('data-field-label', label || columnLabel(index));
         tr.setAttribute('data-map-section-kind', 'tag');
+        tr.setAttribute('data-accepts-bound', '0');
         tr.setAttribute('data-is-primary', '0');
         tr.setAttribute('data-is-required', '0');
         tr.tabIndex = 0;
@@ -978,11 +1237,12 @@
             + '<div class="import-map-row__sample import-map-row__sample-live">—</div>'
             + '</td>'
             + '<td class="import-map-row__expr">'
-            + '<span class="import-map-expr-slot is-empty" data-drop-slot draggable="false"'
+            + '<span class="import-map-expr-slot is-empty" data-drop-slot="value" draggable="false"'
             + ' title="Перетащите колонку сюда или выберите строку и кликните колонку справа">'
             + '<span class="import-map-expr-label"></span></span>'
             + '<input type="hidden" class="import-map-column-value" value="">'
             + '</td>'
+            + boundCellHtml(false, label || columnLabel(index))
             + '<td class="import-map-row__parse import-map-row__parse--tag">'
             + '<span class="text-muted" aria-hidden="true">—</span>'
             + '</td>'
@@ -1033,7 +1293,10 @@
             var index = btn.getAttribute('data-column-index');
             var owner = findRowByColumnIndex(index, { preferNonTag: true });
             if (owner && btn.classList.contains('is-locate-only')) {
-                selectRow(owner);
+                var locateSlot = owner.getAttribute('data-bound-column-index') === String(index)
+                    ? 'bound'
+                    : 'value';
+                selectRow(owner, locateSlot);
                 owner.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                 return;
             }
@@ -1059,7 +1322,10 @@
                 selectedRow,
                 index,
                 btn.getAttribute('data-label'),
-                btn.getAttribute('data-sample')
+                btn.getAttribute('data-sample'),
+                {
+                    slot: (activeSlot === 'bound' && rowAcceptsBound(selectedRow)) ? 'bound' : 'value',
+                }
             );
         });
 
@@ -1087,7 +1353,8 @@
             if (event.target.closest('select, button, a, input, label')) {
                 return;
             }
-            selectRow(row);
+            var dest = slotOfEvent(event);
+            selectRow(row, dest === 'bound' ? 'bound' : 'value');
         });
         row.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -1109,6 +1376,17 @@
             });
         }
 
+        var kindSelect = boundKindSelect(row);
+        if (kindSelect) {
+            kindSelect.addEventListener('change', function () {
+                syncBoundSlotUi(row);
+                refreshState();
+            });
+            kindSelect.addEventListener('focus', function () {
+                selectRow(row, 'bound');
+            });
+        }
+
         var removeBtn = row.querySelector('.import-map-remove-field');
         if (removeBtn) {
             removeBtn.addEventListener('click', function (event) {
@@ -1121,7 +1399,7 @@
         var slot = rowSlotEl(row);
         if (slot) {
             slot.addEventListener('dragstart', function (event) {
-                if (!writeRowDragPayload(event, row)) {
+                if (!writeRowDragPayload(event, row, 'value')) {
                     return;
                 }
                 slot.classList.add('is-dragging');
@@ -1131,10 +1409,23 @@
             });
         }
 
+        var boundSlot = boundSlotEl(row);
+        if (boundSlot) {
+            boundSlot.addEventListener('dragstart', function (event) {
+                if (!writeRowDragPayload(event, row, 'bound')) {
+                    return;
+                }
+                boundSlot.classList.add('is-dragging');
+            });
+            boundSlot.addEventListener('dragend', function () {
+                endDrag(boundSlot);
+            });
+        }
+
         var sampleDrag = row.querySelector('.import-map-row__sample');
         if (sampleDrag) {
             sampleDrag.addEventListener('dragstart', function (event) {
-                if (!writeRowDragPayload(event, row)) {
+                if (!writeRowDragPayload(event, row, 'value')) {
                     return;
                 }
                 sampleDrag.classList.add('is-dragging');
@@ -1144,7 +1435,7 @@
             });
         }
 
-        var dropZones = [row, slot].filter(Boolean);
+        var dropZones = [row, slot, boundSlot].filter(Boolean);
         dropZones.forEach(function (zone) {
             zone.addEventListener('dragenter', function (event) {
                 if (!readDragPayload(event) && !dragPayload) {
@@ -1157,23 +1448,32 @@
                 if (!payload || payload.columnIndex == null || payload.columnIndex === '') {
                     return;
                 }
+                var destSlot = slotOfEvent(event);
+                if (destSlot !== 'bound') {
+                    destSlot = 'value';
+                }
                 if (
                     payload.source === 'row'
                     && payload.fieldTarget === row.getAttribute('data-field-target')
+                    && (payload.slot || 'value') === destSlot
                 ) {
                     return;
                 }
                 event.preventDefault();
-                var allowed = rowAllowsDrop(row, payload);
+                var allowed = rowAllowsDrop(row, payload, destSlot);
                 event.dataTransfer.dropEffect = dropEffectFor(row, payload, allowed);
                 clearDropHover();
-                setSlotDropState(row, payload);
+                setSlotDropState(row, payload, destSlot);
             });
             zone.addEventListener('dragleave', function (event) {
                 if (!row.contains(event.relatedTarget)) {
                     var currentSlot = rowSlotEl(row);
                     if (currentSlot) {
                         currentSlot.classList.remove('is-drop-hover', 'is-drop-blocked');
+                    }
+                    var currentBound = boundSlotEl(row);
+                    if (currentBound) {
+                        currentBound.classList.remove('is-drop-hover', 'is-drop-blocked');
                     }
                     row.classList.remove('is-drop-over');
                 }
@@ -1185,8 +1485,12 @@
                 }
                 event.preventDefault();
                 event.stopPropagation();
+                var destSlot = slotOfEvent(event);
+                if (destSlot !== 'bound') {
+                    destSlot = 'value';
+                }
                 clearDropHover();
-                dropPayloadOnRow(row, payload);
+                dropPayloadOnRow(row, payload, destSlot);
             });
         });
     }
@@ -1322,7 +1626,15 @@
             return;
         }
         event.preventDefault();
-        clearRowExpression(selectedRow);
+        if (
+            activeSlot === 'bound'
+            && boundInput(selectedRow)
+            && boundInput(selectedRow).value
+        ) {
+            clearBoundColumn(selectedRow);
+        } else {
+            clearRowExpression(selectedRow);
+        }
     });
 
     if (resetAllBtn) {
@@ -1394,7 +1706,10 @@
                     addFieldRow(
                         TARGET_PROPERTY_PREFIX + payload.property_id,
                         label,
-                        { section: 'property' }
+                        {
+                            section: 'property',
+                            acceptsBound: payload.data_type === 'number',
+                        }
                     );
                 });
             },

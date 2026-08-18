@@ -33,7 +33,7 @@ Table names **must** start with `structures_`, snake_case latin, max 100 chars, 
 3. **Manage type** — `/structures/types/<code>/` — color, fields, create/drop SQL table; **delete draft** (`type_delete`) when `is_created=False`
 4. **Materials list** — `/structures/<code>/` — materials matrix for this type **owned by the active workspace only** (no shared/published materials from other spaces); name, code, structure fields; wrapping headers with units; horizontal scroll with sticky name/code; click a column header to sort asc/desc (empty cells last); search/filter like materials (tags, description, dictionaries) even when those columns are hidden; CTA **«Создать материал»** → `materials:create?struct_type=…`; code/name link to `materials:detail`
 5. **Migrate** — `/structures/migrate/` (superuser) — move all materials from source type to target with interactive field mapping; identical field names auto-mapped; optional delete source type+table after success (`migrate_service.py`)
-6. **Diagnostics** — `/structures/diagnostics/` (superuser) — normalization checks for material↔SQL links, columns, orphans, shared rows (`diagnostics.py`)
+6. **Diagnostics** — `/structures/diagnostics/` (superuser) — normalization checks; **«Что делать»** guidance; confirmable repair buttons (table/column/row fixes) where safe (`diagnostics.py`, `diagnostics_repairs.py`)
 
 SQL row create/edit remains available for admin/manage flows; detail of a SQL row still shows linked materials. Page bookmarks (header «В закладки») cover the current URL; entity toggles on structure pages were removed.
 

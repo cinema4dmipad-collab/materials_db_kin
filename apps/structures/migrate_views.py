@@ -244,41 +244,6 @@ class StructureNormalizationDiagnosticsView(SystemAdminRequiredMixin, AppViewMix
         )
 
     def post(self, request):
-        action = (request.POST.get('action') or '').strip()
-        if action == 'rename_column':
-            return self._repair_rename_column(request)
-        messages.error(request, 'Неизвестное действие диагностики.')
-        return redirect('structures:diagnostics')
+        from apps.structures.diagnostics_repairs import execute_repair
 
-    def _repair_rename_column(self, request):
-        code = (request.POST.get('structure_code') or '').strip()
-        old_name = (request.POST.get('old_name') or '').strip()
-        new_name = (request.POST.get('new_name') or '').strip()
-        st = StructureType.objects.filter(code=code).first()
-        if st is None:
-            messages.error(request, f'Тип структуры «{code}» не найден.')
-            return redirect('structures:diagnostics')
-        if not st.fields.filter(name=new_name).exists():
-            messages.error(
-                request,
-                f'В метаданных «{st.name}» нет поля «{new_name}» — переименование отменено.',
-            )
-            return redirect('structures:diagnostics')
-        if st.fields.filter(name=old_name).exists():
-            messages.error(
-                request,
-                f'В метаданных ещё есть поле «{old_name}» — сначала уберите конфликт имён.',
-            )
-            return redirect('structures:diagnostics')
-
-        result = SQLExecutor.rename_column(st, old_name, new_name)
-        if not result.get('success'):
-            messages.error(request, result.get('error') or 'Не удалось переименовать колонку.')
-            return redirect('structures:diagnostics')
-
-        renamed = ', '.join(result.get('renamed') or [])
-        messages.success(
-            request,
-            f'«{st.name}»: колонки переименованы ({renamed}).',
-        )
-        return redirect('structures:diagnostics')
+        return execute_repair(request)

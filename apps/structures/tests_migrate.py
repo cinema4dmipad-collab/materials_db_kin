@@ -259,6 +259,40 @@ class StructureMigrateViewsTests(TransactionTestCase):
         response = self.client.get(reverse('structures:diagnostics'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Диагностика нормализации')
+        self.assertContains(response, 'Как пользоваться')
+        self.assertContains(response, 'Что делать')
+
+    def test_diagnostics_issues_include_remediation_and_repair(self):
+        material = Material.objects.get(code='MAT-UI-MIG')
+        import uuid
+
+        material.struct_props_id = uuid.uuid4()
+        material.save(update_fields=['struct_props_id'])
+        issues = run_structure_normalization_diagnostics()
+        orphan = next(i for i in issues if i.code == 'orphan_struct_props_id')
+        self.assertIn('сохраните форму', orphan.remediation.lower())
+        self.assertEqual(orphan.repair.get('action'), 'create_material_structure_row')
+        self.assertEqual(orphan.repair.get('material_code'), 'MAT-UI-MIG')
+
+    def test_diagnostics_repair_creates_material_structure_row(self):
+        material = Material.objects.get(code='MAT-UI-MIG')
+        import uuid
+
+        bad_id = uuid.uuid4()
+        material.struct_props_id = bad_id
+        material.save(update_fields=['struct_props_id'])
+        response = self.client.post(
+            reverse('structures:diagnostics'),
+            {
+                'action': 'create_material_structure_row',
+                'material_code': material.code,
+                'structure_code': self.source.code,
+            },
+        )
+        self.assertRedirects(response, reverse('structures:diagnostics'))
+        material.refresh_from_db()
+        self.assertNotEqual(material.struct_props_id, bad_id)
+        self.assertIsNotNone(get_row(self.source, material.struct_props_id))
 
     def test_diagnostics_finds_orphan_props_id(self):
         material = Material.objects.get(code='MAT-UI-MIG')
