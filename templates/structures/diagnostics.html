@@ -1,9 +1,14 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Диагностика нормализации — структуры{% endblock %}
 
+{% block extra_head %}
+<link href="{% static 'css/structures_diagnostics.css' %}?v={{ app_version }}-diag1" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="card mb-4">
+<div class="card mb-4 struct-diagnostics-page">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h1 class="h4 mb-0">Диагностика нормализации структур</h1>
@@ -17,70 +22,122 @@
         </div>
     </div>
     <div class="card-body">
-        <div class="alert alert-light border mb-3 small">
-            <p class="mb-2 fw-semibold">Как пользоваться</p>
-            <ol class="mb-2 ps-3">
-                <li>Страница показывает расхождения между метаданными типов, SQL-таблицами и карточками материалов.</li>
-                <li>В колонке <strong>«Что делать»</strong> — пояснение; в <strong>«Исправление»</strong> — кнопка, если есть автоматическое действие.</li>
-                <li>Каждое исправление запрашивает подтверждение в модальном окне — можно отменить.</li>
-                <li>После правки обновите страницу: список пересчитается.</li>
-            </ol>
-            <p class="mb-0 text-muted">
-                Не все проблемы чинятся автоматически (например, отсутствие свойства в справочнике).
-                Опасные действия (удаление колонок и строк) помечены красной кнопкой.
-            </p>
-        </div>
+        <section class="struct-diagnostics-guide" aria-labelledby="struct-diagnostics-guide-title">
+            <div class="struct-diagnostics-guide__title" id="struct-diagnostics-guide-title">
+                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                Как пользоваться
+            </div>
+            <div class="struct-diagnostics-guide__grid">
+                <ol class="struct-diagnostics-guide__steps mb-0">
+                    <li>Страница показывает расхождения между метаданными типов, SQL-таблицами и карточками материалов.</li>
+                    <li>В колонке <strong>«Что делать»</strong> — пояснение; в <strong>«Исправление»</strong> — кнопка, если есть автоматическое действие.</li>
+                    <li>Каждое исправление запрашивает подтверждение в модальном окне — можно отменить.</li>
+                    <li>После правки обновите страницу: список пересчитается.</li>
+                </ol>
+                <p class="struct-diagnostics-guide__note mb-0">
+                    Не все проблемы чинятся автоматически (например, отсутствие свойства в справочнике).
+                    Опасные действия (удаление колонок и строк) помечены красной кнопкой.
+                </p>
+            </div>
+        </section>
 
-        <div class="d-flex flex-wrap gap-3 mb-3">
-            <span class="badge text-bg-danger">Ошибки: {{ summary.errors }}</span>
-            <span class="badge text-bg-warning text-dark">Предупреждения: {{ summary.warnings }}</span>
-            <span class="badge text-bg-secondary">Инфо: {{ summary.info }}</span>
-        </div>
+        <section class="struct-diagnostics-summary" aria-label="Сводка по уровням">
+            <article class="struct-diagnostics-stat struct-diagnostics-stat--error">
+                <span class="struct-diagnostics-stat__icon" aria-hidden="true"><i class="bi bi-x-circle"></i></span>
+                <span class="struct-diagnostics-stat__body">
+                    <span class="struct-diagnostics-stat__value">{{ summary.errors }}</span>
+                    <span class="struct-diagnostics-stat__label">Ошибки</span>
+                </span>
+            </article>
+            <article class="struct-diagnostics-stat struct-diagnostics-stat--warning">
+                <span class="struct-diagnostics-stat__icon" aria-hidden="true"><i class="bi bi-exclamation-triangle"></i></span>
+                <span class="struct-diagnostics-stat__body">
+                    <span class="struct-diagnostics-stat__value">{{ summary.warnings }}</span>
+                    <span class="struct-diagnostics-stat__label">Предупреждения</span>
+                </span>
+            </article>
+            <article class="struct-diagnostics-stat struct-diagnostics-stat--info">
+                <span class="struct-diagnostics-stat__icon" aria-hidden="true"><i class="bi bi-info-lg"></i></span>
+                <span class="struct-diagnostics-stat__body">
+                    <span class="struct-diagnostics-stat__value">{{ summary.info }}</span>
+                    <span class="struct-diagnostics-stat__label">Информация</span>
+                </span>
+            </article>
+        </section>
 
         {% if issues %}
-        <div class="table-responsive">
-            <table class="table table-sm table-striped align-middle mb-0 app-data-table">
-                <thead>
-                    <tr>
-                        <th>Уровень</th>
-                        <th>Проблема</th>
-                        <th>Детали</th>
-                        <th>Что делать</th>
-                        <th>Тип / материал</th>
-                        <th class="text-end">Исправление</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for issue in issues %}
-                    <tr>
-                        <td>
-                            {% if issue.severity == 'error' %}
-                            <span class="badge text-bg-danger">ошибка</span>
-                            {% elif issue.severity == 'warning' %}
-                            <span class="badge text-bg-warning text-dark">внимание</span>
-                            {% else %}
-                            <span class="badge text-bg-secondary">инфо</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ issue.title }}</td>
-                        <td>{{ issue.detail }}</td>
-                        <td class="small">{{ issue.remediation|safe }}</td>
-                        <td class="small">
-                            {% if issue.structure_code %}
-                            <a href="{% url 'structures:type_manage' issue.structure_code %}"><code>{{ issue.structure_code }}</code></a>
-                            {% endif %}
-                            {% if issue.material_code %} · {{ issue.material_code }}{% endif %}
-                        </td>
-                        <td class="text-end">
-                            {% include 'structures/includes/diagnostics_repair_form.html' with issue=issue %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="struct-diagnostics-table-wrap">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle struct-diagnostics-table">
+                    <colgroup>
+                        <col class="struct-diagnostics-col--level">
+                        <col class="struct-diagnostics-col--title">
+                        <col class="struct-diagnostics-col--detail">
+                        <col class="struct-diagnostics-col--remediation">
+                        <col class="struct-diagnostics-col--context">
+                        <col class="struct-diagnostics-col--action">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col">Уровень</th>
+                            <th scope="col">Проблема</th>
+                            <th scope="col">Детали</th>
+                            <th scope="col">Что делать</th>
+                            <th scope="col">Тип / материал</th>
+                            <th scope="col" class="text-end">Исправление</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for issue in issues %}
+                        <tr class="struct-diagnostics-row struct-diagnostics-row--{{ issue.severity }}">
+                            <td>
+                                {% if issue.severity == 'error' %}
+                                <span class="badge text-bg-danger struct-diagnostics-severity">ошибка</span>
+                                {% elif issue.severity == 'warning' %}
+                                <span class="badge text-bg-warning text-dark struct-diagnostics-severity">внимание</span>
+                                {% else %}
+                                <span class="badge text-bg-secondary struct-diagnostics-severity">инфо</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="struct-diagnostics-title">{{ issue.title }}</div>
+                            </td>
+                            <td>
+                                <div class="struct-diagnostics-detail">{{ issue.detail }}</div>
+                            </td>
+                            <td>
+                                <div class="struct-diagnostics-remediation">{{ issue.remediation|safe }}</div>
+                            </td>
+                            <td>
+                                <div class="struct-diagnostics-context">
+                                    {% if issue.structure_code %}
+                                    <a href="{% url 'structures:type_manage' issue.structure_code %}"><code>{{ issue.structure_code }}</code></a>
+                                    {% endif %}
+                                    {% if issue.material_code %}
+                                    <span class="struct-diagnostics-context__material">{{ issue.material_code }}</span>
+                                    {% endif %}
+                                    {% if not issue.structure_code and not issue.material_code %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="struct-diagnostics-action">
+                                {% include 'structures/includes/diagnostics_repair_form.html' with issue=issue %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
         {% else %}
-        <div class="alert alert-success mb-0">Проблем не найдено.</div>
+        <div class="struct-diagnostics-empty" role="status">
+            <span class="struct-diagnostics-empty__icon" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+            <h2 class="struct-diagnostics-empty__title">Проблем не найдено</h2>
+            <p class="struct-diagnostics-empty__text">
+                Связи типов структур, SQL-таблиц и материалов согласованы. При изменении схемы обновите страницу.
+            </p>
+        </div>
         {% endif %}
     </div>
 </div>

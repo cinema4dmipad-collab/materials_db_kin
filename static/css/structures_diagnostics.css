@@ -1,0 +1,368 @@
+/* Structure normalization diagnostics page */
+
+.struct-diagnostics-page .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+}
+
+.struct-diagnostics-guide {
+    background: linear-gradient(135deg, rgba(0, 118, 121, 0.07) 0%, rgba(0, 118, 121, 0.02) 55%, #fff 100%);
+    border: 1px solid rgba(0, 118, 121, 0.22);
+    border-left: 4px solid var(--kx-brand, #007679);
+    border-radius: 0.65rem;
+    padding: 1rem 1.15rem;
+}
+
+.struct-diagnostics-guide__title {
+    align-items: center;
+    color: var(--kx-brand-dark, #005a5c);
+    display: flex;
+    font-size: 0.92rem;
+    font-weight: 700;
+    gap: 0.45rem;
+    margin-bottom: 0.65rem;
+}
+
+.struct-diagnostics-guide__title .bi {
+    color: var(--kx-brand, #007679);
+    font-size: 1rem;
+}
+
+.struct-diagnostics-guide__grid {
+    display: grid;
+    gap: 0.85rem 1.25rem;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+}
+
+.struct-diagnostics-guide__steps {
+    color: var(--kx-text, #1f2937);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    margin: 0;
+    padding-left: 1.15rem;
+}
+
+.struct-diagnostics-guide__steps li + li {
+    margin-top: 0.35rem;
+}
+
+.struct-diagnostics-guide__note {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px dashed var(--kx-border-strong, #c9d2d2);
+    border-radius: 0.5rem;
+    color: var(--kx-text-muted, #667085);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    margin: 0;
+    padding: 0.65rem 0.75rem;
+}
+
+.struct-diagnostics-summary {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.struct-diagnostics-stat {
+    align-items: center;
+    background: var(--kx-surface, #fff);
+    border: 1px solid var(--kx-border, #e4e7ec);
+    border-radius: 0.6rem;
+    display: flex;
+    gap: 0.75rem;
+    min-height: 4.25rem;
+    padding: 0.75rem 0.95rem;
+}
+
+.struct-diagnostics-stat__icon {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 1rem;
+    height: 2.35rem;
+    justify-content: center;
+    width: 2.35rem;
+}
+
+.struct-diagnostics-stat__body {
+    min-width: 0;
+}
+
+.struct-diagnostics-stat__value {
+    color: var(--kx-text, #111);
+    display: block;
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.struct-diagnostics-stat__label {
+    color: var(--kx-text-muted, #667085);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.25;
+    margin-top: 0.12rem;
+    text-transform: uppercase;
+}
+
+.struct-diagnostics-stat--error {
+    border-color: rgba(220, 53, 69, 0.28);
+}
+
+.struct-diagnostics-stat--error .struct-diagnostics-stat__icon {
+    background: rgba(220, 53, 69, 0.12);
+    color: #b42318;
+}
+
+.struct-diagnostics-stat--warning {
+    border-color: rgba(255, 193, 7, 0.45);
+}
+
+.struct-diagnostics-stat--warning .struct-diagnostics-stat__icon {
+    background: rgba(255, 193, 7, 0.18);
+    color: #b7791f;
+}
+
+.struct-diagnostics-stat--info {
+    border-color: rgba(108, 117, 125, 0.28);
+}
+
+.struct-diagnostics-stat--info .struct-diagnostics-stat__icon {
+    background: rgba(108, 117, 125, 0.12);
+    color: #475467;
+}
+
+.struct-diagnostics-table-wrap {
+    background: var(--kx-surface, #fff);
+    border: 1px solid var(--kx-border, #e4e7ec);
+    border-radius: 0.65rem;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    overflow: hidden;
+}
+
+.struct-diagnostics-table {
+    --bs-table-bg: transparent;
+    --bs-table-striped-bg: rgba(244, 247, 247, 0.65);
+    --bs-table-hover-bg: rgba(0, 118, 121, 0.05);
+    margin-bottom: 0;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.struct-diagnostics-table thead th {
+    background: var(--kx-surface-muted, #f4f7f7);
+    border-bottom: 1px solid var(--kx-border, #e4e7ec);
+    color: var(--kx-text-muted, #667085);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.7rem 0.85rem;
+    text-transform: uppercase;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.struct-diagnostics-table tbody td {
+    border-bottom: 1px solid var(--kx-border, #eef0f3);
+    padding: 0.8rem 0.85rem;
+    vertical-align: top;
+}
+
+.struct-diagnostics-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.struct-diagnostics-row {
+    position: relative;
+}
+
+.struct-diagnostics-row::before {
+    background: transparent;
+    bottom: 0;
+    content: '';
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 3px;
+}
+
+.struct-diagnostics-row--error::before {
+    background: #dc3545;
+}
+
+.struct-diagnostics-row--warning::before {
+    background: #ffc107;
+}
+
+.struct-diagnostics-row--info::before {
+    background: #6c757d;
+}
+
+.struct-diagnostics-col--level {
+    width: 6.75rem;
+}
+
+.struct-diagnostics-col--title {
+    width: 14%;
+}
+
+.struct-diagnostics-col--detail {
+    width: 20%;
+}
+
+.struct-diagnostics-col--remediation {
+    width: 28%;
+}
+
+.struct-diagnostics-col--context {
+    width: 14%;
+}
+
+.struct-diagnostics-col--action {
+    width: 10.5rem;
+}
+
+.struct-diagnostics-severity {
+    display: inline-flex;
+    justify-content: center;
+    min-width: 5.5rem;
+    text-transform: lowercase;
+}
+
+.struct-diagnostics-title {
+    color: var(--kx-text, #111);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.struct-diagnostics-detail {
+    color: var(--kx-text-muted, #475467);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.struct-diagnostics-remediation {
+    background: rgba(0, 118, 121, 0.05);
+    border: 1px solid rgba(0, 118, 121, 0.12);
+    border-radius: 0.45rem;
+    color: var(--kx-text, #344054);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    padding: 0.45rem 0.55rem;
+    word-break: break-word;
+}
+
+.struct-diagnostics-remediation code {
+    font-size: 0.92em;
+}
+
+.struct-diagnostics-context {
+    color: var(--kx-text-muted, #667085);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.struct-diagnostics-context code {
+    font-size: 0.92em;
+}
+
+.struct-diagnostics-context__material {
+    color: var(--kx-text, #344054);
+    display: block;
+    margin-top: 0.15rem;
+}
+
+.struct-diagnostics-action {
+    text-align: right;
+    vertical-align: middle !important;
+}
+
+.struct-diagnostics-action__empty {
+    color: var(--kx-text-subtle, #98a2b3);
+    display: inline-block;
+    font-size: 0.875rem;
+    min-width: 1rem;
+    text-align: center;
+}
+
+.struct-diagnostics-repair-form {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0;
+}
+
+.struct-diagnostics-repair-btn {
+    max-width: 100%;
+    min-width: 7.5rem;
+    white-space: normal;
+}
+
+.struct-diagnostics-empty {
+    align-items: center;
+    background: linear-gradient(180deg, rgba(25, 135, 84, 0.08), rgba(25, 135, 84, 0.02));
+    border: 1px solid rgba(25, 135, 84, 0.22);
+    border-radius: 0.65rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 2rem 1.25rem;
+    text-align: center;
+}
+
+.struct-diagnostics-empty__icon {
+    align-items: center;
+    background: rgba(25, 135, 84, 0.14);
+    border-radius: 999px;
+    color: #198754;
+    display: inline-flex;
+    font-size: 1.35rem;
+    height: 3rem;
+    justify-content: center;
+    margin-bottom: 0.35rem;
+    width: 3rem;
+}
+
+.struct-diagnostics-empty__title {
+    color: #0b6b45;
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.struct-diagnostics-empty__text {
+    color: var(--kx-text-muted, #667085);
+    font-size: 0.8125rem;
+    margin: 0;
+    max-width: 28rem;
+}
+
+@media (max-width: 991.98px) {
+    .struct-diagnostics-guide__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .struct-diagnostics-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .struct-diagnostics-table {
+        table-layout: auto;
+    }
+
+    .struct-diagnostics-table-wrap .table-responsive {
+        overflow-x: auto;
+    }
+
+    .struct-diagnostics-table {
+        min-width: 52rem;
+    }
+}

@@ -1,6 +1,6 @@
 {% if issue.repair.action %}
 <form method="post"
-      class="d-inline diagnostics-repair-form"
+      class="struct-diagnostics-repair-form diagnostics-repair-form"
       data-confirm-delete-form
       data-confirm-title="{{ issue.repair.confirm_title }}"
       data-confirm-message="{{ issue.repair.confirm_message }}"
@@ -28,10 +28,10 @@
     {% if issue.repair.row_id %}
     <input type="hidden" name="row_id" value="{{ issue.repair.row_id }}">
     {% endif %}
-    <button type="submit" class="btn btn-sm {{ issue.repair.submit_class|default:'btn-primary' }}">
+    <button type="submit" class="btn btn-sm struct-diagnostics-repair-btn {{ issue.repair.submit_class|default:'btn-primary' }}">
         {{ issue.repair.submit_label }}
     </button>
 </form>
 {% else %}
-<span class="text-muted">—</span>
+<span class="struct-diagnostics-action__empty" aria-hidden="true">—</span>
 {% endif %}
