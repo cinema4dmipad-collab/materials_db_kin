@@ -645,9 +645,9 @@ button.import-map-catalog-item:disabled {
     z-index: 2;
 }
 
-.import-map-table__bound-col {
-    min-width: 8.5rem;
-    width: 9.5rem;
+.import-map-table__mapping-col {
+    min-width: 14rem;
+    width: 55%;
 }
 
 .import-map-table__parse-col {
@@ -655,27 +655,79 @@ button.import-map-catalog-item:disabled {
     width: 7rem;
 }
 
-.import-map-bound {
+.import-map-row__mapping {
+    min-width: 0;
+    vertical-align: middle;
+}
+
+.import-map-mapping {
+    align-items: center;
     display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    min-width: 8rem;
+    flex-wrap: nowrap;
+    gap: 0.4rem 0.55rem;
+    min-width: 0;
+}
+
+.import-map-mapping--value-only {
+    max-width: 100%;
+}
+
+.import-map-mapping__part {
+    align-items: center;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.import-map-mapping__value {
+    flex: 1 1 7rem;
+    min-width: 6.5rem;
+}
+
+.import-map-mapping__bound {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.import-map-mapping__bridge {
+    align-items: center;
+    color: var(--kx-brand, #007679);
+    display: flex;
+    flex: 0 0 auto;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0 0.05rem;
+    user-select: none;
+}
+
+.import-map-mapping__arrow {
+    display: inline-block;
 }
 
 .import-map-bound-kind {
+    flex: 0 0 auto;
     font-size: 0.72rem;
-    max-width: 100%;
+    min-width: 4.75rem;
     padding-bottom: 0.12rem;
     padding-left: 0.3rem;
     padding-right: 1.4rem;
     padding-top: 0.12rem;
+    width: auto;
 }
 
-.import-map-row__bound--na {
-    color: var(--kx-text-muted, #6c757d);
+.import-map-expr-slot--bound {
+    flex: 0 1 7rem;
+    max-width: 11rem;
+    min-width: 5.5rem;
 }
 
-.import-map-row.is-selected.is-bound-slot .import-map-row__bound .import-map-expr-slot {
+.import-map-expr-slot--bound.is-empty {
+    min-width: 5.5rem;
+}
+
+.import-map-row.is-selected.is-bound-slot .import-map-mapping__bound .import-map-expr-slot {
     background: #fff;
     border-color: var(--kx-brand, #007679);
     border-style: solid;
@@ -683,11 +735,11 @@ button.import-map-catalog-item:disabled {
 }
 
 .import-map-expr-slot[data-drop-slot="bound"].is-empty .import-map-expr-label:empty::before {
-    content: '↘ колонка ±';
+    content: 'колонка ±';
 }
 
 .import-map-expr-slot[data-drop-slot="bound"][data-placeholder-kind="range"].is-empty .import-map-expr-label:empty::before {
-    content: '↘ колонка «до»';
+    content: 'колонка «до»';
 }
 
 .import-map-parse {
@@ -751,7 +803,7 @@ button.import-map-catalog-item:disabled {
 
 .import-map-expr-slot.is-empty .import-map-expr-label:empty::before {
     color: var(--kx-brand, #007679);
-    content: '↘ перетащите колонку сюда';
+    content: 'колонка значения';
     font-size: 0.72rem;
     font-weight: 600;
     font-style: normal;
@@ -851,6 +903,16 @@ button.import-map-catalog-item:disabled {
 
     .import-map-catalog {
         order: -1;
+    }
+
+    .import-map-mapping {
+        flex-wrap: wrap;
+    }
+
+    .import-map-mapping__bridge {
+        flex-basis: 100%;
+        justify-content: center;
+        padding: 0.1rem 0;
     }
 }
 

@@ -23,42 +23,45 @@
         <div class="import-map-row__sample import-map-row__sample-live"
              title="{% if item.is_tag %}{{ item.tag_preview }}{% else %}{{ item.sample }}{% endif %}">{% if item.is_tag %}{{ item.tag_preview }}{% else %}{{ item.sample }}{% endif %}</div>
     </td>
-    <td class="import-map-row__expr">
-        <span class="import-map-expr-slot{% if not item.column %} is-empty{% endif %}"
-              data-drop-slot="value"
-              {% if item.column %}draggable="true"{% endif %}
-              title="{% if not item.column %}Перетащите колонку сюда или выберите строку и кликните колонку справа{% else %}Перетащите в другое поле или обратно в каталог{% endif %}">
-            <span class="import-map-expr-label">{% if item.column %}{{ item.column.display }}{% endif %}</span>
-        </span>
-        <input type="hidden"
-               class="import-map-column-value"
-               value="{% if item.column_index != None %}{{ item.column_index }}{% endif %}"
-               data-label="{% if item.column %}{{ item.column.display|escape }}{% endif %}"
-               data-sample="{{ item.sample|escape }}">
-    </td>
-    <td class="import-map-row__bound{% if not item.accepts_bound %} import-map-row__bound--na{% endif %}">
-        {% if item.accepts_bound %}
-        <div class="import-map-bound">
-            <select class="form-select form-select-sm import-map-bound-kind"
-                    aria-label="Тип погрешности для {{ item.target_label }}">
-                <option value="tolerance"{% if item.bound_kind != 'range' %} selected{% endif %}>±</option>
-                <option value="range"{% if item.bound_kind == 'range' %} selected{% endif %}>Диапазон</option>
-            </select>
-            <span class="import-map-expr-slot{% if not item.bound_column %} is-empty{% endif %}"
-                  data-drop-slot="bound"
-                  data-placeholder-kind="{{ item.bound_kind|default:'tolerance' }}"
-                  {% if item.bound_column %}draggable="true"{% endif %}
-                  title="{% if not item.bound_column %}Перетащите колонку погрешности или «до»{% else %}Перетащите в другое поле или обратно в каталог{% endif %}">
-                <span class="import-map-expr-label">{% if item.bound_column %}{{ item.bound_column.display }}{% endif %}</span>
-            </span>
-            <input type="hidden"
-                   class="import-map-bound-value"
-                   value="{% if item.bound_column_index != None %}{{ item.bound_column_index }}{% endif %}"
-                   data-label="{% if item.bound_column %}{{ item.bound_column.display|escape }}{% endif %}">
+    <td class="import-map-row__mapping">
+        <div class="import-map-mapping{% if not item.accepts_bound %} import-map-mapping--value-only{% endif %}">
+            <div class="import-map-mapping__part import-map-mapping__value">
+                <span class="import-map-expr-slot{% if not item.column %} is-empty{% endif %}"
+                      data-drop-slot="value"
+                      {% if item.column %}draggable="true"{% endif %}
+                      title="{% if not item.column %}Перетащите колонку сюда или выберите строку и кликните колонку справа{% else %}Перетащите в другое поле или обратно в каталог{% endif %}">
+                    <span class="import-map-expr-label">{% if item.column %}{{ item.column.display }}{% endif %}</span>
+                </span>
+                <input type="hidden"
+                       class="import-map-column-value"
+                       value="{% if item.column_index != None %}{{ item.column_index }}{% endif %}"
+                       data-label="{% if item.column %}{{ item.column.display|escape }}{% endif %}"
+                       data-sample="{{ item.sample|escape }}">
+            </div>
+            {% if item.accepts_bound %}
+            <div class="import-map-mapping__bridge" aria-hidden="true">
+                <span class="import-map-mapping__arrow">→</span>
+            </div>
+            <div class="import-map-mapping__part import-map-mapping__bound">
+                <select class="form-select form-select-sm import-map-bound-kind"
+                        aria-label="Тип погрешности для {{ item.target_label }}">
+                    <option value="tolerance"{% if item.bound_kind != 'range' %} selected{% endif %}>±</option>
+                    <option value="range"{% if item.bound_kind == 'range' %} selected{% endif %}>Диапазон</option>
+                </select>
+                <span class="import-map-expr-slot import-map-expr-slot--bound{% if not item.bound_column %} is-empty{% endif %}"
+                      data-drop-slot="bound"
+                      data-placeholder-kind="{{ item.bound_kind|default:'tolerance' }}"
+                      {% if item.bound_column %}draggable="true"{% endif %}
+                      title="{% if not item.bound_column %}Перетащите колонку погрешности или «до»{% else %}Перетащите в другое поле или обратно в каталог{% endif %}">
+                    <span class="import-map-expr-label">{% if item.bound_column %}{{ item.bound_column.display }}{% endif %}</span>
+                </span>
+                <input type="hidden"
+                       class="import-map-bound-value"
+                       value="{% if item.bound_column_index != None %}{{ item.bound_column_index }}{% endif %}"
+                       data-label="{% if item.bound_column %}{{ item.bound_column.display|escape }}{% endif %}">
+            </div>
+            {% endif %}
         </div>
-        {% else %}
-        <span class="text-muted" aria-hidden="true">—</span>
-        {% endif %}
     </td>
     <td class="import-map-row__parse{% if item.is_tag %} import-map-row__parse--tag{% endif %}">
         {% if item.is_tag %}
@@ -72,7 +75,8 @@
             {% endfor %}
         </select>
         {% endif %}
-    </td>    <td class="import-map-row__actions">
+    </td>
+    <td class="import-map-row__actions">
         {% if item.is_addon %}
         <button type="button"
                 class="btn btn-link btn-sm text-danger import-map-remove-field p-0"

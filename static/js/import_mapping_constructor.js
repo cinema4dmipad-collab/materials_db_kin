@@ -1112,22 +1112,35 @@
         addFieldBtn.disabled = visible === 0;
     }
 
-    function boundCellHtml(acceptsBound, fieldLabel) {
-        if (!acceptsBound) {
-            return '<td class="import-map-row__bound import-map-row__bound--na">'
-                + '<span class="text-muted" aria-hidden="true">—</span></td>';
+    function mappingCellHtml(acceptsBound, fieldLabel) {
+        var boundPart = '';
+        if (acceptsBound) {
+            boundPart = ''
+                + '<div class="import-map-mapping__bridge" aria-hidden="true">'
+                + '<span class="import-map-mapping__arrow">→</span></div>'
+                + '<div class="import-map-mapping__part import-map-mapping__bound">'
+                + '<select class="form-select form-select-sm import-map-bound-kind" aria-label="Тип погрешности для '
+                + escapeAttr(fieldLabel) + '">'
+                + '<option value="tolerance" selected>±</option>'
+                + '<option value="range">Диапазон</option>'
+                + '</select>'
+                + '<span class="import-map-expr-slot import-map-expr-slot--bound is-empty" data-drop-slot="bound"'
+                + ' data-placeholder-kind="tolerance" draggable="false"'
+                + ' title="Перетащите колонку погрешности или «до»">'
+                + '<span class="import-map-expr-label"></span></span>'
+                + '<input type="hidden" class="import-map-bound-value" value="">'
+                + '</div>';
         }
         return ''
-            + '<td class="import-map-row__bound"><div class="import-map-bound">'
-            + '<select class="form-select form-select-sm import-map-bound-kind" aria-label="Тип погрешности для '
-            + escapeAttr(fieldLabel) + '">'
-            + '<option value="tolerance" selected>±</option>'
-            + '<option value="range">Диапазон</option>'
-            + '</select>'
-            + '<span class="import-map-expr-slot is-empty" data-drop-slot="bound" data-placeholder-kind="tolerance" draggable="false"'
-            + ' title="Перетащите колонку погрешности или «до»">'
+            + '<td class="import-map-row__mapping">'
+            + '<div class="import-map-mapping' + (acceptsBound ? '' : ' import-map-mapping--value-only') + '">'
+            + '<div class="import-map-mapping__part import-map-mapping__value">'
+            + '<span class="import-map-expr-slot is-empty" data-drop-slot="value" draggable="false"'
+            + ' title="Перетащите колонку сюда или выберите строку и кликните колонку справа">'
             + '<span class="import-map-expr-label"></span></span>'
-            + '<input type="hidden" class="import-map-bound-value" value="">'
+            + '<input type="hidden" class="import-map-column-value" value="">'
+            + '</div>'
+            + boundPart
             + '</div></td>';
     }
 
@@ -1164,13 +1177,7 @@
             + '</div>'
             + '<div class="import-map-row__sample import-map-row__sample-live">—</div>'
             + '</td>'
-            + '<td class="import-map-row__expr">'
-            + '<span class="import-map-expr-slot is-empty" data-drop-slot="value" draggable="false"'
-            + ' title="Перетащите колонку сюда или выберите строку и кликните колонку справа">'
-            + '<span class="import-map-expr-label"></span></span>'
-            + '<input type="hidden" class="import-map-column-value" value="">'
-            + '</td>'
-            + boundCellHtml(acceptsBound, label)
+            + mappingCellHtml(acceptsBound, label)
             + '<td class="import-map-row__parse">'
             + '<select class="form-select form-select-sm import-map-parse" disabled aria-label="Тип поля для '
             + escapeAttr(label) + '">' + parseOptionsHtml('auto') + '</select>'
@@ -1236,13 +1243,7 @@
             + '</div>'
             + '<div class="import-map-row__sample import-map-row__sample-live">—</div>'
             + '</td>'
-            + '<td class="import-map-row__expr">'
-            + '<span class="import-map-expr-slot is-empty" data-drop-slot="value" draggable="false"'
-            + ' title="Перетащите колонку сюда или выберите строку и кликните колонку справа">'
-            + '<span class="import-map-expr-label"></span></span>'
-            + '<input type="hidden" class="import-map-column-value" value="">'
-            + '</td>'
-            + boundCellHtml(false, label || columnLabel(index))
+            + mappingCellHtml(false, label || columnLabel(index))
             + '<td class="import-map-row__parse import-map-row__parse--tag">'
             + '<span class="text-muted" aria-hidden="true">—</span>'
             + '</td>'

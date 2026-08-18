@@ -4,7 +4,7 @@
 {% block title %}{{ import_page_title|default:"Импорт материалов" }} — База композитов{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-tags6" rel="stylesheet">
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-map-layout1" rel="stylesheet">
 <link href="{% static 'css/reference_properties_picker.css' %}?v={{ app_version }}" rel="stylesheet">
 {% endblock %}
 
@@ -449,7 +449,7 @@
                     <div class="import-map-panel__head">
                         <div>
                             <div class="import-map-panel__title">Поля для записи</div>
-                            <p class="import-map-panel__hint mb-0">Сюда кладутся колонки из файла →</p>
+                            <p class="import-map-panel__hint mb-0">Значение → погрешность (если есть) — колонки из файла справа</p>
                         </div>
                         <div class="import-map-constructor__toolbar">
                             <button type="button" class="btn btn-outline-secondary btn-sm" id="import-map-clear-row">
@@ -465,8 +465,7 @@
                             <thead>
                                 <tr>
                                     <th scope="col">Поле</th>
-                                    <th scope="col">Колонка файла</th>
-                                    <th scope="col" class="import-map-table__bound-col">Погрешность</th>
+                                    <th scope="col" class="import-map-table__mapping-col">Сопоставление колонок</th>
                                     <th scope="col" class="import-map-table__parse-col">Тип поля</th>
                                     <th scope="col" class="import-map-table__actions-col"></th>
                                 </tr>
@@ -475,7 +474,7 @@
                                    data-map-section="primary"
                                    id="import-map-section-primary">
                                 <tr class="import-map-section__header">
-                                    <th scope="colgroup" colspan="5">
+                                    <th scope="colgroup" colspan="4">
                                         <button type="button"
                                                 class="import-map-section__toggle"
                                                 data-map-section-toggle
@@ -498,7 +497,7 @@
                                    data-map-section="material"
                                    id="import-map-section-material">
                                 <tr class="import-map-section__header">
-                                    <th scope="colgroup" colspan="5">
+                                    <th scope="colgroup" colspan="4">
                                         <div class="import-map-section__bar">
                                             <button type="button"
                                                     class="import-map-section__toggle"
@@ -564,7 +563,7 @@
                                 {% endfor %}
                                 <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_material %} d-none{% endif %}{% endfor %}"
                                     data-map-section-empty>
-                                    <td colspan="5" class="text-muted small">
+                                    <td colspan="4" class="text-muted small">
                                         Нет дополнительных полей — нажмите «{{ addon_field_label|default:"Поле материала" }}».
                                     </td>
                                 </tr>
@@ -573,7 +572,7 @@
                                    data-map-section="addon"
                                    id="import-map-section-addon">
                                 <tr class="import-map-section__header">
-                                    <th scope="colgroup" colspan="5">
+                                    <th scope="colgroup" colspan="4">
                                         <div class="import-map-section__bar">
                                             <button type="button"
                                                     class="import-map-section__toggle"
@@ -600,7 +599,7 @@
                                 {% endfor %}
                                 <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_property %} d-none{% endif %}{% endfor %}"
                                     data-map-section-empty>
-                                    <td colspan="5" class="text-muted small">
+                                    <td colspan="4" class="text-muted small">
                                         Нет дополнительных свойств — нажмите «Добавить свойство».
                                     </td>
                                 </tr>
@@ -609,7 +608,7 @@
                                    data-map-section="tag"
                                    id="import-map-section-tag">
                                 <tr class="import-map-section__header">
-                                    <th scope="colgroup" colspan="5">
+                                    <th scope="colgroup" colspan="4">
                                         <button type="button"
                                                 class="import-map-section__toggle"
                                                 data-map-section-toggle
@@ -629,7 +628,7 @@
                                 {% endfor %}
                                 <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_tag %} d-none{% endif %}{% endfor %}"
                                     data-map-section-empty>
-                                    <td colspan="5" class="text-muted small">
+                                    <td colspan="4" class="text-muted small">
                                         Перетащите колонки из каталога или значение/колонку из полей выше.
                                     </td>
                                 </tr>
@@ -953,7 +952,7 @@
 {% endif %}
 {% if step == 'mapping' %}
 <script src="{% static 'js/reference_properties_picker.js' %}?v={{ app_version }}"></script>
-<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map24"></script>
+<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map25"></script>
 {% endif %}
 {% if step == 'review' %}
 <script src="{% static 'js/import_fix_grid.js' %}?v={{ app_version }}-fixgrid13"></script>
