@@ -416,6 +416,15 @@
         input.setAttribute('data-initial-value', input.value);
     });
 
+    grid.querySelectorAll('[data-fix-cell]').forEach(function (cell) {
+        var inputName = cell.getAttribute('data-input-name') || '';
+        var valueInput = hiddenValue(inputName);
+        if (valueInput && String(valueInput.value || '').trim()) {
+            setCellDisplay(cell, valueInput.value);
+        }
+        applyCellResolution(cell);
+    });
+
     grid.querySelectorAll('[data-fix-cell].is-unrecognized').forEach(function (cell) {
         cell.setAttribute('data-was-unrecognized', '1');
     });

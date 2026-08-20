@@ -16,7 +16,10 @@
                 Выбрать
             </button>
             {% endif %}
-            <a href="{% url 'samples:import' %}" class="btn btn-outline-primary btn-sm">Импорт</a>
+            <a href="{% url 'samples:import' %}" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                {% include 'includes/icon_import.html' with extra_class="app-icon-import app-icon-import--btn" %}
+                Импорт
+            </a>
             <a href="{% url 'samples:create' %}" class="btn btn-primary btn-sm">Создать</a>
         </div>
     </div>

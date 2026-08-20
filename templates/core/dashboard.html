@@ -18,7 +18,10 @@
     </div>
     <div class="dashboard-header__actions d-flex flex-wrap gap-2">
         {% include 'materials/includes/create_material_split_button.html' with label='Создать материал' %}
-        <a href="{% url 'materials:import' %}" class="btn btn-outline-primary btn-sm">Импорт</a>
+        <a href="{% url 'materials:import' %}" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+            {% include 'includes/icon_import.html' with extra_class="app-icon-import app-icon-import--btn" %}
+            Импорт
+        </a>
         <a href="{% url 'samples:create' %}" class="btn btn-outline-secondary btn-sm">Создать образец</a>
     </div>
 </div>

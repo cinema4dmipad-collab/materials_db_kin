@@ -1113,11 +1113,10 @@
     }
 
     function mappingCellHtml(acceptsBound, fieldLabel) {
-        var boundPart = '';
+        var boundCell = '';
         if (acceptsBound) {
-            boundPart = ''
-                + '<div class="import-map-mapping__bridge" aria-hidden="true">'
-                + '<span class="import-map-mapping__arrow">→</span></div>'
+            boundCell = ''
+                + '<td class="import-map-row__mapping-bound">'
                 + '<div class="import-map-mapping__part import-map-mapping__bound">'
                 + '<select class="form-select form-select-sm import-map-bound-kind" aria-label="Тип погрешности для '
                 + escapeAttr(fieldLabel) + '">'
@@ -1129,19 +1128,22 @@
                 + ' title="Перетащите колонку погрешности или «до»">'
                 + '<span class="import-map-expr-label"></span></span>'
                 + '<input type="hidden" class="import-map-bound-value" value="">'
-                + '</div>';
+                + '</div></td>';
+        } else {
+            boundCell = ''
+                + '<td class="import-map-row__mapping-bound">'
+                + '<span class="text-muted import-map-row__mapping-bound-empty" aria-hidden="true">—</span>'
+                + '</td>';
         }
         return ''
-            + '<td class="import-map-row__mapping">'
-            + '<div class="import-map-mapping' + (acceptsBound ? '' : ' import-map-mapping--value-only') + '">'
+            + '<td class="import-map-row__mapping-value">'
             + '<div class="import-map-mapping__part import-map-mapping__value">'
             + '<span class="import-map-expr-slot is-empty" data-drop-slot="value" draggable="false"'
             + ' title="Перетащите колонку сюда или выберите строку и кликните колонку справа">'
             + '<span class="import-map-expr-label"></span></span>'
             + '<input type="hidden" class="import-map-column-value" value="">'
-            + '</div>'
-            + boundPart
-            + '</div></td>';
+            + '</div></td>'
+            + boundCell;
     }
 
     function addFieldRow(target, label, options) {

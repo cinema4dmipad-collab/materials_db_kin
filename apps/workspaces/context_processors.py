@@ -38,7 +38,7 @@ def workspace_navigation(request):
     main_nav_items = [
         {
             'label': 'Материалы',
-            'icon': 'bi-box-seam',
+            'icon_include': 'includes/icon_materials.html',
             'url': reverse('materials:list'),
             'visible': can(WorkspacePerm.MATERIAL_VIEW),
             'is_active': lambda n, u: n == 'materials' and u != 'import' and u not in (
@@ -48,7 +48,7 @@ def workspace_navigation(request):
         },
         {
             'label': 'Импорт',
-            'icon': 'bi-upload',
+            'icon_include': 'includes/icon_import.html',
             'url': reverse('materials:import'),
             'visible': can(WorkspacePerm.MATERIAL_CREATE),
             'is_active': lambda n, u: n == 'materials' and u in ('import', 'import_example'),
@@ -86,7 +86,7 @@ def workspace_navigation(request):
         },
         {
             'label': 'Структуры',
-            'icon': 'bi-diagram-3',
+            'icon_include': 'includes/icon_structures.html',
             'url': reverse('structures:select_type'),
             'visible': can(WorkspacePerm.STRUCTURE_VIEW),
             'is_active': lambda n, u: n == 'structures',
@@ -100,7 +100,7 @@ def workspace_navigation(request):
         },
         {
             'label': 'Сканы',
-            'icon': 'bi-hdd-stack',
+            'icon_include': 'includes/icon_scans.html',
             'url': reverse('scans_all'),
             'visible': can(WorkspacePerm.SCAN_VIEW),
             'is_active': lambda n, u: u == 'scans_all' or n == 'scans',

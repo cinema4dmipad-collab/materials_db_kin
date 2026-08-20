@@ -1917,7 +1917,9 @@ class MaterialImportUITests(TestCase):
         self.assertContains(response, 'Поля для записи')
         self.assertContains(response, 'Колонки файла')
         self.assertContains(response, 'Сопоставление колонок')
-        self.assertContains(response, 'import-map-mapping')
+        self.assertContains(response, 'import-map-table__mapping-subcol">Погрешность</th>')
+        self.assertContains(response, 'import-map-table__mapping-subcol">Значение</th>')
+        self.assertContains(response, 'import-map-row__mapping-bound')
         self.assertContains(response, 'import-map-bound-kind')
         self.assertContains(response, 'Тип поля')
         self.assertContains(response, 'import-map-expr-slot')
@@ -2101,6 +2103,114 @@ class MaterialImportUITests(TestCase):
         row = get_row(self.structure_type, material.struct_props_id)
         self.assertEqual(str(row[self.density_field.name]).rstrip('0').rstrip('.'), '260')
         self.assertTrue(material.tags.filter(name='марка::Е-стекло').exists())
+
+    def test_map_preview_preserves_bound_column_in_draft(self):
+        csv_body = (
+            'Наименование,Плотность,Погрешность\n'
+            'Ткань A,300,20\n'
+        ).encode('utf-8')
+        uploaded = SimpleUploadedFile(
+            'density_tolerance.csv',
+            csv_body,
+            content_type='text/csv',
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse('materials:import'),
+                {'action': 'upload', 'file': uploaded},
+            ).status_code,
+            302,
+        )
+        self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'configure',
+                'sheet': 'CSV',
+                'header_row': '1',
+                'group_row': '',
+                'match_policy': MATCH_BY_NAME,
+                'structure_type_id': str(self.structure_type.pk),
+            },
+        )
+        prop_target = f'property:{self.density.pk}'
+        preview = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'match_policy': MATCH_BY_NAME,
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': prop_target,
+                'parse_1': 'auto',
+                'bound_1': '2',
+                'bound_kind_1': 'tolerance',
+                'map_2': TARGET_SKIP,
+                'parse_2': 'auto',
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, 'Черновик')
+        config = get_import_config(self.client.session)
+        self.assertEqual(config['mapping']['1']['bound_column'], 2)
+        self.assertEqual(config['mapping']['1']['bound_kind'], 'tolerance')
+        drafts = drafts_from_session(config.get('draft'))
+        self.assertEqual(len(drafts), 1)
+        prop = drafts[0].properties[0]
+        self.assertEqual(prop.value_kind, 'tolerance')
+        self.assertEqual(prop.value, '300')
+        self.assertEqual(prop.value_b, '20')
+        self.assertContains(preview, '300±20')
+
+    def test_map_preview_shows_structure_tolerance_in_review_grid(self):
+        csv_body = (
+            'Наименование,Плотность,Погрешность\n'
+            'Ткань A,300,20\n'
+        ).encode('utf-8')
+        uploaded = SimpleUploadedFile(
+            'structure_tolerance.csv',
+            csv_body,
+            content_type='text/csv',
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse('materials:import'),
+                {'action': 'upload', 'file': uploaded},
+            ).status_code,
+            302,
+        )
+        self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'configure',
+                'sheet': 'CSV',
+                'header_row': '1',
+                'group_row': '',
+                'match_policy': MATCH_BY_NAME,
+                'structure_type_id': str(self.structure_type.pk),
+            },
+        )
+        struct_target = f'structure:{self.density_field.name}'
+        preview = self.client.post(
+            reverse('materials:import'),
+            {
+                'action': 'map_preview',
+                'match_policy': MATCH_BY_NAME,
+                'map_0': 'material.name',
+                'parse_0': 'auto',
+                'map_1': struct_target,
+                'parse_1': 'auto',
+                'bound_1': '2',
+                'bound_kind_1': 'tolerance',
+                'map_2': TARGET_SKIP,
+                'parse_2': 'auto',
+            },
+        )
+        self.assertEqual(preview.status_code, 200)
+        drafts = drafts_from_session(get_import_config(self.client.session).get('draft'))
+        struct = drafts[0].structure_values[0]
+        self.assertEqual(struct.value_kind, 'tolerance')
+        self.assertEqual(struct.value_b, '20')
+        self.assertContains(preview, '300±20')
 
     def test_review_apply_persists_edited_material_name(self):
         self._upload_and_configure_wide_sample()

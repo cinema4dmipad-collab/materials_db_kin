@@ -31,6 +31,7 @@ from apps.core.property_number_value import (
     VALUE_KIND_SCALAR,
     VALUE_KIND_TOLERANCE,
     clean_number_property_fields,
+    format_property_number_display,
 )
 from apps.materials.imports.value_parse import (
     CONFIDENCE_OK,
@@ -860,10 +861,20 @@ def _cell_display_value(*, raw: str, value: str, value_b: str, value_kind: str, 
     extra = (value_b or '').strip()
     if not text:
         return ''
-    kind = value_kind or ''
-    if extra and kind == 'range':
+    kind = (value_kind or VALUE_KIND_SCALAR).strip().lower() or VALUE_KIND_SCALAR
+    if extra and kind == VALUE_KIND_SCALAR:
+        kind = VALUE_KIND_TOLERANCE
+    formatted = format_property_number_display(
+        value_kind=kind,
+        value=text,
+        value_b=extra or None,
+        decimal_places=None,
+    )
+    if formatted:
+        return formatted
+    if extra and kind == VALUE_KIND_RANGE:
         return f'{text}–{extra}'
-    if extra and kind == 'tolerance':
+    if extra:
         return f'{text}±{extra}'
     return text
 

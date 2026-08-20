@@ -6,7 +6,7 @@
            class="workspace-sidebar__home-link"
            title="Дашборд"
            aria-label="Дашборд">
-            <i class="bi bi-speedometer2 workspace-sidebar__icon" aria-hidden="true"></i>
+            {% include 'includes/icon_dashboard.html' with extra_class="workspace-sidebar__icon" %}
             <span class="workspace-sidebar__link-text">Дашборд</span>
         </a>
         {% else %}
@@ -36,7 +36,11 @@
                        class="workspace-sidebar__link{% if item.active %} is-active{% endif %}{% if item.is_footer_link %} workspace-sidebar__link--muted{% endif %}"
                        title="{% if item.subtitle %}{{ item.label }} · {{ item.subtitle }}{% else %}{{ item.label }}{% endif %}"
                        aria-label="{{ item.label }}">
+                        {% if item.icon_include %}
+                        {% include item.icon_include with extra_class="workspace-sidebar__icon" %}
+                        {% else %}
                         <i class="{{ item.icon }} workspace-sidebar__icon" aria-hidden="true"></i>
+                        {% endif %}
                         <span class="workspace-sidebar__link-text">{{ item.label }}</span>
                     </a>
                 </li>

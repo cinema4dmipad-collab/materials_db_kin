@@ -67,6 +67,7 @@ from apps.materials.imports.iterate import (
     start_iterate,
 )
 from apps.materials.imports.mapping import (
+    BOUND_KIND_TOLERANCE,
     TARGET_NAME,
     TARGET_PROPERTY_PREFIX,
     TARGET_SKIP,
@@ -74,6 +75,8 @@ from apps.materials.imports.mapping import (
     apply_profile_to_columns,
     build_field_mapping_rows,
     import_templates_for_workspace,
+    mapping_bound_column,
+    mapping_bound_kind,
     mapping_choices,
     mapping_catalog_groups,
     mapping_for_session,
@@ -2561,9 +2564,9 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
         structure_type = self._resolve_structure_type(config)
         table = self._load_table(path, config)
         structure_fields, _ = self._structure_fields_for_config(config)
-        mapping_rows = []
         properties = list(Property.objects.order_by('display_name', 'name'))
         stored = config.get('mapping') or {}
+        mapping: dict = {}
         claimed_targets: set[str] = set()
         for column in table.columns:
             key = str(column.index)
@@ -2581,12 +2584,22 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                     structure_fields=structure_fields,
                     properties=properties,
                 )
+                mapping[key] = {
+                    'target': target,
+                    'parse': parse,
+                    'label': column.display,
+                }
             else:
                 target, parse = normalize_mapping_entry(entry)
+                mapping[key] = dict(entry) if isinstance(entry, dict) else {
+                    'target': target,
+                    'parse': parse,
+                }
+                mapping[key]['target'] = target
+                mapping[key]['parse'] = parse
+                mapping[key].setdefault('label', column.display)
             if not target_allows_multiple_columns(target):
                 claimed_targets.add(target)
-            mapping_rows.append({'column': column, 'target': target, 'parse': parse})
-        mapping = mapping_for_session(mapping_rows)
         drafts = build_staging_draft(
             table,
             mapping,
@@ -2740,6 +2753,8 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                     sample_text = sample_text[:77] + '…'
                 if not sample_text:
                     sample_text = '—'
+            stored_entry = stored.get(key) if stored else None
+            bound_index = mapping_bound_column(stored_entry) if stored_entry else None
             mapping_rows.append({
                 'column': column,
                 'target': target,
@@ -2747,6 +2762,13 @@ class MaterialImportView(AppViewMixin, PermissionRequiredMixin, FormView):
                 'sample': sample_text,
                 'is_required_target': target in required_keys,
                 'target_label': target_labels.get(target, target_labels.get(TARGET_SKIP, '— пропустить —')),
+                'bound_column_index': bound_index,
+                'bound_kind': mapping_bound_kind(stored_entry) if stored_entry else BOUND_KIND_TOLERANCE,
+                'bound_label': (
+                    stored_entry.get('bound_label', '')
+                    if isinstance(stored_entry, dict)
+                    else ''
+                ),
             })
         if not stored:
             stored = mapping_for_session(mapping_rows)

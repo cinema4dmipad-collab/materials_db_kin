@@ -701,6 +701,29 @@
     color: inherit;
 }
 
+.app-icon-import,
+.app-icon-materials,
+.app-icon-structures,
+.app-icon-scans,
+.app-icon-dashboard {
+    display: block;
+    flex: 0 0 auto;
+    height: 1.25rem;
+    width: 1.25rem;
+}
+
+.app-icon-import--btn {
+    height: 1rem;
+    width: 1rem;
+}
+
+.app-icon-import--title {
+    color: var(--kx-brand, #007679);
+    height: 1.35rem;
+    width: 1.35rem;
+}
+
+
 .workspace-sidebar__footer-workspace {
     display: block;
     font-size: 0.8125rem;

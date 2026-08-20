@@ -5,6 +5,7 @@ from django.utils.safestring import mark_safe
 from apps.core.number_utils import format_decimal_display
 from apps.core.property_form_display import property_label_with_unit as format_property_label_with_unit
 from apps.core.creator import get_creator_display
+from apps.materials.imports.staging import _cell_display_value
 
 register = template.Library()
 
@@ -161,3 +162,19 @@ def entity_code_mark_style(color):
 
     result = build_style(color)
     return mark_safe(result) if result else ''
+
+
+@register.filter
+def import_draft_value_display(item):
+    """Число с ±/диапазоном для шага импорта (структура / свойство черновика)."""
+    if not item:
+        return ''
+    if getattr(item, 'recognition', '') == 'unrecognized':
+        return (getattr(item, 'raw', '') or '').strip()
+    return _cell_display_value(
+        raw=getattr(item, 'raw', '') or '',
+        value=getattr(item, 'value', '') or '',
+        value_b=getattr(item, 'value_b', '') or '',
+        value_kind=getattr(item, 'value_kind', '') or '',
+        is_unrecognized=False,
+    )

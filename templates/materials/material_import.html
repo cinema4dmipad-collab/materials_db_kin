@@ -1,17 +1,21 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load ui_tags %}
 
 {% block title %}{{ import_page_title|default:"Импорт материалов" }} — База композитов{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-map-layout1" rel="stylesheet">
+<link href="{% static 'css/import_busy.css' %}?v={{ app_version }}-map-layout2" rel="stylesheet">
 <link href="{% static 'css/reference_properties_picker.css' %}?v={{ app_version }}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
 <div class="card mb-4{% if step == 'mapping' %} import-map-page{% endif %}">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <h1 class="h4 mb-0">{{ import_page_title|default:"Импорт материалов" }}</h1>
+        <h1 class="h4 mb-0 d-flex align-items-center gap-2">
+            {% include 'includes/icon_import.html' with extra_class="app-icon-import app-icon-import--title" %}
+            {{ import_page_title|default:"Импорт материалов" }}
+        </h1>
         <div class="d-flex flex-wrap gap-2">
             {% if has_staged_file %}
             <a href="{{ import_url }}?cancel=1" class="btn btn-outline-danger btn-sm">Отменить импорт</a>
@@ -428,11 +432,11 @@
                        data-map-index="{{ item.column.index }}">
                 <input type="hidden" name="parse_{{ item.column.index }}" value="{{ item.parse }}"
                        data-parse-index="{{ item.column.index }}">
-                <input type="hidden" name="bound_{{ item.column.index }}" value=""
+                <input type="hidden" name="bound_{{ item.column.index }}" value="{% if item.bound_column_index != None %}{{ item.bound_column_index }}{% endif %}"
                        data-bound-index="{{ item.column.index }}">
-                <input type="hidden" name="bound_kind_{{ item.column.index }}" value="tolerance"
+                <input type="hidden" name="bound_kind_{{ item.column.index }}" value="{{ item.bound_kind|default:'tolerance' }}"
                        data-bound-kind-index="{{ item.column.index }}">
-                <input type="hidden" name="bound_label_{{ item.column.index }}" value=""
+                <input type="hidden" name="bound_label_{{ item.column.index }}" value="{{ item.bound_label|default:'' }}"
                        data-bound-label-index="{{ item.column.index }}">
                 {% endfor %}
             </div>
@@ -464,17 +468,21 @@
                         <table class="table table-sm align-middle mb-0 import-map-table">
                             <thead>
                                 <tr>
-                                    <th scope="col">Поле</th>
-                                    <th scope="col" class="import-map-table__mapping-col">Сопоставление колонок</th>
-                                    <th scope="col" class="import-map-table__parse-col">Тип поля</th>
-                                    <th scope="col" class="import-map-table__actions-col"></th>
+                                    <th scope="col" rowspan="2">Поле</th>
+                                    <th scope="colgroup" colspan="2" class="import-map-table__mapping-col">Сопоставление колонок</th>
+                                    <th scope="col" rowspan="2" class="import-map-table__parse-col">Тип поля</th>
+                                    <th scope="col" rowspan="2" class="import-map-table__actions-col"></th>
+                                </tr>
+                                <tr>
+                                    <th scope="col" class="import-map-table__mapping-subcol">Значение</th>
+                                    <th scope="col" class="import-map-table__mapping-subcol">Погрешность</th>
                                 </tr>
                             </thead>
                             <tbody class="import-map-section"
                                    data-map-section="primary"
                                    id="import-map-section-primary">
                                 <tr class="import-map-section__header">
-                                    <th scope="colgroup" colspan="4">
+                                    <th scope="colgroup" colspan="5">
                                         <button type="button"
                                                 class="import-map-section__toggle"
                                                 data-map-section-toggle
@@ -497,7 +505,7 @@
                                    data-map-section="material"
                                    id="import-map-section-material">
                                 <tr class="import-map-section__header">
-                                    <th scope="colgroup" colspan="4">
+                                    <th scope="colgroup" colspan="5">
                                         <div class="import-map-section__bar">
                                             <button type="button"
                                                     class="import-map-section__toggle"
@@ -563,7 +571,7 @@
                                 {% endfor %}
                                 <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_material %} d-none{% endif %}{% endfor %}"
                                     data-map-section-empty>
-                                    <td colspan="4" class="text-muted small">
+                                    <td colspan="5" class="text-muted small">
                                         Нет дополнительных полей — нажмите «{{ addon_field_label|default:"Поле материала" }}».
                                     </td>
                                 </tr>
@@ -572,7 +580,7 @@
                                    data-map-section="addon"
                                    id="import-map-section-addon">
                                 <tr class="import-map-section__header">
-                                    <th scope="colgroup" colspan="4">
+                                    <th scope="colgroup" colspan="5">
                                         <div class="import-map-section__bar">
                                             <button type="button"
                                                     class="import-map-section__toggle"
@@ -599,7 +607,7 @@
                                 {% endfor %}
                                 <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_property %} d-none{% endif %}{% endfor %}"
                                     data-map-section-empty>
-                                    <td colspan="4" class="text-muted small">
+                                    <td colspan="5" class="text-muted small">
                                         Нет дополнительных свойств — нажмите «Добавить свойство».
                                     </td>
                                 </tr>
@@ -608,7 +616,7 @@
                                    data-map-section="tag"
                                    id="import-map-section-tag">
                                 <tr class="import-map-section__header">
-                                    <th scope="colgroup" colspan="4">
+                                    <th scope="colgroup" colspan="5">
                                         <button type="button"
                                                 class="import-map-section__toggle"
                                                 data-map-section-toggle
@@ -628,7 +636,7 @@
                                 {% endfor %}
                                 <tr class="import-map-section__empty{% for item in field_mapping_rows %}{% if item.is_tag %} d-none{% endif %}{% endfor %}"
                                     data-map-section-empty>
-                                    <td colspan="4" class="text-muted small">
+                                    <td colspan="5" class="text-muted small">
                                         Перетащите колонки из каталога или значение/колонку из полей выше.
                                     </td>
                                 </tr>
@@ -783,7 +791,7 @@
                                     {% if struct.note == 'пусто' or not struct.value and not struct.value_b %}
                                     <span class="text-muted fst-italic">пусто</span>
                                     {% else %}
-                                    {{ struct.value }}{% if struct.value_b %} / {{ struct.value_b }}{% endif %}
+                                    {{ struct|import_draft_value_display }}
                                     {% endif %}
                                 </span>
                             </label>
@@ -800,7 +808,7 @@
                                     {% if prop.note == 'пусто' or not prop.value and not prop.value_b %}
                                     <span class="text-muted fst-italic">пусто</span>
                                     {% else %}
-                                    {{ prop.value }}{% if prop.value_b %} / {{ prop.value_b }}{% endif %}
+                                    {{ prop|import_draft_value_display }}
                                     {% endif %}
                                 </span>
                             </label>
@@ -952,9 +960,9 @@
 {% endif %}
 {% if step == 'mapping' %}
 <script src="{% static 'js/reference_properties_picker.js' %}?v={{ app_version }}"></script>
-<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map25"></script>
+<script src="{% static 'js/import_mapping_constructor.js' %}?v={{ app_version }}-map26"></script>
 {% endif %}
 {% if step == 'review' %}
-<script src="{% static 'js/import_fix_grid.js' %}?v={{ app_version }}-fixgrid13"></script>
+<script src="{% static 'js/import_fix_grid.js' %}?v={{ app_version }}-fixgrid14"></script>
 {% endif %}
 {% endblock %}
